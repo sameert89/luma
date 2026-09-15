@@ -262,6 +262,8 @@ Initial requirement:
 
 Theme styling should be based on reusable design tokens/CSS variables rather than scattered hard-coded values.
 
+Inter is the default interface typeface, served with the application so browsing does not depend on a third-party font service. Interface icons come from the shared Lucide React set; feature code should not maintain hand-drawn SVG path data.
+
 The UI should remain visually consistent across:
 
 - gallery

@@ -10,3 +10,4 @@
 **/test-results/
 **/playwright-report/
 src/Luma.Server/wwwroot/
+.env

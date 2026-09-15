@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Dapper;
 using Luma.Server.Data;
 using Luma.Server.Features.Indexing;
@@ -24,7 +23,9 @@ public sealed class CacheContent(Database database,IndexingOptions options,Cache
             try
             {
                 stream=new FileStream(System.IO.Path.Combine(options.CachePath,entry.RelativePath),FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete,64*1024,FileOptions.Asynchronous|FileOptions.SequentialScan);
-                var valid=stream.Length==entry.SizeBytes && Convert.ToHexString(await SHA256.HashDataAsync(stream,ct))==entry.ContentHash;
+                // Full hash verification runs in bounded background maintenance. The request path
+                // validates that the generated file still exists at the recorded length.
+                var valid=stream.Length==entry.SizeBytes;
                 if(valid)
                 {
                     stream.Position=0;

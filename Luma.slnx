@@ -4,5 +4,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Luma.Server.Tests/Luma.Server.Tests.csproj" />
+    <Project Path="tests/Luma.Tools/Luma.Tools.csproj" />
   </Folder>
 </Solution>

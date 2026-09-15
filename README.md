@@ -2,20 +2,32 @@
 
 A lightweight, self-hosted photo and video browser for large media collections and low-end hardware.
 
-Stages 1–3 provide the application foundation and a resumable media indexing/cache pipeline. Configure roots locally, inspect scans through the administrative API, and generate image thumbnails/previews and video posters. The gallery UI and cache-serving endpoints arrive in stage 4.
+Stages 1â€“5 provide a usable, responsive gallery, cached previews, search and filters, tags, preferences, and a resumable media indexing/cache pipeline.
+
+## Quick start with Docker
+
+Docker runs the frontend, API, SQLite, and bundled FFmpeg tools as one service. From the repository root:
+
+```sh
+cp .env.example .env
+# Edit .env and set LUMA_MEDIA_PATH to your absolute media directory.
+docker compose up --build
+```
+
+On Windows, copy the file with `Copy-Item .env.example .env`. Set `LUMA_CASE_SENSITIVE=false` for a normal NTFS media directory. Then open http://127.0.0.1:5080. Media is mounted read-only at `/media`; the database and generated cache persist in the `luma-data` volume.
 
 ## Local development
 
 Requirements: .NET SDK 10.0 (global.json permits installed 10.0 feature bands) and Node.js 24 LTS with npm. Video processing and the backend test suite require FFmpeg and FFprobe on PATH (or configured absolute tool paths). Image processing uses the pinned ImageSharp package. No database service is needed.
 
-From the repository root:
+Development uses two processes so Vite can provide live frontend updates. In terminal 1, from the repository root, start the API:
 
 ```sh
 dotnet restore Luma.slnx --locked-mode
 dotnet run --project src/Luma.Server
 ```
 
-In a second terminal:
+In terminal 2, start the frontend:
 
 ```sh
 cd src/Luma.Web
@@ -23,7 +35,7 @@ npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite (normally http://127.0.0.1:5173). Vite proxies `/api` to http://127.0.0.1:5080. The shell displays the server connection state and an explanation of the upcoming library setup. `GET /api/status` returns readiness and schema version. Development OpenAPI is at http://127.0.0.1:5080/openapi/v1.json.
+Open the URL printed by Vite (normally http://127.0.0.1:5173). Vite proxies `/api` to http://127.0.0.1:5080. Configure a library as described below, start a scan from the sidebar, and browse as indexed items become ready. `GET /api/status` returns readiness and schema version. Development OpenAPI is at http://127.0.0.1:5080/openapi/v1.json.
 
 ## Configuration and database
 
@@ -64,7 +76,7 @@ Add a `Luma:Indexing` section to the server configuration, for example:
 
 Use absolute Windows paths on Windows and `CaseSensitive: false` for a normal NTFS root. Paths and IDs must be distinct; overlapping roots and symlink/reparse roots are rejected. Keep database/cache outside all media roots. Choose stable positive IDs: changing the path or case policy for an existing ID is rejected. Omitting a root disables its work without deleting its records. Originals may be mounted read-only.
 
-Environment variables use double underscores: `Luma__Indexing__Libraries__0__Path`, `Luma__Indexing__Libraries__0__Id`, `Luma__Indexing__CachePath`, etc. `FfmpegPath` and `FfprobePath` default to `ffmpeg` and `ffprobe`. Worker counts range from 1–4; image/video limits may not exceed the aggregate `ProcessingWorkers`. Queue capacity is 16–1024. `CacheQuotaBytes` defaults to 20 GiB (minimum 1 GiB); `ReserveFreeBytes` defaults to 1 GiB (minimum 1 GiB). `VerificationIntervalSeconds` defaults to 300.
+Environment variables use double underscores: `Luma__Indexing__Libraries__0__Path`, `Luma__Indexing__Libraries__0__Id`, `Luma__Indexing__CachePath`, etc. `FfmpegPath` and `FfprobePath` default to `ffmpeg` and `ffprobe`. Worker counts range from 1â€“4; image/video limits may not exceed the aggregate `ProcessingWorkers`. Queue capacity is 16â€“1024. `CacheQuotaBytes` defaults to 20 GiB (minimum 1 GiB); `ReserveFreeBytes` defaults to 1 GiB (minimum 1 GiB). `VerificationIntervalSeconds` defaults to 300.
 
 With the server running:
 
@@ -81,7 +93,7 @@ Start with `{ "retryFailures": true }` to explicitly retry permanent failures, o
 
 Shutdown interrupts active work; startup releases job claims and retraverses interrupted scans. A failed/incomplete traversal cannot mark unseen files missing. Cache verification runs in the background: deleted or corrupt current cache files are regenerated when originals are available. Quota pressure pauses generation; maintenance removes obsolete files and evicts previews first. Evicted entries are not automatically regenerated in a loop; visible-item demand is part of stage 4. Diagnostics use stable codes and never expose absolute source paths or raw media-tool output.
 
-See [stage 3 verification](docs/STAGE-3-VERIFICATION.md), [indexing](docs/INDEXING.md) and [cache](docs/MEDIA-CACHE.md) for details. There is no scan UI yet.
+See [stage 3 verification](docs/STAGE-3-VERIFICATION.md), [indexing](docs/INDEXING.md) and [cache](docs/MEDIA-CACHE.md) for details. The sidebar shows scan state and can start or cancel a scan.
 
 ## Verification
 
@@ -99,7 +111,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The browser checks start a real server and the production frontend preview on ports 5080 and 4173; stop development servers on those ports first. They check desktop/mobile layouts, the live API connection, keyboard focus and the Radix dialog. Their isolated database is `src/Luma.Server/.local/browser-tests.db`; screenshots appear in `src/Luma.Web/test-results/`.
+The browser checks generate an isolated 1,500-item cache fixture, then start a real server and the production frontend preview on ports 5180 and 4173. They check desktop/mobile gallery and tag workflows, cache-only previews, keyboard focus, scroll restoration, and bounded virtualization. Artifacts appear in `src/Luma.Web/test-results/`.
 
 `npm run generate:api` rebuilds the server with [ASP.NET build-time OpenAPI generation](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/overview?view=aspnetcore-10.0), then generates `src/lib/api/generated.ts`. Commit both that file and `contracts/luma.json` after contract changes. Do not edit generated types. Numeric JSON fields are strict numbers. CI runs locked dependency restore, both builds/test suites and accessibility lint on Linux and Windows, checks generated-contract drift, and runs Chromium smoke tests on Linux.
 
@@ -115,10 +127,11 @@ cd ../../.local/publish
 dotnet Luma.Server.dll --urls http://127.0.0.1:5080
 ```
 
-This copies the generated frontend to the host's `wwwroot` and publishes to `.local/publish`. Run from that directory so configuration and static files resolve correctly. Set an absolute `Luma__DatabasePath` for persistent deployment data. Docker and media-tool packaging are stage 7 deliverables. Unknown `/api` routes always return JSON errors; frontend routes return the shell. This version is intended for a private/local network and has no authentication.
+This copies the generated frontend to the host's `wwwroot` and publishes to `.local/publish`. Run from that directory so configuration and static files resolve correctly. Set an absolute `Luma__DatabasePath` for persistent deployment data. The Docker setup above packages the same single-process deployment with FFmpeg and read-only media mounting. Unknown `/api` routes always return JSON errors; frontend routes return the shell. This version is intended for a private/local network and has no authentication.
 
 ## Project contracts
 
+- [Stages 4â€“5 verification and performance evidence](docs/STAGES-4-5-VERIFICATION.md)
 - [Delivery plan and stage completion criteria](docs/DELIVERY-PLAN.md)
 - [Product requirements](docs/PRODUCT.md)
 - [Architecture](ARCHITECTURE.md)

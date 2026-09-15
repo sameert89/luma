@@ -10,11 +10,11 @@
   --color-on-accent: #1e1e2e;
   --color-positive: #a6e3a1;
   --color-danger: #f38ba8;
-  --font-sans: "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Inter Variable", system-ui, sans-serif;
 }
 
 @layer base {
   body { @apply m-0 min-w-80 bg-canvas font-sans text-ink antialiased; }
-  button, a, input { @apply focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent; }
+  button, a, input, select { @apply focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent; }
   button { @apply cursor-pointer disabled:cursor-wait; }
 }

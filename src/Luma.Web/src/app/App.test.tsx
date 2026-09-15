@@ -5,42 +5,35 @@ import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
 function renderApp() {
+  window.history.replaceState(null, '', '/')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   return render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
 }
-
-describe('application shell', () => {
-  it('loads server status through the API', async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'ready', schemaVersion: 1 })))
-    vi.stubGlobal('fetch', fetch)
-    renderApp()
-    expect(screen.getByRole('status')).toHaveTextContent('Connecting')
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('connected and ready'))
-    expect(fetch).toHaveBeenCalledWith('/api/status', expect.objectContaining({ signal: expect.any(AbortSignal) }))
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('A home for your memories.')
+function emptyApi() {
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url.startsWith('/api/libraries') ? [] : { items: [], nextCursor: null, previousCursor: null }), { headers: { 'Content-Type': 'application/json' } }))))
+}
+describe('browsing shell', () => {
+  it('explains how to connect an empty library', async () => {
+    emptyApi(); renderApp()
+    expect(await screen.findByRole('heading', { name: 'Connect your first library' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Search media' })).toBeDefined()
   })
-
-  it('recovers from server errors using the keyboard', async () => {
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 503, title: 'Unavailable', code: 'database_unavailable', traceId: 'test' }), { status: 503, headers: { 'Content-Type': 'application/problem+json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'ready', schemaVersion: 1 }))))
-    renderApp()
-    const retry = await screen.findByRole('button', { name: 'Try again' })
-    retry.focus()
-    await userEvent.keyboard('{Enter}')
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('connected and ready'))
-  })
-
-  it('opens the accessible dialog and restores focus after Escape', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'ready', schemaVersion: 1 }))))
-    renderApp()
-    const trigger = screen.getByRole('button', { name: 'About Luma' })
-    trigger.focus()
-    await userEvent.keyboard('{Enter}')
-    expect(screen.getByRole('dialog', { name: 'Your media, at home' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+  it('opens filters from the keyboard and restores focus after Escape', async () => {
+    emptyApi(); renderApp()
+    const trigger = screen.getByRole('button', { name: 'Filters' })
+    trigger.focus(); await userEvent.keyboard('{Enter}')
+    expect(screen.getByRole('dialog', { name: 'Search and filters' })).toBeVisible()
     await userEvent.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(trigger).toHaveFocus()
+  })
+  it('keeps applied search and filter state in the URL', async () => {
+    emptyApi(); renderApp()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'Summer{Enter}')
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Preference' }), 'liked')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+    expect(window.location.search).toContain('q=Summer')
+    expect(window.location.search).toContain('preference=liked')
   })
 })
