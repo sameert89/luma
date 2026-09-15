@@ -1,0 +1,494 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Luma.Server | v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/status": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/indexing": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetIndexingStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexingStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{id}/scans": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "StartScan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetScan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "afterFailureId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanProgress"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CancelScan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanAccepted"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiProblem": {
+        "required": [
+          "code",
+          "traceId"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          },
+          "code": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        }
+      },
+      "IndexingLibrary": {
+        "required": [
+          "id",
+          "name",
+          "availability",
+          "latestScanId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "string"
+          },
+          "latestScanId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "IndexingStatus": {
+        "required": [
+          "libraries",
+          "cachePressure",
+          "cacheBytes",
+          "discoveryWorkers",
+          "processingWorkers",
+          "imageWorkers",
+          "videoWorkers",
+          "queueCapacity"
+        ],
+        "type": "object",
+        "properties": {
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IndexingLibrary"
+            }
+          },
+          "cachePressure": {
+            "type": "boolean"
+          },
+          "cacheBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "discoveryWorkers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "processingWorkers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "imageWorkers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "videoWorkers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queueCapacity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ScanAccepted": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ScanFailure": {
+        "required": [
+          "id",
+          "mediaId",
+          "code",
+          "occurredAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mediaId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "code": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          }
+        }
+      },
+      "ScanProgress": {
+        "required": [
+          "id",
+          "libraryId",
+          "state",
+          "discovered",
+          "skipped",
+          "startedAt",
+          "finishedAt",
+          "failureCode",
+          "pending",
+          "processing",
+          "ready",
+          "failed",
+          "failures",
+          "nextFailureId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          },
+          "discovered": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "processing": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ready": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScanFailure"
+            }
+          },
+          "nextFailureId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "StartScanRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "default": false
+          },
+          "retryFailures": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "StatusResponse": {
+        "required": [
+          "status",
+          "schemaVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Luma.Server"
+    }
+  ]
+}

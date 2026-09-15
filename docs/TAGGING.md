@@ -1,0 +1,15 @@
+# Tag and preference contract
+
+SQLite is authoritative. Routine editing never writes originals. Implementation begins in stage 5; metadata exchange in stage 7.
+
+Normalize input by trimming Unicode whitespace and applying Unicode NFC. Reject empty values, control characters, or values over 100 Unicode scalar values. Store the display spelling from first creation. The unique key is NFC of .NET `ToUpperInvariant()` on the normalized value, compared with SQLite BINARY collation; do not use SQLite NOCASE for Unicode. This is invariant casing, not linguistic/full Unicode case folding: accents remain distinct and `ß` is not promised equal to `ss`. Record normalization version 1; runtime upgrades that change keys require a collision-audited migration. Test ASCII variants, composed/decomposed accents, Turkish I and sharp S when implemented.
+
+`Tags(normalizedKey UNIQUE)` and `MediaTags(mediaId, tagId PRIMARY KEY)` plus `(tagId, mediaId)` support uniqueness and both lookup directions. Autocomplete is normalized prefix matching, sorted by key then ID, default 20/max 50 results; no full-table fuzzy search.
+
+Bulk mutation accepts 1–500 distinct media IDs and at most 50 distinct tag IDs per add/remove list (100 tags total per item). Deduplicate inputs; reject overlap between add/remove lists. Validate all references first; an unknown ID returns 404 and rolls back the whole operation. Apply set-based SQL in one short transaction, avoiding SQLite parameter limits using a JSON input table. Adding existing or removing absent assignments succeeds idempotently. Enforce the resulting per-item limit atomically. Concurrent writes serialize; last committed preference write wins. A preference is one of neutral/liked/disliked, never both.
+
+Explicit metadata import reads embedded EXIF/XMP and optional sidecars in bounded background jobs. Union recognized keywords with existing tags using the same normalization; never delete application tags. Invalid tags are reported per item. Retries are idempotent. Imported spelling cannot overwrite existing display spelling.
+
+Explicit export generates standalone XMP sidecars as a downloadable archive with media-ID filenames and a manifest mapping IDs to relative paths; originals remain unchanged. Encode tags as escaped UTF-8 `dc:subject` RDF Bag entries. Default external merge instructions: back up existing metadata, union subjects after normalization, preserve unrelated XMP properties, review conflicts, then write with an external tool. Export never claims to update embedded metadata. Export jobs use bounded batches and a database snapshot cutoff; edits after cutoff require another export.
+
+Full-path dislike export is a separate, explicit operation: UTF-8 JSON Lines containing media ID, configured full source path and presence state for disliked items at the export snapshot. JSON escaping makes newlines in filenames unambiguous. Include missing records; paths are reconstructed from stored configuration and relative paths without touching originals. This is the sole public full-path exception, intended for user-reviewed external deletion. Luma never deletes these files.

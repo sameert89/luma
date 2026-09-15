@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/coverage/
+.local/
+.vs/
+*.user
+*.tsbuildinfo
+**/test-results/
+**/playwright-report/
+src/Luma.Server/wwwroot/

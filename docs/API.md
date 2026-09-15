@@ -1,0 +1,96 @@
+# HTTP API contract
+
+Stages 2�3 implement `GET /api/status`, the indexing/scan endpoints described below and development-only `GET /openapi/v1.json`. Other endpoints remain staged contracts. Same-origin JSON uses camelCase, UTC ISO 8601 timestamps, integer IDs within JavaScript's safe range, and no source paths except the explicit dislike export.
+
+## Foundation and errors
+
+`GET /api/status` returns 200 `{ "status": "ready", "schemaVersion": 2 }` after a successful SQLite query. Database failure returns 503 `database_unavailable`. Migration failure prevents startup. No root scan or source access is performed.
+
+Errors use `application/problem+json`: `{ "type": "about:blank", "title": "...", "status": 400, "code": "invalid_request", "traceId": "..." }`. Optional `errors` maps field names to message arrays. Never return stack traces, SQL, absolute paths or exception messages. Codes: 400 `invalid_request`/`invalid_cursor`, 404 `not_found`, 409 `conflict`, 413 `request_too_large`, 429 `rate_limited`, 503 `database_unavailable`/`cache_unavailable`, 500 `internal_error`. A future explicit expired cursor returns 410 `cursor_expired`. Unsupported methods return 405 `method_not_allowed`. Unknown API routes remain JSON 404, never the frontend shell.
+
+## Shared media query (stages 4–7)
+
+`GET /api/media` returns `{ items, nextCursor, previousCursor }`. Default page size 60, maximum 200, minimum 1; invalid limits return 400. Do not return an implicit total count. Summary fields: id, fileName, mediaType, dimensions, durationMs, effectiveDate, preference, availability and versioned cache URLs/status. Tags on a page use one batched query, never N+1.
+
+All predicates combine with AND, except alternatives within a repeated field. Unknown parameters/enums and contradictory ranges return 400. Empty filters are omitted. Normalize searchable text to NFC/invariant uppercase like tag keys; literal `%` and `_` are escaped. Parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| libraryId, folderId | Optional root/folder ID; folder must belong to specified root |
+| recursive | False by default for a folder; without folder, query all selected roots |
+| q | Literal substring in normalized filename or root-relative path, maximum 200 characters |
+| path | Literal substring of stored root-relative path, never a source read |
+| startsWith, endsWith | Literal filename prefix/suffix, maximum 200 characters |
+| tag | Repeated normalized tag names, at most 50; unknown tag means empty result |
+| tagMode | all (default) or any; applies only to tag predicates |
+| tagged | true/false; false with tag values is invalid |
+| mediaType | image/video; omitted means both |
+| extension | Repeated lowercase extension without dot, at most 20 |
+| dateFrom, dateTo | Inclusive start/exclusive end UTC, over effectiveDate |
+| minSizeBytes, maxSizeBytes | Inclusive nonnegative byte bounds |
+| orientation | landscape/portrait/square; exact stored width/height comparison |
+| minWidth, width, minHeight, height | Inclusive minimum/exact positive dimensions; unknown dimensions do not match |
+| minAspectRatio, maxAspectRatio | Inclusive positive finite bounds over width/height; unknown dimensions excluded |
+| preference | neutral/liked/disliked; omitted means all |
+| availability | present (default)/missing/all; root unavailability does not itself mark files missing |
+| sort, order | modified (default), captured, name, type, size, shuffle; asc/desc (default desc) |
+| seed | Required for repeatable shuffle; server supplies one if absent and returns it with query state |
+| groupBy | none/folder/date/type; presentation headers within paginated results, no full-result materialization |
+
+`effectiveDate = capturedAt ?? modifiedAt ?? indexedAt`, persisted on indexing. The captured sort and date filter use effectiveDate; modified uses `modifiedAt ?? indexedAt`. Group date means UTC day of effectiveDate. Grouping prepends its stored group key to the order and ID tie-breaker; folder grouping uses folder ID, type grouping image before video. Unknown dimensions and metadata sort last where applicable. String ordering is normalized binary ordering; ties always use ID in the chosen direction. Group headers may repeat across page boundaries and clients merge adjacent identical headers.
+
+Opaque base64url cursors encode a versioned payload signed with a persisted server key: canonical filter/sort/group fingerprint, seed, direction, last composite sort tuple and ID. Limits and direction may change, filters/order may not. Bad encoding/signature/fingerprint returns 400. No offset pagination. Previous page uses the inverse seek/order and reverses the returned page. Cursors are not snapshots: concurrent inserts before a cursor are seen after refresh; edits to ordering/filter fields can cause omission/repetition. Clients deduplicate IDs; a refreshed query restarts traversal. Fixed datasets must traverse without gaps or duplicates. Signing-key reset invalidates existing cursors.
+
+## Query and index candidates
+
+All tables/indexes below are introduced with the owning feature's migration and checked with `EXPLAIN QUERY PLAN` on 120k and 1m fixtures. Use parameterized SQL; allowlist order clauses.
+
+| Query | Candidate strategy |
+| --- | --- |
+| modified/captured/name/type/size | Persist non-null sort keys; B-tree `(availability, key, id)`, root/folder-scoped `(rootId, availability, key, id)`/`(folderId, availability, key, id)` only for measured common sorts. Seek `(key,id) >/< (@key,@id)`; no OFFSET |
+| folders/recursive | `(parentId,id)` folder index; ancestry `(ancestorId,descendantId)` joins indexed `(folderId,id)` media |
+| tags all/any, tagged | `(tagId,mediaId)` semi-joins or grouped matching IDs with count = tag count; `(mediaId,tagId)` EXISTS/NOT EXISTS |
+| keyword/path/endsWith | FTS5 trigram candidate index for substrings of 3+ characters, then exact literal verification; reversed normalized filename B-tree for suffix. Short substrings scan narrowed SQL candidates, bounded by query deadline |
+| startsWith/name | Binary normalized key range, with escaped literal prefix verification |
+| library/type/extension/preference | Equality predicates, measured leading equality + sort composites; extension/type/preference each have ID lookup indexes |
+| dates/size/dimensions/aspect/orientation | Persist effective date, aspect ratio and orientation; range B-trees for selective candidate IDs, intersect with query, residual predicates for combinations. Avoid an index for every combination |
+| grouping | Persist date-day key; `(groupKey,sortKey,id)` for measured combinations. Rare combinations may sort the narrowed SQLite result under deadline; benchmark before release |
+| shuffle | Persist a uniformly generated 63-bit random key and `(availability,randomKey,id)` index. Seed maps to a pivot; seek from pivot then wrap once, cursor records segment/key/ID. Seed rotates a fixed random permutation, not an independent permutation; filters apply before page limit. Grouping + shuffle rotates within each group |
+| random image | Same filtered random-key pivot with wrap, LIMIT 1, cache-ready images only. Unequal key gaps create selection bias: acceptable for decoration, not statistical sampling. No `ORDER BY random()` over a full result |
+
+Rare broad substring/multifilter queries have a 2 s database execution deadline; return 503 `query_timeout` with narrower-search guidance. This is a safety ceiling, not permission to exceed common-query budgets. Candidate strategies must be measured in their implementation stage; no performance result is claimed by this contract.
+
+## Remaining endpoint behavior
+
+| Endpoint | Behavior / stage |
+| --- | --- |
+| GET /api/libraries; GET /api/folders?parentId=… | ID/name/root availability and paginated direct folders, max 200, SQLite only; stage 4 |
+| POST /api/libraries/{id}/scans; GET /api/scans/{id}; POST /api/scans/{id}/cancel | Start 202 with Location; inspect counters/failures; idempotent cancel 202, conflict if active scan exists; stage 3 |
+| GET /api/media/{id} | Metadata detail, 404 unknown; no filesystem access; stage 4 |
+| GET /api/media/{id}/cache/{revision}/{variant} | Generated content, ETag/304; see MEDIA-CACHE.md; stage 4 |
+| GET /api/media/{id}/original | Explicit original download/stream; single range 206, unsatisfiable 416, unavailable source 503 `source_unavailable`; stage 6 |
+| GET /api/tags?prefix=… | Bounded autocomplete; stage 5 |
+| POST /api/tags | Create or return existing normalized tag, 201 new/200 existing; stage 5 |
+| POST /api/media/tags | Atomic bulk `{mediaIds, addTagIds, removeTagIds}`, 204; limits in TAGGING.md; stage 5 |
+| PUT /api/media/{id}/preference | `{preference}` neutral/liked/disliked; 204; stage 5 |
+| PUT /api/folders/{id}/cover | `{mediaId}` or null for default; must be present descendant in same root; 204; stage 7 |
+| GET /api/random | Same filters, forces images; conflicting video filter 400; returns cached preview content, no match 404, cache pressure 503; no-store; stage 7 |
+| POST /api/exports/dislikes; POST /api/exports/xmp; POST /api/imports/tags | Explicit bounded jobs, 202 with Location; inspect via GET /api/jobs/{id}, download finished exports via GET /api/jobs/{id}/content; stage 7 |
+
+Default covers select the first cache-ready descendant using modified-descending order; stale custom covers fall back without reading originals. Covers refer to IDs and retain preference when a source is temporarily unavailable.
+
+Mutation JSON is limited to 64 KiB except streamed import/export jobs; invalid bodies return common 400/413. No request accepts an arbitrary source path for streaming. Library paths are private local configuration. Export retention defaults to 24 hours and counts against a separate 1 GiB job quota; jobs fail visibly on quota exhaustion. Only implemented endpoints are generated into frontend contracts.
+
+## Stage 3 indexing administration
+
+`GET /api/indexing` returns `{ libraries, cachePressure, cacheBytes, discoveryWorkers, processingWorkers, imageWorkers, videoWorkers, queueCapacity }`. Each library has `id`, `name`, `availability` (`unknown|available|unavailable`) and nullable `latestScanId`. It reads SQLite/configuration only; it does not inspect source roots.
+
+`POST /api/libraries/{id}/scans` accepts `{ "force": false, "retryFailures": false }` (both fields optional; an empty JSON object is valid). It returns 202 `{ "id": scanId }` with `Location: /api/scans/{scanId}`; an unknown/disabled library returns 404 and an existing queued/running traversal returns 409.
+
+`GET /api/scans/{id}?afterFailureId=0` returns the ID, library ID, traversal state, discovered/skipped counts, start/finish timestamps, nullable traversal `failureCode`, processing counts (`pending`, `processing`, `ready`, `failed`), `failures` and nullable `nextFailureId`. States are `queued|running|completed|cancelled|interrupted|failed`. `completed` describes a successful traversal; processing may continue. Pending includes jobs waiting for the next scan/source availability. Processing counts describe jobs currently associated with that scan; later scans can adopt unchanged work. Failure history remains attached to the scan that recorded it.
+
+Failure entries contain `{ id, mediaId, code, occurredAt }`, at most 100 per response. Pass `nextFailureId` as `afterFailureId` to continue; no offsets or implicit unbounded history. A negative value returns 400. Unknown scan IDs return 404.
+
+`POST /api/scans/{id}/cancel` returns 202 `{ "id": scanId }` with Location, including repeated cancellation. It stops traversal and outstanding processing. If traversal already succeeded, cancellation does not undo its completed reconciliation; otherwise unseen rows are not marked missing. A finished scan with no outstanding work is a no-op; unknown IDs return 404.
+
+Failure codes include `source_unavailable`, `source_changed`, `invalid_media`, `dimensions_exceeded`, `memory_limit`, `invalid_generated_media`, `tool_unavailable`, `tool_output_exceeded`, `cache_io`, `processing_timeout`, `database_busy`, `indexing_failed` and `interrupted`. `cache_pressure` pauses a job and appears in administrative status without exposing a file path. No additional media-content or browsing endpoints are implemented in stage 3.

@@ -1,0 +1,126 @@
+# Luma
+
+A lightweight, self-hosted photo and video browser for large media collections and low-end hardware.
+
+Stages 1–3 provide the application foundation and a resumable media indexing/cache pipeline. Configure roots locally, inspect scans through the administrative API, and generate image thumbnails/previews and video posters. The gallery UI and cache-serving endpoints arrive in stage 4.
+
+## Local development
+
+Requirements: .NET SDK 10.0 (global.json permits installed 10.0 feature bands) and Node.js 24 LTS with npm. Video processing and the backend test suite require FFmpeg and FFprobe on PATH (or configured absolute tool paths). Image processing uses the pinned ImageSharp package. No database service is needed.
+
+From the repository root:
+
+```sh
+dotnet restore Luma.slnx --locked-mode
+dotnet run --project src/Luma.Server
+```
+
+In a second terminal:
+
+```sh
+cd src/Luma.Web
+npm ci
+npm run dev
+```
+
+Open the URL printed by Vite (normally http://127.0.0.1:5173). Vite proxies `/api` to http://127.0.0.1:5080. The shell displays the server connection state and an explanation of the upcoming library setup. `GET /api/status` returns readiness and schema version. Development OpenAPI is at http://127.0.0.1:5080/openapi/v1.json.
+
+## Configuration and database
+
+ASP.NET configuration supports JSON, environment variables and command-line arguments. `Luma:DatabasePath` defaults to `.local/luma.db` relative to the server content root (`src/Luma.Server` in development). Environment equivalent: `Luma__DatabasePath`. For example:
+
+```sh
+dotnet run --project src/Luma.Server -- --Luma:DatabasePath=/absolute/writable/data/luma.db
+```
+
+On Windows use an absolute Windows path. The parent directory is created on startup. Keep the database outside source media; one running Luma instance owns the data directory. Media root and worker configuration is described below.
+
+Startup applies embedded `Data/Migrations/NNNN_Name.sql` files in order within a transaction. Applied checksums are stored in `SchemaMigrations`. Never edit an applied migration: add the next sequential file. Unknown versions and checksum mismatches stop startup. Back up before upgrades; for this foundation, stop the process before copying the data directory (including any SQLite WAL/SHM files). Restore the directory with the process stopped. Generated cache is disposable; keep the database and its application state when regenerating it.
+
+`LUMA_EXPORT_OPENAPI` is an internal generator flag; do not set it when running the application because it skips database initialization.
+
+## Configure and operate indexing
+
+Add a `Luma:Indexing` section to the server configuration, for example:
+
+```json
+{
+  "Luma": {
+    "DatabasePath": "/data/luma.db",
+    "Indexing": {
+      "CachePath": "/data/cache",
+      "Libraries": [
+        { "Id": 1, "Name": "Photos", "Path": "/media/photos", "CaseSensitive": true, "ScanOnStartup": true }
+      ],
+      "DiscoveryWorkers": 1,
+      "ImageWorkers": 1,
+      "VideoWorkers": 1,
+      "ProcessingWorkers": 2,
+      "QueueCapacity": 128
+    }
+  }
+}
+```
+
+Use absolute Windows paths on Windows and `CaseSensitive: false` for a normal NTFS root. Paths and IDs must be distinct; overlapping roots and symlink/reparse roots are rejected. Keep database/cache outside all media roots. Choose stable positive IDs: changing the path or case policy for an existing ID is rejected. Omitting a root disables its work without deleting its records. Originals may be mounted read-only.
+
+Environment variables use double underscores: `Luma__Indexing__Libraries__0__Path`, `Luma__Indexing__Libraries__0__Id`, `Luma__Indexing__CachePath`, etc. `FfmpegPath` and `FfprobePath` default to `ffmpeg` and `ffprobe`. Worker counts range from 1–4; image/video limits may not exceed the aggregate `ProcessingWorkers`. Queue capacity is 16–1024. `CacheQuotaBytes` defaults to 20 GiB (minimum 1 GiB); `ReserveFreeBytes` defaults to 1 GiB (minimum 1 GiB). `VerificationIntervalSeconds` defaults to 300.
+
+With the server running:
+
+```sh
+curl http://127.0.0.1:5080/api/indexing
+curl -X POST http://127.0.0.1:5080/api/libraries/1/scans -H "Content-Type: application/json" -d '{}'
+curl http://127.0.0.1:5080/api/scans/1
+curl -X POST http://127.0.0.1:5080/api/scans/1/cancel
+```
+
+Use the returned scan ID/Location, rather than assuming it is 1. `GET /api/indexing` also returns each library's latest scan ID. Only one traversal per root may run at once; a conflicting start returns 409. `completed` means discovery and missing-file reconciliation finished; inspect `pending`, `processing`, `ready` and `failed` for processing progress. Cancellation can also stop outstanding processing after traversal completes. Failure history is bounded to 100 entries; follow `nextFailureId` with `?afterFailureId=...` for the next page.
+
+Start with `{ "retryFailures": true }` to explicitly retry permanent failures, or `{ "force": true }` to reprocess same-size/same-mtime edits. Transient failures retry three times after 5 seconds, 30 seconds and 5 minutes. An unavailable source waits for the next scan. Routine scans preserve IDs/preferences at an unchanged path; moves receive new IDs and retain the former record as missing. No source file is rewritten or deleted.
+
+Shutdown interrupts active work; startup releases job claims and retraverses interrupted scans. A failed/incomplete traversal cannot mark unseen files missing. Cache verification runs in the background: deleted or corrupt current cache files are regenerated when originals are available. Quota pressure pauses generation; maintenance removes obsolete files and evicts previews first. Evicted entries are not automatically regenerated in a loop; visible-item demand is part of stage 4. Diagnostics use stable codes and never expose absolute source paths or raw media-tool output.
+
+See [stage 3 verification](docs/STAGE-3-VERIFICATION.md), [indexing](docs/INDEXING.md) and [cache](docs/MEDIA-CACHE.md) for details. There is no scan UI yet.
+
+## Verification
+
+From the root:
+
+```sh
+dotnet build Luma.slnx -c Release
+dotnet test Luma.slnx -c Release --no-build
+cd src/Luma.Web
+npm run generate:api
+npm run lint
+npm run build
+npm test
+npx playwright install chromium
+npm run test:e2e
+```
+
+The browser checks start a real server and the production frontend preview on ports 5080 and 4173; stop development servers on those ports first. They check desktop/mobile layouts, the live API connection, keyboard focus and the Radix dialog. Their isolated database is `src/Luma.Server/.local/browser-tests.db`; screenshots appear in `src/Luma.Web/test-results/`.
+
+`npm run generate:api` rebuilds the server with [ASP.NET build-time OpenAPI generation](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/overview?view=aspnetcore-10.0), then generates `src/lib/api/generated.ts`. Commit both that file and `contracts/luma.json` after contract changes. Do not edit generated types. Numeric JSON fields are strict numbers. CI runs locked dependency restore, both builds/test suites and accessibility lint on Linux and Windows, checks generated-contract drift, and runs Chromium smoke tests on Linux.
+
+The toolchain uses the [Vite Node requirements](https://vite.dev/guide/) and [Tailwind Vite integration](https://tailwindcss.com/docs/installation/using-vite). ESLint 9 and TypeScript 5.9 are retained for compatibility with the accessibility plugin and OpenAPI generator; npm may print ESLint's upstream support notice. Lockfiles make installs reproducible.
+
+## Serve the built application from one process
+
+```sh
+cd src/Luma.Web
+npm ci
+npm run build:host
+cd ../../.local/publish
+dotnet Luma.Server.dll --urls http://127.0.0.1:5080
+```
+
+This copies the generated frontend to the host's `wwwroot` and publishes to `.local/publish`. Run from that directory so configuration and static files resolve correctly. Set an absolute `Luma__DatabasePath` for persistent deployment data. Docker and media-tool packaging are stage 7 deliverables. Unknown `/api` routes always return JSON errors; frontend routes return the shell. This version is intended for a private/local network and has no authentication.
+
+## Project contracts
+
+- [Delivery plan and stage completion criteria](docs/DELIVERY-PLAN.md)
+- [Product requirements](docs/PRODUCT.md)
+- [Architecture](ARCHITECTURE.md)
+- [Target hardware and performance requirements](docs/PERFORMANCE.md)
+- [Contributor instructions](AGENTS.md)
