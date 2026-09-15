@@ -20,6 +20,13 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
         if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested) return false;
+        if (exception is ApiRequestException request)
+        {
+            if (request.Code == "cache_unavailable") context.Response.Headers.RetryAfter = "30";
+            await Results.Problem(statusCode: request.Status, title: request.Message,
+                extensions: new Dictionary<string, object?> { ["code"] = request.Code, ["traceId"] = context.TraceIdentifier }).ExecuteAsync(context);
+            return true;
+        }
         logger.LogError(exception, "Request failed with trace {TraceId}", context.TraceIdentifier);
         var status = exception switch
         {

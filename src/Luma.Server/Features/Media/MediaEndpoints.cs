@@ -1,0 +1,33 @@
+using Luma.Server.Features.Libraries;
+using Luma.Server.Features.Tags;
+using Luma.Server.Http;
+
+namespace Luma.Server.Features.Media;
+
+public static class MediaEndpoints
+{
+    public static void MapMedia(this WebApplication app)
+    {
+        app.MapGet("/api/libraries",async(LibraryBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.LibrariesAsync(ct))).WithName("GetLibraries");
+        app.MapGet("/api/folders",async(long? libraryId,long? parentId,int? limit,string? cursor,LibraryBrowser browser,CancellationToken ct)=>
+            TypedResults.Ok(await browser.FoldersAsync(libraryId,parentId,limit,cursor,ct))).WithName("GetFolders");
+        app.MapGet("/api/media",async([AsParameters] MediaQuery query,HttpContext context,MediaBrowser browser,CancellationToken ct)=>
+            TypedResults.Ok(await browser.ListAsync(query.Normalize(context.Request.Query),ct))).WithName("GetMedia");
+        app.MapGet("/api/media/{id:long}",async(long id,MediaBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.DetailAsync(id,ct))).WithName("GetMediaDetail");
+        app.MapGet("/api/media/{id:long}/neighbors",async(long id,[AsParameters] MediaQuery query,HttpContext context,MediaBrowser browser,CancellationToken ct)=>
+            TypedResults.Ok(await browser.NeighborsAsync(id,query.Normalize(context.Request.Query),ct))).WithName("GetMediaNeighbors");
+        app.MapGet("/api/media/{id:long}/cache/{revision:long}/{variant}",async(long id,long revision,string variant,int? v,HttpContext context,CacheContent cache,CancellationToken ct)=>
+            await cache.ServeAsync(id,revision,variant,v,context,ct)).WithName("GetCachedMedia")
+            .Produces(200,contentType:"image/webp").Produces(200,contentType:"image/jpeg").Produces(304).Produces<ApiProblem>(503,"application/problem+json");
+        app.MapGet("/api/tags",async(string? prefix,int? limit,TagService tags,CancellationToken ct)=>TypedResults.Ok(await tags.FindAsync(prefix,limit,ct))).WithName("FindTags");
+        app.MapPost("/api/tags",async(CreateTagRequest request,TagService tags,CancellationToken ct)=>
+        {
+            var result=await tags.CreateAsync(request.Name,ct);
+            return Results.Json(result.Tag,statusCode:result.Created?201:200);
+        }).WithName("CreateTag").Produces<TagSummary>(200).Produces<TagSummary>(201);
+        app.MapPost("/api/media/tags",async(BulkTagsRequest request,TagService tags,CancellationToken ct)=>
+        {await tags.BulkAsync(request,ct);return TypedResults.NoContent();}).WithName("EditMediaTags");
+        app.MapPut("/api/media/{id:long}/preference",async(long id,PreferenceRequest request,TagService tags,CancellationToken ct)=>
+        {await tags.PreferenceAsync(id,request.Preference,ct);return TypedResults.NoContent();}).WithName("SetPreference");
+    }
+}

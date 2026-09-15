@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Luma.Server.Features.Media;
 
 namespace Luma.Server.Data;
 
@@ -17,6 +18,9 @@ public sealed class Database(IConfiguration configuration, IHostEnvironment envi
         try
         {
             await connection.OpenAsync(cancellationToken);
+            connection.CreateFunction<string, string>("luma_key", SearchText.Key, isDeterministic: true);
+            connection.CreateFunction<string, string>("luma_reverse", SearchText.Reverse, isDeterministic: true);
+            connection.CreateFunction<string, long>("luma_ticks", SearchText.Ticks, isDeterministic: true);
             return connection;
         }
         catch

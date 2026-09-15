@@ -80,6 +80,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/libraries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetLibraries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFolders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMediaDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{id}/neighbors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMediaNeighbors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{id}/cache/{revision}/{variant}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetCachedMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FindTags"];
+        put?: never;
+        post: operations["CreateTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["EditMediaTags"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{id}/preference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetPreference"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -93,6 +237,38 @@ export interface components {
             instance?: string | null;
             code: string;
             traceId: string;
+        };
+        BulkTagsRequest: {
+            mediaIds: number[];
+            addTagIds: number[];
+            removeTagIds: number[];
+        };
+        CacheRepresentation: {
+            url: string;
+            status: string;
+            /** Format: int32 */
+            width: number | null;
+            /** Format: int32 */
+            height: number | null;
+        };
+        CreateTagRequest: {
+            name: string;
+        };
+        FolderPage: {
+            current: components["schemas"]["FolderSummary"];
+            ancestors: components["schemas"]["FolderSummary"][];
+            items: components["schemas"]["FolderSummary"][];
+            nextCursor: string | null;
+            previousCursor: string | null;
+        };
+        FolderSummary: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            libraryId: number;
+            /** Format: int64 */
+            parentId: number | null;
+            name: string;
         };
         IndexingLibrary: {
             /** Format: int64 */
@@ -117,6 +293,53 @@ export interface components {
             videoWorkers: number;
             /** Format: int32 */
             queueCapacity: number;
+        };
+        LibrarySummary: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            availability: string;
+            /** Format: int64 */
+            rootFolderId: number | null;
+        };
+        MediaNeighbors: {
+            previous: components["schemas"]["MediaSummary"] | null;
+            next: components["schemas"]["MediaSummary"] | null;
+        };
+        MediaPage: {
+            items: components["schemas"]["MediaSummary"][];
+            nextCursor: string | null;
+            previousCursor: string | null;
+        };
+        MediaSummary: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            libraryId: number;
+            /** Format: int64 */
+            folderId: number;
+            fileName: string;
+            mediaType: string;
+            extension: string;
+            /** Format: int64 */
+            sizeBytes: number;
+            /** Format: int32 */
+            width: number | null;
+            /** Format: int32 */
+            height: number | null;
+            /** Format: int64 */
+            durationMs: number | null;
+            modifiedAt: string;
+            effectiveDate: string;
+            capturedAt: string | null;
+            preference: string;
+            availability: string;
+            thumbnail: components["schemas"]["CacheRepresentation"];
+            preview: components["schemas"]["CacheRepresentation"];
+            tags: components["schemas"]["TagSummary"][];
+        };
+        PreferenceRequest: {
+            preference: string;
         };
         ScanAccepted: {
             /** Format: int64 */
@@ -165,6 +388,11 @@ export interface components {
             status: string;
             /** Format: int32 */
             schemaVersion: number;
+        };
+        TagSummary: {
+            /** Format: int64 */
+            id: number;
+            name: string;
         };
     };
     responses: never;
@@ -347,6 +575,319 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ApiProblem"];
                 };
+            };
+        };
+    };
+    GetLibraries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibrarySummary"][];
+                };
+            };
+        };
+    };
+    GetFolders: {
+        parameters: {
+            query?: {
+                libraryId?: number;
+                parentId?: number;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderPage"];
+                };
+            };
+        };
+    };
+    GetMedia: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                libraryId?: number;
+                folderId?: number;
+                recursive?: boolean;
+                q?: string;
+                path?: string;
+                startsWith?: string;
+                endsWith?: string;
+                tag?: string[];
+                tagMode?: string;
+                tagged?: boolean;
+                mediaType?: string;
+                extension?: string[];
+                dateFrom?: string;
+                dateTo?: string;
+                minSizeBytes?: number;
+                maxSizeBytes?: number;
+                orientation?: string;
+                minWidth?: number;
+                width?: number;
+                minHeight?: number;
+                height?: number;
+                minAspectRatio?: number;
+                maxAspectRatio?: number;
+                preference?: string;
+                availability?: string;
+                sort?: string;
+                order?: string;
+                groupBy?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaPage"];
+                };
+            };
+        };
+    };
+    GetMediaDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaSummary"];
+                };
+            };
+        };
+    };
+    GetMediaNeighbors: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                libraryId?: number;
+                folderId?: number;
+                recursive?: boolean;
+                q?: string;
+                path?: string;
+                startsWith?: string;
+                endsWith?: string;
+                tag?: string[];
+                tagMode?: string;
+                tagged?: boolean;
+                mediaType?: string;
+                extension?: string[];
+                dateFrom?: string;
+                dateTo?: string;
+                minSizeBytes?: number;
+                maxSizeBytes?: number;
+                orientation?: string;
+                minWidth?: number;
+                width?: number;
+                minHeight?: number;
+                height?: number;
+                minAspectRatio?: number;
+                maxAspectRatio?: number;
+                preference?: string;
+                availability?: string;
+                sort?: string;
+                order?: string;
+                groupBy?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaNeighbors"];
+                };
+            };
+        };
+    };
+    GetCachedMedia: {
+        parameters: {
+            query?: {
+                v?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+                revision: number;
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblem"];
+                };
+            };
+        };
+    };
+    FindTags: {
+        parameters: {
+            query?: {
+                prefix?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSummary"][];
+                };
+            };
+        };
+    };
+    CreateTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTagRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSummary"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSummary"];
+                };
+            };
+        };
+    };
+    EditMediaTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkTagsRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SetPreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

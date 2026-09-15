@@ -3,6 +3,9 @@ using Luma.Server.Features.Status;
 using Luma.Server.Http;
 using Luma.Server.Features.Indexing;
 using Luma.Server.MediaProcessing;
+using Luma.Server.Features.Media;
+using Luma.Server.Features.Tags;
+using Luma.Server.Features.Libraries;
 
 if (args.FirstOrDefault() == "--process-image")
 {
@@ -16,6 +19,12 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<MigrationRunner>();
+builder.Services.AddSingleton<CursorSigner>();
+builder.Services.AddSingleton<MediaBrowser>();
+builder.Services.AddSingleton<LibraryBrowser>();
+builder.Services.AddSingleton<CacheContent>();
+builder.Services.AddSingleton<CacheAccessLog>();
+builder.Services.AddSingleton<TagService>();
 builder.Services.AddSingleton(services =>
 {
     var options = new IndexingOptions();
@@ -31,6 +40,7 @@ if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
     builder.Services.AddHostedService(services => services.GetRequiredService<ScanWorker>());
     builder.Services.AddHostedService<ProcessingWorker>();
+    builder.Services.AddHostedService(services => services.GetRequiredService<CacheAccessLog>());
 }
 builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(10));
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -46,6 +56,7 @@ app.UseStatusCodePages(async context =>
 });
 app.MapStatus();
 app.MapIndexing();
+app.MapMedia();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseRouting();
 app.Use(async (context, next) =>
@@ -68,6 +79,7 @@ if (Directory.Exists(app.Environment.WebRootPath))
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
     await app.Services.GetRequiredService<MigrationRunner>().ApplyAsync(app.Lifetime.ApplicationStopping);
+    await app.Services.GetRequiredService<CursorSigner>().InitializeAsync(app.Lifetime.ApplicationStopping);
     await app.Services.GetRequiredService<IndexingSetup>().InitializeAsync(app.Lifetime.ApplicationStopping);
 }
 await app.RunAsync();
