@@ -47,10 +47,10 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                     await Task.Delay(TimeSpan.FromSeconds(5), ct);
                     await FinishFailedAsync(scan.Id, "interrupted", "database_busy", ct);
                     await db.ExecuteAsync(new CommandDefinition("""
-                        INSERT INTO Scans(LibraryId,State,Force,RetryFailures,StartedAt)
-                        SELECT @LibraryId,'queued',@Force,@RetryFailures,@now
+                        INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt)
+                        SELECT @LibraryId,@FolderId,'queued',@Force,@RetryFailures,@now
                         WHERE NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))
-                        """, new { scan.LibraryId, scan.Force, scan.RetryFailures, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
+                        """, new { scan.LibraryId, scan.FolderId, scan.Force, scan.RetryFailures, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
                 }
                 catch (Exception error)
                 {
@@ -78,12 +78,15 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         await db.ExecuteAsync(new CommandDefinition("""
             UPDATE Scans SET State=@state,FailureCode=@code,FinishedAt=@now WHERE Id=@id AND State='running';
             UPDATE ProcessingJobs SET State='waiting' WHERE ScanId=@id AND State='pending';
-            UPDATE Libraries SET Availability='unavailable' WHERE Id=(SELECT LibraryId FROM Scans WHERE Id=@id) AND @state='failed';
+            UPDATE Libraries SET Availability='unavailable' WHERE Id=(SELECT LibraryId FROM Scans WHERE Id=@id AND FolderId IS NULL) AND @state='failed';
             """, new { id, state, code, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
     }
 
     public async Task ScanAsync(ScanRow scan, LibraryOptions root, CancellationToken ct)
     {
+        await using var lookup = await database.OpenAsync(ct);
+        var relativeFolder = scan.FolderId is { } folderId
+            ? await lookup.QuerySingleAsync<string>(new CommandDefinition("SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId", new { folderId, scan.LibraryId }, cancellationToken: ct)) : "";
         var channel = Channel.CreateBounded<DiscoveredEntry>(new BoundedChannelOptions(options.QueueCapacity)
         { SingleWriter = true, SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -93,8 +96,9 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             {
                 SourcePaths.Check(root, root.Path);
                 // Access errors are not ignored: any traversal error prohibits missing reconciliation.
-                await channel.Writer.WriteAsync(new DiscoveredEntry("", true, 0, ""), linked.Token);
-                foreach (var entry in SourceTraversal.Enumerate(root.Path))
+                var directoryPath = relativeFolder.Length == 0 ? root.Path : SourcePaths.Resolve(root, relativeFolder);
+                await channel.Writer.WriteAsync(new DiscoveredEntry(relativeFolder, true, 0, ""), linked.Token);
+                foreach (var entry in SourceTraversal.Enumerate(directoryPath, recursive: scan.FolderId is null))
                 {
                     linked.Token.ThrowIfCancellationRequested();
                     var relative = Path.GetRelativePath(root.Path, entry.FullName).Replace(Path.DirectorySeparatorChar, '/');
@@ -109,8 +113,22 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         try
         {
             await using var db = await database.OpenAsync(ct);
-            await foreach (var entry in channel.Reader.ReadAllAsync(ct))
-                await PersistEntryAsync(db, scan, root, entry, ct);
+            while (await channel.Reader.WaitToReadAsync(ct))
+            {
+                using (var batch = db.BeginTransaction())
+                {
+                    var folders = new Dictionary<string, long>();
+                    var started = System.Diagnostics.Stopwatch.StartNew();
+                    for (var count = 0; count < 32 && channel.Reader.TryRead(out var entry); count++)
+                    {
+                        await PersistEntryAsync(db, batch, folders, scan, root, entry, ct);
+                        if (started.ElapsedMilliseconds >= 25) break;
+                    }
+                    batch.Commit();
+                }
+                // Give processing and interactive writes a chance between discovery batches.
+                await Task.Delay(1, ct);
+            }
             await producer;
             SourcePaths.Check(root, root.Path);
             using var tx = db.BeginTransaction();
@@ -119,10 +137,13 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 """, new { scan.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
             if (owned == 1)
                 await db.ExecuteAsync(new CommandDefinition("""
-                    UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND LastSeenScanId<>@Id;
+                    UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND LastSeenScanId<>@Id
+                      AND (@FolderId IS NULL OR FolderId=@FolderId);
                     UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
                       (SELECT Id FROM Media WHERE LibraryId=@LibraryId AND Availability='missing');
                     UPDATE Libraries SET Availability='available' WHERE Id=@LibraryId;
+                    UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                      WHERE LibraryId=@LibraryId AND ((@FolderId IS NULL AND LastSeenScanId=@Id) OR Id=@FolderId);
                     """, scan, tx, cancellationToken: ct));
             tx.Commit();
         }
@@ -133,17 +154,16 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         }
     }
 
-    private static async Task PersistEntryAsync(SqliteConnection db, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct)
+    private static async Task PersistEntryAsync(SqliteConnection db, SqliteTransaction tx, Dictionary<string, long> folders, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct)
     {
-        using var tx = db.BeginTransaction();
         if (entry.Directory)
-            await EnsureFolderAsync(db, tx, root, entry.RelativePath, scan.Id, ct);
+            await EnsureFolderAsync(db, tx, root, entry.RelativePath, scan.Id, ct, folders);
         else if (!MediaFormats.TryGet(entry.RelativePath, out var format))
             await db.ExecuteAsync(new CommandDefinition("UPDATE Scans SET Skipped=Skipped+1 WHERE Id=@Id", scan, tx, cancellationToken: ct));
         else
         {
             var folderPath = entry.RelativePath.Contains('/') ? entry.RelativePath[..entry.RelativePath.LastIndexOf('/')] : "";
-            var folderId = await EnsureFolderAsync(db, tx, root, folderPath, scan.Id, ct);
+            var folderId = await EnsureFolderAsync(db, tx, root, folderPath, scan.Id, ct, folders);
             var key = root.Key(entry.RelativePath);
             var now = DateTimeOffset.UtcNow.ToString("O");
             var mediaId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
@@ -176,21 +196,22 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 UPDATE Scans SET Discovered=Discovered+1 WHERE Id=@scanId;
                 """, new { mediaId, version = IndexingOptions.EncoderVersion, scanId = scan.Id, now, retry = scan.RetryFailures }, tx, cancellationToken: ct));
         }
-        tx.Commit();
     }
 
-    private static async Task<long> EnsureFolderAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, string path, long scanId, CancellationToken ct)
+    private static async Task<long> EnsureFolderAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, string path, long scanId, CancellationToken ct, Dictionary<string, long> folders)
     {
         var key = root.Key(path);
+        if (folders.TryGetValue(key, out var cached)) return cached;
         var existing = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(
             "SELECT Id FROM Folders WHERE LibraryId=@Id AND PathKey=@key", new { root.Id, key }, tx, cancellationToken: ct));
         if (existing is { } id)
         {
             await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET LastSeenScanId=@scanId,RelativePath=@path WHERE Id=@id", new { scanId, path, id }, tx, cancellationToken: ct));
+            folders[key] = id;
             return id;
         }
         long? parentId = path == "" ? null : await EnsureFolderAsync(db, tx, root,
-            path.Contains('/') ? path[..path.LastIndexOf('/')] : "", scanId, ct);
+            path.Contains('/') ? path[..path.LastIndexOf('/')] : "", scanId, ct, folders);
         var newId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
             INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId) VALUES(@Id,@parentId,@path,@key,@scanId) RETURNING Id
             """, new { root.Id, parentId, path, key, scanId }, tx, cancellationToken: ct));
@@ -198,6 +219,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             INSERT INTO FolderAncestry VALUES(@newId,@newId);
             INSERT INTO FolderAncestry SELECT AncestorId,@newId FROM FolderAncestry WHERE DescendantId=@parentId;
             """, new { newId, parentId }, tx, cancellationToken: ct));
+        folders[key] = newId;
         return newId;
     }
     private sealed record DiscoveredEntry(string RelativePath, bool Directory, long Size, string ModifiedAt);

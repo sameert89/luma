@@ -8,6 +8,9 @@ public static class MediaEndpoints
 {
     public static void MapMedia(this WebApplication app)
     {
+        app.MapGet("/api/media/{id:long}/original", async (long id, bool? download, OriginalContent content, CancellationToken ct) =>
+            await content.ServeAsync(id, download ?? false, ct)).WithName("GetOriginalMedia")
+            .Produces(200).Produces(206).Produces(416).Produces<ApiProblem>(503,"application/problem+json");
         app.MapGet("/api/libraries",async(LibraryBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.LibrariesAsync(ct))).WithName("GetLibraries");
         app.MapGet("/api/folders",async(long? libraryId,long? parentId,int? limit,string? cursor,LibraryBrowser browser,CancellationToken ct)=>
             TypedResults.Ok(await browser.FoldersAsync(libraryId,parentId,limit,cursor,ct))).WithName("GetFolders");
@@ -16,6 +19,8 @@ public static class MediaEndpoints
         app.MapGet("/api/media/{id:long}",async(long id,MediaBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.DetailAsync(id,ct))).WithName("GetMediaDetail");
         app.MapGet("/api/media/{id:long}/neighbors",async(long id,[AsParameters] MediaQuery query,HttpContext context,MediaBrowser browser,CancellationToken ct)=>
             TypedResults.Ok(await browser.NeighborsAsync(id,query.Normalize(context.Request.Query),ct))).WithName("GetMediaNeighbors");
+        app.MapPost("/api/media/priority",async(MediaPriorityRequest request,MediaBrowser browser,CancellationToken ct)=>
+        {await browser.PrioritizeAsync(request,ct);return TypedResults.NoContent();}).WithName("PrioritizeVisibleMedia");
         app.MapGet("/api/media/{id:long}/cache/{revision:long}/{variant}",async(long id,long revision,string variant,int? v,HttpContext context,CacheContent cache,CancellationToken ct)=>
             await cache.ServeAsync(id,revision,variant,v,context,ct)).WithName("GetCachedMedia")
             .Produces(200,contentType:"image/webp").Produces(200,contentType:"image/jpeg").Produces(304).Produces<ApiProblem>(503,"application/problem+json");

@@ -2,6 +2,8 @@
 
 Status: accepted for stage 3.
 
+Updated by [ADR 0005](0005-indexing-feedback.md): decoder processes now serve up to 128 jobs before recycling, preserving killable deadlines while amortizing startup cost.
+
 Keep orchestration in the existing ASP.NET Core process. SQLite owns pending work, claims, scan progress, failures, identity and cache accounting. A bounded discovery channel applies backpressure; processing workers claim one durable job at a time rather than loading the pending queue. Short transactions keep writer ownership brief. Indexes cover root/path identity, reconciliation, failure pages, pending jobs by media type and expired leases.
 
 Use FFprobe and FFmpeg for video metadata and a single poster frame. Use ImageSharp 3.1.12 for the initial image formats, EXIF orientation, first-frame/page selection, predecode dimension checks and the exact JPEG/WebP quality settings. These are substantive decoder/encoder responsibilities; implementing them with custom format parsers would be harder to maintain. No browser request invokes either processor.

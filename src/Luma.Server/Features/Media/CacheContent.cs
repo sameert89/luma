@@ -3,11 +3,30 @@ using Luma.Server.Data;
 using Luma.Server.Features.Indexing;
 using Luma.Server.Http;
 using Microsoft.Net.Http.Headers;
+using System.Threading.Channels;
+using Microsoft.Data.Sqlite;
 
 namespace Luma.Server.Features.Media;
 
-public sealed class CacheContent(Database database,IndexingOptions options,CacheAccessLog access)
+public sealed class CacheContent(Database database,IndexingOptions options,CacheAccessLog access) : BackgroundService
 {
+    private readonly Channel<(long Id, long Revision)> demands = Channel.CreateBounded<(long, long)>(new BoundedChannelOptions(256)
+    {
+        SingleReader = true,
+        FullMode = BoundedChannelFullMode.DropWrite
+    });
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await foreach (var demand in demands.Reader.ReadAllAsync(stoppingToken))
+        {
+            try { await QueueAsync(demand.Id, demand.Revision, stoppingToken); }
+            // Cache demand is a disposable hint. A later request can retry; discovery
+            // already owns the durable queue for newly indexed media.
+            catch (SqliteException) { }
+        }
+    }
+
     public async Task<IResult> ServeAsync(long id,long revision,string variant,int? v,HttpContext context,CancellationToken ct)
     {
         if(variant is not ("thumbnail" or "preview" or "poster") || (v??IndexingOptions.EncoderVersion)!=IndexingOptions.EncoderVersion) throw ApiRequestException.Missing();
@@ -38,13 +57,17 @@ public sealed class CacheContent(Database database,IndexingOptions options,Cache
             catch {if(stream is not null) await stream.DisposeAsync();throw;}
             if(stream is not null) await stream.DisposeAsync();
         }
-        await QueueAsync(id,revision,ct);
+        demands.Writer.TryWrite((id, revision));
         context.Response.Headers.RetryAfter="30";
         throw new ApiRequestException(503,"cache_unavailable","This preview is not available yet. Background processing will retry it.");
     }
     public async Task QueueAsync(long id,long revision,CancellationToken ct)
     {
         await using var db=await database.OpenAsync(ct);
+        var state = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition("""
+            SELECT State FROM ProcessingJobs WHERE MediaId=@id AND SourceRevision=@revision AND EncoderVersion=@version
+            """, new { id, revision, version = IndexingOptions.EncoderVersion }, cancellationToken: ct));
+        if (state is "pending" or "running" or "obsolete") return;
         await db.ExecuteAsync(new CommandDefinition("""
             INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt)
             SELECT m.Id,m.SourceRevision,@version,m.LastSeenScanId,m.MediaType,'pending',@now FROM Media m

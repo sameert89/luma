@@ -1,14 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ImageOff, RefreshCw } from 'lucide-react'
 import { QuietButton } from './Controls'
 
-export function CachedImage({ url, alt, className = '', preview = false }: { url: string; alt: string; className?: string; preview?: boolean }) {
+export function CachedImage({ url, alt, status = 'ready', className = '', preview = false }: { url: string; alt: string; status?: string; className?: string; preview?: boolean }) {
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    if (!failed || attempt >= 10) return
+    const timeout = window.setTimeout(() => { setAttempt(value => value + 1); setFailed(false) }, attempt < 3 ? 3000 : 30000)
+    return () => window.clearTimeout(timeout)
+  }, [failed, attempt])
+  if (status === 'pending' || status === 'failed') return <div className={`flex items-center justify-center bg-surface text-center text-xs text-muted ${className}`}>
+    {status === 'failed' ? 'Preview could not be prepared' : 'Preparing preview…'}
+  </div>
   if (failed) return <div className={`flex flex-col items-center justify-center gap-3 bg-surface text-center text-muted ${className}`}>
     <ImageOff className="size-8" aria-hidden="true" />
     <span className="text-xs">Preview unavailable</span>
     {preview && <QuietButton onClick={() => { setAttempt(x => x + 1); setFailed(false) }}><RefreshCw className="size-4" />Retry preview</QuietButton>}
   </div>
-  return <img key={attempt} src={url} alt={alt} loading={preview ? 'eager' : 'lazy'} decoding="async" className={className} onError={() => setFailed(true)} />
+  return <img draggable={false} key={attempt} src={url} alt={alt} loading={preview ? 'eager' : 'lazy'} decoding="async" className={`${className} ${preview && loaded ? 'motion-preview' : ''}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
 }

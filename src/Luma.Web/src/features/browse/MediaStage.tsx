@@ -1,0 +1,130 @@
+import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react'
+import { Download, EllipsisVertical, Maximize, Pause, Play } from 'lucide-react'
+import { IconButton, QuietButton, QuietLink, Select } from '../../components/ui/Controls'
+import { CachedImage } from '../../components/ui/CachedImage'
+import { Modal } from '../../components/ui/Modal'
+import type { Media } from './api'
+
+const fillKey = 'luma-viewer-fill'
+
+function formatTime(value: number) {
+  if (!Number.isFinite(value) || value < 0) return '0:00'
+  const minutes = Math.floor(value / 60)
+  const seconds = Math.floor(value % 60)
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+export function MediaStage({ item, reels = false, muted = false, onEnded, onNavigate, fullscreenRoot }: {
+  item: Media; reels?: boolean; muted?: boolean; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>
+}) {
+  const host = useRef<HTMLDivElement>(null)
+  const video = useRef<HTMLVideoElement>(null)
+  const pointers = useRef(new Map<number, { x: number; y: number }>())
+  const touchStart = useRef({ x: 0, y: 0, multiple: false })
+  const lastWheel = useRef(0)
+  const gesture = useRef({ x: 0, y: 0, distance: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [rotation, setRotation] = useState(0)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [fill, setFill] = useState(() => localStorage.getItem(fillKey) === '1')
+  const [original, setOriginal] = useState(false)
+  const [failure, setFailure] = useState('')
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [time, setTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [rate, setRate] = useState(1)
+  const originalUrl = `/api/media/${item.id}/original`
+  const displayFill = reels || fill
+  const progress = duration > 0 ? Math.min(100, Math.max(0, time / duration * 100)) : 0
+  function scale(value: number) { setZoom(Math.max(0.1, Math.min(8, value))); if (value <= 1) setPan({ x: 0, y: 0 }) }
+  function toggleFill() {
+    setFill(value => {
+      const next = !value
+      localStorage.setItem(fillKey, next ? '1' : '0')
+      return next
+    })
+    scale(1)
+  }
+  function actualSize() { setOriginal(true); setFill(false); setPan({ x: 0, y: 0 }); const bounds = host.current?.getBoundingClientRect(); if (bounds && item.width && item.height) setZoom(Math.max(item.width / bounds.width, item.height / bounds.height)) }
+  async function fullscreen() {
+    const target = fullscreenRoot?.current ?? host.current
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen()
+      else if (target?.requestFullscreen) await target.requestFullscreen()
+      else setFailure('Fullscreen is unavailable in this browser.')
+    } catch { setFailure('Fullscreen is unavailable in this browser.') }
+  }
+  function togglePlay() {
+    const player = video.current
+    if (!player) return
+    if (player.paused) void player.play().catch(() => setFailure(current => current || 'Autoplay was blocked. Press Play to start.'))
+    else player.pause()
+  }
+  function seekFromBar(event: MouseEvent<HTMLButtonElement>) {
+    if (!video.current || duration <= 0) return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const value = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)) * duration
+    video.current.currentTime = value
+    setTime(value)
+  }
+  useEffect(() => {
+    const player = video.current
+    let disposed = false
+    if (player && !player.getAttribute('src')) player.src = originalUrl
+    if (reels && player) void player.play().catch(error => { if (!disposed) setFailure(current => current || (player.error || (error instanceof DOMException && error.name === 'NotSupportedError') ? 'This video could not play. Copy its stream URL and open it in an external player such as VLC.' : 'Autoplay was blocked. Press Play to start.')) })
+    return () => { disposed = true; if (player) { player.pause(); player.removeAttribute('src'); player.load() } }
+  }, [reels, originalUrl])
+  useEffect(() => {
+    function key(event: KeyboardEvent) {
+      const dialog = host.current?.closest('[role="dialog"]'); const dialogs = document.querySelectorAll('[role="dialog"]'); if (dialog && dialogs[dialogs.length - 1] !== dialog) return
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.target instanceof HTMLElement && event.target.closest('input,select,textarea,video,[contenteditable="true"]')) return
+      if (event.key === '+' || event.key === '=') { event.preventDefault(); scale(zoom * 1.25) }
+      if (event.key === '-') { event.preventDefault(); scale(zoom / 1.25) }
+      if (event.key === '1') actualSize()
+      if (event.key.toLowerCase() === 'r') setRotation(value => (value + 90) % 360)
+      if (event.key.toLowerCase() === 'f') void fullscreen()
+      if (event.key === ' ' && item.mediaType === 'video') { event.preventDefault(); togglePlay() }
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  })
+  return <div className="relative flex h-full min-h-0 w-full flex-col">
+    <div ref={host} className="relative flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden bg-black"
+      onWheel={event => { if (reels && Math.abs(event.deltaY) > 40 && Date.now() - lastWheel.current > 500) { lastWheel.current = Date.now(); onNavigate(event.deltaY > 0 ? 'next' : 'previous') } else if (!reels && item.mediaType === 'image') scale(zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1)) }}
+      onTouchStart={event => { if (item.mediaType !== 'video') return; const touch = event.touches[0]; touchStart.current = { x: touch.clientX, y: touch.clientY, multiple: event.touches.length > 1 } }}
+      onTouchEnd={event => { if (item.mediaType !== 'video' || touchStart.current.multiple) return; const touch = event.changedTouches[0]; const dx = touch.clientX - touchStart.current.x; const dy = touch.clientY - touchStart.current.y; if (Math.abs(reels ? dy : dx) > 60 && Math.abs(reels ? dy : dx) > Math.abs(reels ? dx : dy)) onNavigate((reels ? dy : dx) < 0 ? 'next' : 'previous') }}
+      onPointerDown={event => { if ((event.target as HTMLElement).closest('button,a,input,select,video')) return; event.currentTarget.setPointerCapture(event.pointerId); pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); gesture.current = { x: event.clientX, y: event.clientY, distance: 0 } }}
+      onPointerMove={event => { const old = pointers.current.get(event.pointerId); if (!old) return; pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); const points = [...pointers.current.values()]; if (points.length === 2) { const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); if (gesture.current.distance) scale(zoom * distance / gesture.current.distance); gesture.current.distance = distance } else if (zoom > 1) setPan(value => ({ x: value.x + event.clientX - old.x, y: value.y + event.clientY - old.y })) }}
+      onPointerUp={event => { if (!pointers.current.has(event.pointerId)) return; pointers.current.delete(event.pointerId); const dx = event.clientX - gesture.current.x; const dy = event.clientY - gesture.current.y; if (zoom === 1 && !gesture.current.distance && Math.abs(reels ? dy : dx) > 60 && Math.abs(reels ? dy : dx) > Math.abs(reels ? dx : dy)) onNavigate((reels ? dy : dx) < 0 ? 'next' : 'previous') }}
+      onPointerCancel={() => pointers.current.clear()}>
+      {/* Personal source videos have no generated caption tracks; preserve native playback capabilities. */}
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      {item.mediaType === 'video' ? <video aria-label={item.fileName} ref={video} src={originalUrl} poster={item.preview.status === 'ready' ? item.preview.url : undefined} playsInline muted={muted} controls={false} disablePictureInPicture preload="metadata" onEnded={() => { setPlaying(false); onEnded?.() }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={event => setTime(event.currentTarget.currentTime)} onDurationChange={event => setDuration(event.currentTarget.duration)} onPlaying={() => { if (!video.current?.error) setFailure('') }} onError={() => setFailure('This video could not play. Copy its stream URL and open it in an external player such as VLC.')} className={`pointer-events-none h-full w-full ${displayFill ? 'object-cover' : 'object-contain'}`} /> : <div className="flex h-full w-full items-center justify-center" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)` }}><CachedImage url={original ? originalUrl : item.preview.url} status={original ? 'ready' : item.preview.status} alt={item.fileName} preview className={`h-full w-full select-none ${displayFill ? 'object-cover' : 'object-contain'}`} /></div>}
+      {item.mediaType === 'video' && !reels && <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-canvas/80 p-3">
+        <IconButton label={playing ? 'Pause' : 'Play'} className="border-transparent bg-canvas" onClick={togglePlay}>{playing ? <Pause className="size-4" /> : <Play className="size-4" />}</IconButton>
+        <input aria-label="Seek" type="range" min={0} max={duration || 0} step={0.1} value={time} className="h-11 min-w-0 flex-1 accent-accent" onChange={event => { const value = Number(event.target.value); setTime(value); if (video.current) video.current.currentTime = value }} />
+        <span className="tabular-nums text-xs text-ink">{formatTime(time)} / {formatTime(duration)}</span>
+        <QuietButton className="min-h-10 px-3" aria-label="Playback speed" onClick={() => { const rates = [1, 1.5, 2, 0.5]; const current = video.current?.playbackRate ?? 1; const next = rates[(rates.indexOf(current) + 1) % rates.length]; if (video.current) video.current.playbackRate = next; setRate(next) }}>{rate}×</QuietButton>
+      </div>}
+      {item.mediaType === 'video' && reels && <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-1 pt-8">
+        <button type="button" aria-label="Seek video" className="block h-5 w-full py-2 focus-visible:outline-2 focus-visible:outline-accent" onClick={seekFromBar}>
+          <span className="block h-1 overflow-hidden rounded-full bg-canvas/50"><span className="block h-full rounded-full bg-accent" style={{ width: `${progress}%` }} /></span>
+        </button>
+      </div>}
+      <IconButton label="More options" className={`absolute right-3 border-transparent bg-canvas/85 ${reels ? 'bottom-16' : 'top-28'}`} onClick={() => setOptionsOpen(true)}><EllipsisVertical className="size-5" /></IconButton>
+    </div>
+    {failure && <p role="status" className="bg-canvas px-3 py-2 text-sm text-ink">{failure}</p>}
+    <Modal open={optionsOpen} onOpenChange={setOptionsOpen} title="View options" description="Fit, playback and download actions for this item." sheet>
+      <div className="flex flex-wrap gap-2 p-5">
+        <QuietButton onClick={() => { toggleFill() }}>{fill ? 'Fit' : 'Fill'}</QuietButton>
+        {item.mediaType === 'image' && <><QuietButton aria-label="Zoom out" onClick={() => scale(zoom / 1.25)}>−</QuietButton><QuietButton aria-label="Reset zoom" onClick={() => scale(1)}>{Math.round(zoom * 100)}%</QuietButton><QuietButton aria-label="Zoom in" onClick={() => scale(zoom * 1.25)}>+</QuietButton><QuietButton onClick={actualSize}>Actual size</QuietButton><QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>Rotate</QuietButton></>}
+        {item.mediaType === 'video' && <div className="w-32 shrink-0"><Select aria-label="Playback speed" defaultValue="1" onChange={event => { if (video.current) video.current.playbackRate = Number(event.target.value) }}><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></Select></div>}
+        <QuietButton onClick={() => { void fullscreen(); setOptionsOpen(false) }}><Maximize className="size-4" />Fullscreen</QuietButton>
+        <QuietLink href={`${originalUrl}?download=true`}><Download className="size-4" />Download</QuietLink>
+        {item.mediaType === 'video' && <QuietButton onClick={() => { void navigator.clipboard?.writeText(new URL(originalUrl, window.location.href).href).then(() => setFailure('Stream URL copied. In VLC, choose Open Network Stream and paste it.')).catch(() => setFailure('Copy the download link and paste the stream URL into your player\'s network-stream dialog.')); setOptionsOpen(false) }}>Copy stream URL</QuietButton>}
+      </div>
+    </Modal>
+  </div>
+}

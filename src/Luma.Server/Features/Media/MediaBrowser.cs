@@ -9,6 +9,26 @@ namespace Luma.Server.Features.Media;
 
 public sealed class MediaBrowser(Database database,CursorSigner cursors)
 {
+    public async Task PrioritizeAsync(MediaPriorityRequest request,CancellationToken ct)
+    {
+        if(request.Ids is null) throw ApiRequestException.Invalid("Visible media priority accepts 1 to 200 positive media IDs.");
+        var ids=request.Ids.Where(x=>x>0).Distinct().Take(200).ToArray();
+        if(request.Ids.Count>200 || ids.Length!=request.Ids.Count) throw ApiRequestException.Invalid("Visible media priority accepts 1 to 200 positive media IDs.");
+        if(ids.Length==0) throw ApiRequestException.Invalid("Visible media priority accepts 1 to 200 positive media IDs.");
+        await using var db=await database.OpenAsync(ct);
+        var now=DateTimeOffset.UtcNow.AddYears(-1).ToString("O");
+        var json=JsonSerializer.Serialize(ids);
+        await db.ExecuteAsync(new CommandDefinition("""
+            UPDATE ProcessingJobs SET State='pending',NextAttemptAt=@now,FailureCode=NULL,Claim=NULL,LeaseUntil=NULL
+            WHERE MediaId IN (SELECT value FROM json_each(@json))
+              AND EncoderVersion=@version
+              AND State IN ('pending','waiting')
+              AND EXISTS (SELECT 1 FROM Media m JOIN Libraries l ON l.Id=m.LibraryId JOIN Scans s ON s.Id=ProcessingJobs.ScanId
+                WHERE m.Id=ProcessingJobs.MediaId AND m.SourceRevision=ProcessingJobs.SourceRevision
+                  AND m.Availability='present' AND l.Enabled=1 AND s.State IN ('running','completed'));
+            """,new{json,now,version=IndexingOptions.EncoderVersion},cancellationToken:ct));
+    }
+
     public async Task<MediaPage> ListAsync(MediaQuery query,CancellationToken ct)
     {
         await using var db=await database.OpenAsync(ct);
@@ -85,7 +105,7 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
             CacheRepresentation Variant(string variant)
             {
                 var entry=cache[row.Id].FirstOrDefault(x=>x.Variant==variant);
-                return new($"/api/media/{row.Id}/cache/{row.SourceRevision}/{variant}?v={IndexingOptions.EncoderVersion}",entry?.State??"pending",entry?.Width,entry?.Height);
+                return new($"/api/media/{row.Id}/cache/{row.SourceRevision}/{variant}?v={IndexingOptions.EncoderVersion}",entry?.State ?? (row.ProcessingStatus == "failed" ? "failed" : "pending"),entry?.Width,entry?.Height);
             }
             return new MediaSummary(row.Id,row.LibraryId,row.FolderId,row.FileName,row.MediaType,row.Extension,row.SizeBytes,row.Width,row.Height,row.DurationMs,
                 row.ModifiedAt,row.EffectiveDate,row.CapturedAt,row.Preference,row.Availability,Variant("thumbnail"),Variant(row.MediaType=="image"?"preview":"poster"),

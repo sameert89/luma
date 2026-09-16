@@ -1,6 +1,6 @@
 # Luma delivery plan
 
-Status: stages 1 and 2 complete (2026-09-15). Stages 3–7 remain planned. See [delivery verification](STAGES-1-2-VERIFICATION.md) for evidence and limitations.
+Status: stages 1–5 are implemented. The user accepted the stages 4–5 UI gate on 2026-09-17; the idle-folder discovery follow-up and transition to stage 6 are recorded in [the handoff](STAGE-6-HANDOFF.md). Target-hardware performance validation remains outstanding and is not implied by UI acceptance. Stage 6 functional implementation is delivered; target-hardware/device acceptance remains pending. Stage 7 remains planned.
 
 This plan sequences the requirements in [PRODUCT.md](PRODUCT.md) within the constraints of [ARCHITECTURE.md](../ARCHITECTURE.md) and [AGENTS.md](../AGENTS.md). It does not replace those contracts. Deferring a feature to a later stage does not remove it from the intended initial product.
 
@@ -138,6 +138,8 @@ This is the first usable milestone, not the complete initial product release.
 - Domain behavior and mutation edge cases have tests.
 
 ## Stage 6 — Complete video and reels experiences
+
+Functional implementation delivered 2026-09-17. See [implementation and verification](STAGE-6-VERIFICATION.md). Target-client resource/codec and Raspberry Pi performance gates remain outstanding; this stage is not yet declared complete against every exit criterion.
 
 ### Deliverables
 

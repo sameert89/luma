@@ -26,7 +26,9 @@ When priorities conflict, earlier items generally win.
 
 ### Browse library
 
-The user can open Luma and immediately browse media in a responsive grid.
+Luma opens on a libraries-only home screen. The homepage must not fetch or display a combined media feed. Global search may return results across libraries; search inside a folder includes its descendants by default.
+
+Initial indexing is an explicit, per-library choice. A configured library is idle until the user starts it from its library card (or an administrator explicitly enables startup scanning). Opening a ready library must use SQLite and generated cache files only. Album covers use prepared thumbnails, including media inside nested folders. Status and scan controls are available on demand so they never displace the media grid. Rescanning requires confirmation explaining its disk/CPU cost, and mobile browsing retains a visible scan/preparation indicator.
 
 The grid rendering will be done based on subfolders, the usual sorting by date modified, name, type etc. along with shuffle and group by should be available for the user
 
@@ -43,6 +45,8 @@ Scrolling must remain responsive for extremely large result sets.
 Selecting an item opens a dedicated viewer.
 
 The user can navigate to previous and next media without returning to the gallery.
+
+The viewer gives the preview nearly all available viewport space. File information, preference actions and tag editing live in an on-demand details sheet.
 
 ### Search using tags
 
@@ -256,6 +260,7 @@ Luma should support a coherent & beautiful theme system.
 
 Initial requirement:
 
+- Dark and White
 - Catpuccin
 - Orange & Black
 - Red & White
@@ -277,6 +282,8 @@ The UI should remain visually consistent across:
 Mobile is a first-class client.
 
 The interface must not simply shrink the desktop layout.
+
+The primary mobile destinations are Library, Reels, Search, Collections and Settings. They use a fixed bottom navigation bar. Search, sort and filters stay compact; filters open as a one-column bottom sheet, and scan status stays collapsed until requested. Controls must never consume the gallery's primary viewport or overflow it horizontally.
 
 Important mobile workflows:
 

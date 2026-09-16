@@ -7,6 +7,7 @@ public sealed record MediaSummary(long Id,long LibraryId,long FolderId,string Fi
     string Preference,string Availability,CacheRepresentation Thumbnail,CacheRepresentation Preview,IReadOnlyList<TagSummary> Tags);
 public sealed record MediaPage(IReadOnlyList<MediaSummary> Items,string? NextCursor,string? PreviousCursor);
 public sealed record MediaNeighbors(MediaSummary? Previous,MediaSummary? Next);
+public sealed record MediaPriorityRequest(IReadOnlyList<long> Ids);
 public sealed class MediaRow
 {
     public long Id {get;set;} public long LibraryId {get;set;} public long FolderId {get;set;}
@@ -15,4 +16,5 @@ public sealed class MediaRow
     public string ModifiedAt {get;set;}=""; public long ModifiedTicks {get;set;} public string EffectiveDate {get;set;}="";
     public string? CapturedAt {get;set;} public string Preference {get;set;}=""; public string Availability {get;set;}="";
     public long SourceRevision {get;set;}
+    public string ProcessingStatus {get;set;}="";
 }

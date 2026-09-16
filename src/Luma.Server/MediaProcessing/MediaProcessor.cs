@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Collections.Concurrent;
 using Luma.Server.Features.Indexing;
 
 namespace Luma.Server.MediaProcessing;
@@ -16,8 +17,73 @@ public sealed record MediaMetadata(int Width, int Height, long? DurationMs, stri
 public sealed record GeneratedVariant(string Variant, string TemporaryPath, int Width, int Height);
 
 // A job invokes child processes sequentially, within its caller's aggregate and type limits.
-public sealed class MediaProcessor(IndexingOptions options)
+public sealed class MediaProcessor(IndexingOptions options) : IDisposable
 {
+    private readonly SemaphoreSlim workerSlots = new(options.ProcessingWorkers, options.ProcessingWorkers);
+    private readonly ConcurrentBag<ImageWorker> idleWorkers = [];
+
+    private sealed class ImageWorker(Process process)
+    {
+        public Process Process { get; } = process;
+        public int Requests { get; set; }
+    }
+
+    private async Task<string> DecodeAsync(string[] args, CancellationToken ct)
+    {
+        await workerSlots.WaitAsync(ct);
+        ImageWorker? worker = null;
+        try
+        {
+            if (!idleWorkers.TryTake(out worker))
+            {
+                var assembly = typeof(MediaProcessor).Assembly;
+                var apphost = Assembly.GetEntryAssembly() == assembly && Path.GetFileNameWithoutExtension(Environment.ProcessPath) != "dotnet";
+                var process = new Process { StartInfo = new ProcessStartInfo(apphost ? Environment.ProcessPath! : "dotnet")
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true } };
+                if (!apphost) process.StartInfo.ArgumentList.Add(assembly.Location);
+                process.StartInfo.ArgumentList.Add("--image-worker");
+                worker = new(process);
+                try { process.Start(); }
+                catch (System.ComponentModel.Win32Exception) { process.Dispose(); worker = null; throw new ProcessingException("tool_unavailable", true); }
+            }
+            using var registration = ct.Register(() => Kill(worker.Process));
+            await worker.Process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(args).AsMemory(), ct);
+            await worker.Process.StandardInput.FlushAsync(ct);
+            var response = await worker.Process.StandardOutput.ReadLineAsync(ct);
+            ct.ThrowIfCancellationRequested();
+            if (response is null || response.Length > 524288) throw new ProcessingException("invalid_generated_media");
+            worker.Requests++;
+            if (worker.Requests < 128)
+            {
+                registration.Dispose();
+                idleWorkers.Add(worker);
+                worker = null;
+            }
+            return response;
+        }
+        finally
+        {
+            if (worker is not null)
+            {
+                Kill(worker.Process);
+                await worker.Process.WaitForExitAsync(CancellationToken.None);
+                worker.Process.Dispose();
+            }
+            workerSlots.Release();
+        }
+    }
+
+    public void Dispose()
+    {
+        while (idleWorkers.TryTake(out var worker))
+        {
+            Kill(worker.Process);
+            worker.Process.WaitForExit();
+            worker.Process.Dispose();
+        }
+        workerSlots.Dispose();
+    }
+
     public async Task<ImageProcessResult> ProcessAsync(string path, string type, string thumbnail, string large, CancellationToken ct)
     {
         var source = path;
@@ -33,12 +99,7 @@ public sealed class MediaProcessor(IndexingOptions options)
                 catch (ProcessingException) when (seek > 0) { await ExtractFrameAsync(path, frame, 0, ct); }
                 source = frame;
             }
-            // Framework-dependent tests use dotnet + server.dll; published apphosts re-execute themselves.
-            var assembly = typeof(MediaProcessor).Assembly;
-            var apphost = Assembly.GetEntryAssembly() == assembly && Path.GetFileNameWithoutExtension(Environment.ProcessPath) != "dotnet";
-            List<string> arguments = apphost ? [] : [assembly.Location];
-            arguments.AddRange(["--process-image", source, thumbnail, large, type == "image" ? "preview" : "poster"]);
-            var json = await RunAsync(apphost ? Environment.ProcessPath! : "dotnet", arguments, ct);
+            var json = await DecodeAsync(["--process-image", source, thumbnail, large, type == "image" ? "preview" : "poster"], ct);
             var result = JsonSerializer.Deserialize<ImageProcessResult>(json) ?? throw new ProcessingException("invalid_generated_media");
             if (result.FailureCode is { } code) throw new ProcessingException(code, code == "cache_io");
             return result with { Metadata = metadata ?? result.Metadata };

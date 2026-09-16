@@ -1,17 +1,20 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Check, Film, Heart, Images, LoaderCircle } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CachedImage } from '../../components/ui/CachedImage'
-import { QuietButton } from '../../components/ui/Controls'
-import { errorMessage, mediaPage, type Filters, type Media } from './api'
+import { Checkbox, QuietButton } from '../../components/ui/Controls'
+import { errorMessage, mediaPage, request, type Filters, type Media } from './api'
+import { useFolderIndexing } from './useFolderIndexing'
 
-export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef }: {
-  filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>
+export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent }: {
+  filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode
 }) {
+  const indexing = useFolderIndexing(filters.folderId)
   const query = useInfiniteQuery({ queryKey: ['media', filters], queryFn: ({ pageParam, signal }) => mediaPage(filters, pageParam, signal),
     initialPageParam: undefined as string | undefined, getNextPageParam: page => page.nextCursor ?? undefined, getPreviousPageParam: page => page.previousCursor ?? undefined,
-    maxPages: 5, gcTime: 0, retry: 1 })
+    maxPages: 5, gcTime: 0, retry: 1,
+    refetchInterval: state => indexing.waiting || state.state.data?.pages.some(page => page.items.some(item => !['ready', 'failed'].includes(item.thumbnail.status))) ? 3000 : false })
   const items = query.data?.pages.flatMap(page => page.items) ?? []
   const gridRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(800)
@@ -31,6 +34,7 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
   const virtual = useVirtualizer({ count: rows, getScrollElement: () => scrollerRef.current, estimateSize: () => rowHeight, overscan: 2 })
   const anchor = useRef<{ id: number; offset: number; data: typeof query.data } | null>(null)
   const loading = useRef(false)
+  const prioritized = useRef(new Set<number>())
   const load = useCallback(async (backward: boolean) => {
     if (loading.current || query.isFetching) return
     const top = scrollerRef.current?.scrollTop ?? 0
@@ -48,27 +52,39 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
   const visible = virtual.getVirtualItems()
   const last = visible.at(-1)?.index ?? -1
   useEffect(() => {
+    const pending = visible.flatMap(row => items.slice(row.index * columns, (row.index + 1) * columns)).filter(item =>
+      (item.thumbnail.status === 'pending' || item.preview.status === 'pending') && !prioritized.current.has(item.id)).map(item => item.id)
+    if (!pending.length) return
+    pending.forEach(id => prioritized.current.add(id))
+    void request('/api/media/priority', undefined, 'POST', { ids: pending }).then(() => {
+      void query.refetch()
+    }).catch(() => undefined)
+  }, [visible, items, columns, query.refetch])
+  useEffect(() => {
     if (items.length && last >= rows - 3 && query.hasNextPage && !query.isFetching) void load(false)
   }, [last, rows, query.hasNextPage, query.isFetching, items.length, load])
   return <div ref={scrollerRef} tabIndex={-1} className="min-h-0 flex-1 overflow-auto p-4 focus-visible:outline-2 focus-visible:outline-accent" data-testid="gallery-scroll"
     onScroll={event => { if (event.currentTarget.scrollTop < rowHeight && query.hasPreviousPage && !query.isFetching) void load(true) }}>
     <div ref={gridRef} className="w-full">
+      {leadingContent}
+      {indexing.waiting && <p role="status" className="flex items-center gap-2 pb-3 text-sm text-muted"><LoaderCircle className="size-4 motion-safe:animate-spin" />Checking this folder and preparing previews…</p>}
+      {indexing.error && <p role="alert" className="pb-3 text-sm text-danger">{errorMessage(indexing.error)}</p>}
       {query.isPending && <div role="status" className="flex items-center justify-center gap-3 py-20 text-muted"><LoaderCircle className="size-5 animate-spin" />Loading your collection…</div>}
       {query.isError && <div role="alert" className="space-y-3 p-5 text-danger"><p>{errorMessage(query.error)}</p><QuietButton onClick={() => void query.refetch()}>Try again</QuietButton></div>}
-      {!query.isPending && !query.isError && items.length === 0 && <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center"><Images className="size-12 text-muted" /><h2 className="text-xl font-semibold">No media to show</h2><p className="text-sm leading-relaxed text-muted">Try another folder or adjust your filters. If this is a new library, start a scan to add your photos and videos.</p></div>}
+      {!query.isPending && !query.isError && items.length === 0 && !leadingContent && <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center"><Images className="size-12 text-muted" /><h2 className="text-xl font-semibold">No media to show</h2><p className="text-sm leading-relaxed text-muted">Try another folder or adjust your filters. If this is a new library, start a scan to add your photos and videos.</p></div>}
       {query.hasPreviousPage && <QuietButton className="sr-only focus:not-sr-only focus:absolute focus:z-10" onClick={() => void load(true)} disabled={query.isFetching}>Load earlier items</QuietButton>}
       <div className="relative" style={{ height: virtual.getTotalSize() }} data-testid="gallery-grid" data-retained-items={items.length}>
         {visible.map(row => <div key={row.index} className="absolute left-0 top-0 grid w-full gap-3 pb-3" style={{ height: rowHeight, transform: `translateY(${row.start}px)`, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
           {items.slice(row.index * columns, (row.index + 1) * columns).map(item => <article key={item.id} className={`relative min-w-0 overflow-hidden rounded-md border ${selected.has(item.id) ? 'border-accent' : 'border-transparent'}`} data-testid="media-cell">
             <button data-media-id={item.id} className="block w-full text-left" aria-label={`Open ${item.fileName}`} onClick={() => onOpen(item)}>
-              <CachedImage key={`${item.thumbnail.url}:${item.thumbnail.status}`} url={item.thumbnail.url} alt="" className="aspect-square w-full bg-surface object-cover" />
+              <CachedImage key={`${item.thumbnail.url}:${item.thumbnail.status}`} url={item.thumbnail.url} status={item.thumbnail.status} alt="" className="aspect-square w-full bg-surface object-cover" />
               <span className="block truncate px-1 py-2 text-xs text-muted">{item.fileName}</span>
             </button>
             {item.mediaType === 'video' && <span className="pointer-events-none absolute bottom-10 right-2 flex items-center gap-1 rounded bg-canvas/90 px-2 py-1 text-xs"><Film className="size-3" aria-hidden="true" />Video</span>}
             {item.preference === 'liked' && <Heart className="pointer-events-none absolute right-2 top-2 size-4 fill-accent text-accent" aria-label="Liked" />}
-            {selecting && <label className="absolute left-2 top-2 flex size-11 cursor-pointer items-center justify-center rounded-md bg-canvas/90">
-              <input type="checkbox" className="size-5 accent-accent" aria-label={`Select ${item.fileName}`} checked={selected.has(item.id)} onChange={() => onSelect(item.id)} />
-            </label>}
+            {selecting && <span className="absolute left-2 top-2 flex size-11 items-center justify-center rounded-lg bg-canvas/90">
+              <Checkbox aria-label={`Select ${item.fileName}`} checked={selected.has(item.id)} onChange={() => onSelect(item.id)} />
+            </span>}
             {selected.has(item.id) && !selecting && <Check className="pointer-events-none absolute left-2 top-2 size-5 text-accent" />}
           </article>)}
         </div>)}

@@ -35,6 +35,60 @@
         }
       }
     },
+    "/api/folders/{id}/index": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "IndexFolder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanAccepted"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/indexing": {
       "get": {
         "tags": [
@@ -215,6 +269,53 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/{id}/original": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetOriginalMedia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "206": {
+            "description": "Partial Content"
+          },
+          "416": {
+            "description": "Range Not Satisfiable"
+          },
+          "503": {
+            "description": "Service Unavailable",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -840,6 +941,29 @@
         }
       }
     },
+    "/api/media/priority": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "PrioritizeVisibleMedia",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaPriorityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/media/{id}/cache/{revision}/{variant}": {
       "get": {
         "tags": [
@@ -1185,7 +1309,8 @@
           "id",
           "libraryId",
           "parentId",
-          "name"
+          "name",
+          "coverUrl"
         ],
         "type": "object",
         "properties": {
@@ -1204,6 +1329,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -1286,7 +1415,8 @@
           "id",
           "name",
           "availability",
-          "rootFolderId"
+          "rootFolderId",
+          "coverUrl"
         ],
         "type": "object",
         "properties": {
@@ -1303,6 +1433,10 @@
           "rootFolderId": {
             "type": "integer",
             "format": "int64",
+            "nullable": true
+          },
+          "coverUrl": {
+            "type": "string",
             "nullable": true
           }
         }
@@ -1355,6 +1489,21 @@
           "previousCursor": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "MediaPriorityRequest": {
+        "required": [
+          "ids"
+        ],
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
           }
         }
       },

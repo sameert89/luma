@@ -1,15 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Heart, ThumbsDown } from 'lucide-react'
-import { useEffect } from 'react'
-import { CachedImage } from '../../components/ui/CachedImage'
+import { ArrowLeft, ArrowRight, Heart, Info, Tag, ThumbsDown, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { MediaStage } from './MediaStage'
 import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { TagEditor } from '../tags/TagEditor'
 import { errorMessage, queryString, request, type Filters, type Media, type Neighbors } from './api'
 
 export function Viewer({ active, filters, onChange, onClose, restoreFocus }: { active: Media; filters: Filters; onChange: (item: Media) => void; onClose: () => void; restoreFocus: () => void }) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [open, setOpen] = useState(true)
+  const [direction, setDirection] = useState<'next' | 'previous'>('next')
+  const navigate = useCallback((media: Media, direction: 'next' | 'previous') => { setDirection(direction); onChange(media) }, [onChange])
   const client = useQueryClient()
-  const detail = useQuery({ queryKey: ['detail', active.id], queryFn: ({ signal }) => request<Media>(`/api/media/${active.id}`, signal), gcTime: 0 })
+  const detail = useQuery({ queryKey: ['detail', active.id], queryFn: ({ signal }) => request<Media>(`/api/media/${active.id}`, signal), gcTime: 0, refetchInterval: query => query.state.data?.preview.status === 'ready' ? false : 3000 })
   const item = detail.data ?? active
   const neighbors = useQuery({ queryKey: ['neighbors', filters, active.id], queryFn: ({ signal }) => request<Neighbors>(`/api/media/${active.id}/neighbors?${queryString(filters)}`, signal), gcTime: 0 })
   const previous = neighbors.data?.previous
@@ -19,35 +23,37 @@ export function Viewer({ active, filters, onChange, onClose, restoreFocus }: { a
   } })
   useEffect(() => {
     function key(event: KeyboardEvent) {
-      if (event.target instanceof HTMLElement && (event.target.closest('input,select,textarea,[contenteditable="true"]') || event.ctrlKey || event.metaKey || event.altKey)) return
-      if (event.key === 'ArrowLeft' && previous) { event.preventDefault(); onChange(previous) }
-      if (event.key === 'ArrowRight' && next) { event.preventDefault(); onChange(next) }
-      if (event.key.toLowerCase() === 't') { event.preventDefault(); document.querySelector<HTMLInputElement>('[role="dialog"] input[name="tag"]')?.focus() }
+      if (!open || detailsOpen) return
+      if (event.target instanceof HTMLElement && (event.target.closest('input,select,textarea,video,[contenteditable="true"]') || event.ctrlKey || event.metaKey || event.altKey)) return
+      if (event.key === 'ArrowLeft' && previous) { event.preventDefault(); navigate(previous, 'previous') }
+      if (event.key === 'ArrowRight' && next) { event.preventDefault(); navigate(next, 'next') }
+      if (event.key.toLowerCase() === 'i') { event.preventDefault(); setDetailsOpen(true) }
+      if (event.key.toLowerCase() === 't') { event.preventDefault(); setDetailsOpen(true); requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[role="dialog"] input[name="tag"]')?.focus()) }
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [previous, next, onChange])
-  return <Modal open onOpenChange={open => { if (!open) onClose() }} title={item.fileName} description="Cached media preview. Use Left and Right arrows to navigate, T to edit tags, and Escape to close." wide restoreFocus={restoreFocus}>
-    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-      <section className="relative flex min-h-0 flex-1 flex-col bg-black/30" aria-label="Media preview">
-        <div className="flex min-h-0 flex-1 items-center justify-center p-3"><CachedImage key={item.preview.url} url={item.preview.url} alt={item.fileName} preview className="h-full max-h-full w-full object-contain" /></div>
-        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
-          <IconButton label="Previous item" disabled={!previous || preference.isPending} onClick={() => previous && onChange(previous)}><ArrowLeft className="size-5" /></IconButton>
-          <p className="text-center text-xs text-muted">{item.mediaType === 'video' ? 'Video poster preview' : item.width && item.height ? `${item.width} × ${item.height}` : 'Image preview'}</p>
-          <IconButton label="Next item" disabled={!next || preference.isPending} onClick={() => next && onChange(next)}><ArrowRight className="size-5" /></IconButton>
+  }, [previous, next, navigate, open, detailsOpen])
+  return <>
+    <Modal open={open} onOpenChange={setOpen} onClosed={onClose} title={item.fileName} description="Media viewer. Use Left and Right arrows to navigate, I for details, and Escape to close." wide hideHeader restoreFocus={restoreFocus}>
+      <section className="relative flex min-h-0 flex-1 items-center justify-center bg-black" aria-label="Media preview">
+        <div key={item.id} data-direction={direction} className="motion-media flex h-full w-full items-center justify-center overflow-hidden"><MediaStage key={item.id} item={item} onNavigate={direction => { const target = direction === 'next' ? next : previous; if (target) navigate(target, direction) }} /></div>
+        <header className="absolute inset-x-0 top-0 flex items-center justify-between p-3 sm:p-5">
+          <div className="min-w-0 rounded-full bg-canvas/85 px-4 py-2 text-sm font-medium text-ink"><span className="block max-w-52 truncate sm:max-w-md">{item.fileName}</span></div>
+          <IconButton label="Close viewer" className="border-transparent bg-canvas/85" onClick={() => setOpen(false)}><X className="size-5" /></IconButton>
+        </header>
+        <div className={`pointer-events-none absolute inset-x-0 ${item.mediaType === 'video' ? 'top-16' : 'bottom-16'} flex items-end justify-between p-3 sm:p-5 [&_button]:pointer-events-auto`}>
+          <IconButton label="Previous item" className="border-transparent bg-canvas/85" disabled={!previous || preference.isPending} onClick={() => previous && navigate(previous, 'previous')}><ArrowLeft className="size-5" /></IconButton>
+          <div className="flex items-center gap-2"><QuietButton className="border-transparent bg-canvas/85 px-3" aria-pressed={item.preference === 'liked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'liked' ? 'neutral' : 'liked')}><Heart className={`size-4 ${item.preference === 'liked' ? 'fill-accent text-accent' : ''}`} /><span className="sr-only sm:not-sr-only">Like</span></QuietButton><IconButton label="Media details" className="border-transparent bg-canvas/85" onClick={() => setDetailsOpen(true)}><Info className="size-5" /></IconButton></div>
+          <IconButton label="Next item" className="border-transparent bg-canvas/85" disabled={!next || preference.isPending} onClick={() => next && navigate(next, 'next')}><ArrowRight className="size-5" /></IconButton>
         </div>
-        {neighbors.isError && <p role="alert" className="px-4 pb-3 text-sm text-danger">{errorMessage(neighbors.error)}</p>}
+        {neighbors.isError && <p role="alert" className="absolute bottom-20 rounded-full bg-canvas px-4 py-2 text-sm text-danger">{errorMessage(neighbors.error)}</p>}
       </section>
-      <aside className="max-h-64 shrink-0 space-y-6 overflow-auto border-t border-line p-5 md:max-h-none md:w-80 md:border-l md:border-t-0" aria-label="Media details and tags">
-        <div className="flex gap-2">
-          <QuietButton aria-pressed={item.preference === 'liked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'liked' ? 'neutral' : 'liked')}><Heart className={`size-4 ${item.preference === 'liked' ? 'fill-accent text-accent' : ''}`} />Like</QuietButton>
-          <QuietButton aria-pressed={item.preference === 'disliked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'disliked' ? 'neutral' : 'disliked')}><ThumbsDown className={`size-4 ${item.preference === 'disliked' ? 'fill-danger text-danger' : ''}`} />Dislike</QuietButton>
-        </div>
-        {preference.isError && <p role="alert" className="text-sm text-danger">{errorMessage(preference.error)}</p>}
-        <div><h2 className="mb-3 text-sm font-semibold">Tags</h2><TagEditor key={item.id} mediaIds={[item.id]} tags={item.tags} /></div>
-        <dl className="space-y-3 text-sm"><div><dt className="text-muted">Modified</dt><dd>{new Date(item.modifiedAt).toLocaleString()}</dd></div><div><dt className="text-muted">File size</dt><dd>{(item.sizeBytes / 1024 / 1024).toFixed(2)} MB</dd></div><div><dt className="text-muted">Original availability</dt><dd className="capitalize">{item.availability}</dd></div></dl>
-        {detail.isError && <p role="alert" className="text-sm text-danger">{errorMessage(detail.error)}</p>}
-      </aside>
-    </div>
-  </Modal>
+    </Modal>
+    <Modal open={detailsOpen} onOpenChange={setDetailsOpen} title="Media details" description="Tags and file information." sheet>
+      <div className="space-y-6 overflow-auto p-5"><div className="flex gap-2"><QuietButton aria-pressed={item.preference === 'liked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'liked' ? 'neutral' : 'liked')}><Heart className={`size-4 ${item.preference === 'liked' ? 'fill-accent text-accent' : ''}`} />Like</QuietButton><QuietButton aria-pressed={item.preference === 'disliked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'disliked' ? 'neutral' : 'disliked')}><ThumbsDown className={`size-4 ${item.preference === 'disliked' ? 'fill-danger text-danger' : ''}`} />Dislike</QuietButton></div>
+        <div><h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Tag className="size-4 text-accent" />Tags</h2><TagEditor key={item.id} mediaIds={[item.id]} tags={item.tags} /></div>
+        <dl className="grid grid-cols-2 gap-4 text-sm"><div><dt className="text-muted">Modified</dt><dd>{new Date(item.modifiedAt).toLocaleString()}</dd></div><div><dt className="text-muted">File size</dt><dd>{(item.sizeBytes / 1024 / 1024).toFixed(2)} MB</dd></div>{item.width && item.height && <div><dt className="text-muted">Dimensions</dt><dd>{item.width} × {item.height}</dd></div>}{item.mediaType === 'video' && <div><dt className="text-muted">Video</dt><dd>{item.durationMs ? `${(item.durationMs / 1000).toFixed(1)} seconds` : 'Duration unknown'}</dd></div>}</dl>
+        {preference.isError && <p role="alert" className="text-sm text-danger">{errorMessage(preference.error)}</p>}{detail.isError && <p role="alert" className="text-sm text-danger">{errorMessage(detail.error)}</p>}</div>
+    </Modal>
+  </>
 }

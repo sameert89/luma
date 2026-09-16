@@ -2,11 +2,12 @@ using Dapper;
 using Luma.Server.Data;
 using Luma.Server.Features.Media;
 using Luma.Server.Http;
+using Luma.Server.Features.Indexing;
 
 namespace Luma.Server.Features.Libraries;
 
-public sealed record LibrarySummary(long Id,string Name,string Availability,long? RootFolderId);
-public sealed record FolderSummary(long Id,long LibraryId,long? ParentId,string Name);
+public sealed record LibrarySummary(long Id,string Name,string Availability,long? RootFolderId,string? CoverUrl);
+public sealed record FolderSummary(long Id,long LibraryId,long? ParentId,string Name,string? CoverUrl);
 public sealed record FolderPage(FolderSummary Current,IReadOnlyList<FolderSummary> Ancestors,IReadOnlyList<FolderSummary> Items,string? NextCursor,string? PreviousCursor);
 public sealed class LibraryBrowser(Database database,CursorSigner cursors)
 {
@@ -14,9 +15,13 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
     {
         await using var db=await database.OpenAsync(ct);
         var rows=await db.QueryAsync<LibraryRow>(new CommandDefinition("""
-            SELECT l.Id,l.Name,l.Availability,(SELECT Id FROM Folders WHERE LibraryId=l.Id AND PathKey='') RootFolderId FROM Libraries l WHERE Enabled=1 ORDER BY l.Id
-            """,cancellationToken:ct));
-        return rows.Select(x=>new LibrarySummary(x.Id,x.Name,x.Availability,x.RootFolderId)).ToArray();
+            SELECT l.Id,l.Name,l.Availability,(SELECT Id FROM Folders WHERE LibraryId=l.Id AND PathKey='') RootFolderId,
+            (SELECT '/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion
+             FROM Media m CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
+             WHERE m.LibraryId=l.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
+             LIMIT 1) CoverUrl FROM Libraries l WHERE Enabled=1 ORDER BY l.Id
+            """,new { encoder=IndexingOptions.EncoderVersion },cancellationToken:ct));
+        return rows.Select(x=>new LibrarySummary(x.Id,x.Name,x.Availability,x.RootFolderId,x.CoverUrl)).ToArray();
     }
     public async Task<FolderPage> FoldersAsync(long? libraryId,long? parentId,int? limit,string? cursor,CancellationToken ct)
     {
@@ -31,8 +36,15 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
         var position=cursor is null?null:cursors.Decode(cursor,scope);
         var backwards=position?.Backward==true;
         var order=backwards?"DESC":"ASC";
-        var seek=position is null?"":$"AND Id {(backwards?"<":">")} @after";
-        var rows=(await db.QueryAsync<FolderRow>(new CommandDefinition($"SELECT * FROM Folders WHERE ParentId=@id {seek} ORDER BY Id {order} LIMIT @limit",new{id=current.Id,after=position?.Id,limit=(limit??100)+1},cancellationToken:ct))).ToList();
+        var seek=position is null?"":$"AND f.Id {(backwards?"<":">")} @after";
+        var rows=(await db.QueryAsync<FolderRow>(new CommandDefinition($"""
+            SELECT f.*,
+            (SELECT '/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion
+             FROM FolderAncestry a CROSS JOIN Media m ON m.FolderId=a.DescendantId AND m.LibraryId=f.LibraryId
+             CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
+             WHERE a.AncestorId=f.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder LIMIT 1) CoverUrl
+            FROM Folders f WHERE ParentId=@id {seek} ORDER BY Id {order} LIMIT @limit
+            """,new{id=current.Id,after=position?.Id,limit=(limit??100)+1,encoder=IndexingOptions.EncoderVersion},cancellationToken:ct))).ToList();
         var more=rows.Count>(limit??100);if(more)rows.RemoveAt(rows.Count-1);if(backwards)rows.Reverse();
         var ancestors=await db.QueryAsync<FolderRow>(new CommandDefinition("""
             SELECT f.*,l.Name LibraryName FROM FolderAncestry a JOIN Folders f ON f.Id=a.AncestorId JOIN Libraries l ON l.Id=f.LibraryId
@@ -42,7 +54,7 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
             rows.Count>0 && (backwards?position is not null:more)?cursors.Encode(scope,0,rows[^1].Id,false):null,
             rows.Count>0 && (backwards?more:position is not null)?cursors.Encode(scope,0,rows[0].Id,true):null);
     }
-    private static FolderSummary ToSummary(FolderRow row)=>new(row.Id,row.LibraryId,row.ParentId,row.RelativePath==""?row.LibraryName:row.RelativePath.Split('/')[^1]);
-    private sealed class FolderRow {public long Id{get;set;}public long LibraryId{get;set;}public long? ParentId{get;set;}public string RelativePath{get;set;}="";public string LibraryName{get;set;}="";}
-    private sealed class LibraryRow {public long Id{get;set;}public string Name{get;set;}="";public string Availability{get;set;}="";public long? RootFolderId{get;set;}}
+    private static FolderSummary ToSummary(FolderRow row)=>new(row.Id,row.LibraryId,row.ParentId,row.RelativePath==""?row.LibraryName:row.RelativePath.Split('/')[^1],row.CoverUrl);
+    private sealed class FolderRow {public long Id{get;set;}public long LibraryId{get;set;}public long? ParentId{get;set;}public string RelativePath{get;set;}="";public string LibraryName{get;set;}="";public string? CoverUrl{get;set;}}
+    private sealed class LibraryRow {public long Id{get;set;}public string Name{get;set;}="";public string Availability{get;set;}="";public long? RootFolderId{get;set;}public string? CoverUrl{get;set;}}
 }

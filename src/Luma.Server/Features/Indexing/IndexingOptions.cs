@@ -17,6 +17,7 @@ public sealed class IndexingOptions
     public long CacheQuotaBytes { get; set; } = 20L * 1024 * 1024 * 1024;
     public long ReserveFreeBytes { get; set; } = 1024L * 1024 * 1024;
     public int VerificationIntervalSeconds { get; set; } = 300;
+    public int SourceVerificationIntervalSeconds { get; set; } = 10;
     public const int EncoderVersion = 1;
 
     public void Validate(string contentRoot, string databasePath)
@@ -24,7 +25,7 @@ public sealed class IndexingOptions
         if (new[] { DiscoveryWorkers, ImageWorkers, VideoWorkers, ProcessingWorkers }.Any(x => x is < 1 or > 4)
             || ImageWorkers > ProcessingWorkers || VideoWorkers > ProcessingWorkers
             || QueueCapacity is < 16 or > 1024 || CacheQuotaBytes < 1024L * 1024 * 1024
-            || ReserveFreeBytes < 1024L * 1024 * 1024 || VerificationIntervalSeconds < 1)
+            || ReserveFreeBytes < 1024L * 1024 * 1024 || VerificationIntervalSeconds < 1 || SourceVerificationIntervalSeconds < 1)
             throw new InvalidOperationException("Invalid indexing resource limits.");
         CachePath = Path.GetFullPath(CachePath, contentRoot);
         foreach (var root in Libraries)
@@ -58,7 +59,9 @@ public sealed class LibraryOptions
     public string Name { get; set; } = "";
     public string Path { get; set; } = "";
     public bool CaseSensitive { get; set; } = !OperatingSystem.IsWindows();
-    public bool ScanOnStartup { get; set; } = true;
+    // A configured path is not consent to immediately consume a large library.
+    // First indexing is initiated from the library card or an explicit scan command.
+    public bool ScanOnStartup { get; set; }
     public string Key(string relativePath) => CaseSensitive ? relativePath : relativePath.ToUpperInvariant();
 }
 
@@ -86,8 +89,9 @@ public sealed class IndexingSetup(Database database, IndexingOptions options)
             await db.ExecuteAsync(new CommandDefinition("""
                 INSERT INTO Libraries(Id,Name,Path,CaseSensitive) VALUES(@Id,@Name,@Path,@CaseSensitive)
                 ON CONFLICT(Id) DO UPDATE SET Name=excluded.Name, Enabled=1;
-                INSERT INTO Scans(LibraryId,State,Force,RetryFailures,StartedAt)
-                SELECT @Id,'queued',
+                INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt)
+                SELECT @Id,CASE WHEN NOT @ScanOnStartup AND NOT @encoderChanged THEN
+                  (SELECT FolderId FROM Scans WHERE LibraryId=@Id AND State='interrupted' ORDER BY Id DESC LIMIT 1) ELSE NULL END,'queued',
                   COALESCE((SELECT Force FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),
                   COALESCE((SELECT RetryFailures FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),@now WHERE
                   (@ScanOnStartup OR @encoderChanged OR (SELECT State FROM Scans WHERE LibraryId=@Id ORDER BY Id DESC LIMIT 1)='interrupted')

@@ -17,6 +17,34 @@ var mode=args[0];
 var directory=Path.GetFullPath(args[1]);
 var count=args.Length>2?int.Parse(args[2],CultureInfo.InvariantCulture):1500;
 Directory.CreateDirectory(directory);
+if (mode == "decode-benchmark")
+{
+    var source = Path.Combine(directory, "source.jpg");
+    using (var image = new Image<Rgb24>(1920, 1080))
+    {
+        for (var y = 0; y < image.Height; y++) for (var x = 0; x < image.Width; x++)
+            image[x, y] = new((byte)(x % 256), (byte)(y % 256), (byte)((x + y) % 256));
+        await image.SaveAsJpegAsync(source);
+    }
+    var thumbnail = Path.Combine(directory, "thumbnail.webp");
+    var preview = Path.Combine(directory, "preview.jpg");
+    var iterations = Math.Min(count, 200);
+    var cold = Stopwatch.StartNew();
+    for (var i = 0; i < iterations; i++)
+        await Luma.Server.MediaProcessing.MediaProcessor.RunAsync("dotnet", [typeof(Luma.Server.MediaProcessing.MediaProcessor).Assembly.Location,
+            "--process-image", source, thumbnail, preview, "preview"], default);
+    cold.Stop();
+    using var processor = new Luma.Server.MediaProcessing.MediaProcessor(new());
+    var reused = Stopwatch.StartNew();
+    for (var i = 0; i < iterations; i++) await processor.ProcessAsync(source, "image", thumbnail, preview, default);
+    reused.Stop();
+    var report = JsonSerializer.Serialize(new { iterations, width = 1920, height = 1080,
+        processPerImageSeconds = cold.Elapsed.TotalSeconds, reusedProcessSeconds = reused.Elapsed.TotalSeconds,
+        reusedImagesPerSecond = iterations / reused.Elapsed.TotalSeconds }, new JsonSerializerOptions { WriteIndented = true });
+    await File.WriteAllTextAsync(Path.Combine(directory, "results.json"), report);
+    Console.WriteLine(report);
+    return;
+}
 var builder=Host.CreateApplicationBuilder();
 builder.Configuration.AddInMemoryCollection(new Dictionary<string,string?>{{"Luma:DatabasePath",Path.Combine(directory,"fixture.db")}});
 var database=new Database(builder.Configuration,builder.Environment);
@@ -66,7 +94,7 @@ if(mode=="seed")
         foreach(var variant in new[]{"thumbnail",id%5==0?"poster":"preview"})
         {
             var extension=variant=="thumbnail"?"webp":"jpg";
-            var relative=$"{id%256:x2}/{id}/1-1-{variant}.{extension}";
+            var relative=Path.Combine($"{id%256:x2}", $"{id}", $"1-1-{variant}.{extension}");
             var output=Path.Combine(cache,relative);Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             if(!File.Exists(output)) File.Copy(Path.Combine(cache,$"palette-{id%12}.{extension}"),output);
             var bytes=await File.ReadAllBytesAsync(output);
@@ -78,6 +106,13 @@ if(mode=="seed")
                 """,new{id,variant,relative,size=bytes.Length,hash=Convert.ToHexString(SHA256.HashData(bytes))});
         }
     }
+    await db.ExecuteAsync("""
+        INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt)
+        SELECT Id,SourceRevision,1,LastSeenScanId,MediaType,'ready','2026-01-01' FROM Media WHERE 1
+        ON CONFLICT(MediaId,SourceRevision,EncoderVersion) DO UPDATE SET State='ready',Claim=NULL,LeaseUntil=NULL;
+        UPDATE Media SET Availability='present',ProcessingStatus='ready';
+        UPDATE Folders SET LastSeenScanId=1,DirectIndexedAt='2026-01-01' WHERE Id IN (1,2);
+        """);
     Console.WriteLine($"Fixture ready: {directory}");return;
 }
 var signer=new CursorSigner(database);await signer.InitializeAsync(default);var browser=new MediaBrowser(database,signer);

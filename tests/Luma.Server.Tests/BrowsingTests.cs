@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using Dapper;
 using Luma.Server.Features.Media;
+using Luma.Server.Features.Libraries;
 using Luma.Server.Features.Tags;
+using Luma.Server.Features.Indexing;
 using Luma.Server.Http;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -11,6 +13,46 @@ namespace Luma.Server.Tests;
 
 public sealed class BrowsingTests
 {
+    [Fact]
+    public async Task Album_covers_use_ready_current_descendants_without_accessing_sources()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "nested"));
+        await f.CreateImageAsync("album/nested/image.png");
+        await f.ScanAsync();
+        var signer = new CursorSigner(f.Database);
+        await signer.InitializeAsync(default);
+        var browser = new LibraryBrowser(f.Database, signer);
+        Assert.Null(Assert.Single(await browser.LibrariesAsync(default)).CoverUrl);
+        await f.ProcessAllAsync();
+        Directory.Move(f.Root.Path, f.Root.Path + "-offline");
+        var library = Assert.Single(await browser.LibrariesAsync(default));
+        Assert.NotNull(library.CoverUrl);
+        var album = Assert.Single((await browser.FoldersAsync(1, null, 1, null, default)).Items);
+        Assert.Equal(library.CoverUrl, album.CoverUrl);
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Media SET SourceRevision=SourceRevision+1");
+        Assert.Null(Assert.Single(await browser.LibrariesAsync(default)).CoverUrl);
+        Assert.Null(Assert.Single((await browser.FoldersAsync(1, null, 1, null, default)).Items).CoverUrl);
+        await db.ExecuteAsync("UPDATE Media SET SourceRevision=SourceRevision-1,Availability='missing'");
+        Assert.Null(Assert.Single(await browser.LibrariesAsync(default)).CoverUrl);
+    }
+
+    [Fact]
+    public async Task Missing_preview_does_not_wait_for_the_database_writer()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await SeedAsync(f, 1);
+        using var access = new CacheAccessLog(f.Database);
+        using var content = new CacheContent(f.Database, f.Options, access);
+        await using var db = await f.Database.OpenAsync(default);
+        using var writer = db.BeginTransaction();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var error = await Assert.ThrowsAsync<ApiRequestException>(() => content.ServeAsync(1, 1, "preview", 1, new Microsoft.AspNetCore.Http.DefaultHttpContext(), default));
+        Assert.Contains("preview", error.Message);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(1), $"Request waited {watch.Elapsed} for a writer");
+    }
+
     [Fact]
     public async Task Keyset_pages_handle_ties_forward_backward_changed_limits_and_tampering()
     {
@@ -102,6 +144,8 @@ public sealed class BrowsingTests
         var missing=await client.GetAsync(media.Preview.Url);Assert.Equal(HttpStatusCode.ServiceUnavailable,missing.StatusCode);
         Assert.Contains("cache_unavailable",await missing.Content.ReadAsStringAsync());Assert.NotNull(missing.Headers.RetryAfter);
         await client.GetAsync(media.Preview.Url);
+        for (var attempt = 0; attempt < 100 && await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs") != "pending"; attempt++)
+            await Task.Delay(20);
         Assert.Equal(1,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingJobs"));
         Assert.Equal("pending",await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs"));
         var tag=await client.PostAsJsonAsync("/api/tags",new CreateTagRequest("Offline editing"));Assert.Equal(HttpStatusCode.Created,tag.StatusCode);
@@ -111,6 +155,22 @@ public sealed class BrowsingTests
         Assert.Equal(media.Id,Assert.Single((await client.GetFromJsonAsync<MediaPage>("/api/media?tag=offline%20editing&preference=liked"))!.Items).Id);
         Assert.Equal(HttpStatusCode.BadRequest,(await client.GetAsync("/api/media?unknown=1")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await client.GetAsync("/api/media?limit=0")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Visible_media_priority_wakes_waiting_processing_without_touching_sources()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await SeedAsync(f,3);
+        await using var db=await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("""
+            INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt)
+            VALUES(1,1,@version,1,'image','waiting','2100-01-01T00:00:00.0000000Z');
+            """,new{version=IndexingOptions.EncoderVersion});
+        var browser=await BrowserAsync(f);
+        await browser.PrioritizeAsync(new MediaPriorityRequest([1]),default);
+        Assert.Equal("pending",await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE MediaId=1"));
+        var next=DateTimeOffset.Parse((await db.ExecuteScalarAsync<string>("SELECT NextAttemptAt FROM ProcessingJobs WHERE MediaId=1"))!);
+        Assert.True(next < DateTimeOffset.UtcNow, $"NextAttemptAt was {next:O}");
     }
 
     [Fact]

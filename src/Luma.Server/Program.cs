@@ -7,6 +7,11 @@ using Luma.Server.Features.Media;
 using Luma.Server.Features.Tags;
 using Luma.Server.Features.Libraries;
 
+if (args.FirstOrDefault() == "--image-worker")
+{
+    await ImageProcessCommand.RunWorkerAsync(CancellationToken.None);
+    return;
+}
 if (args.FirstOrDefault() == "--process-image")
 {
     await ImageProcessCommand.RunAsync(args, CancellationToken.None);
@@ -23,6 +28,7 @@ builder.Services.AddSingleton<CursorSigner>();
 builder.Services.AddSingleton<MediaBrowser>();
 builder.Services.AddSingleton<LibraryBrowser>();
 builder.Services.AddSingleton<CacheContent>();
+builder.Services.AddSingleton<OriginalContent>();
 builder.Services.AddSingleton<CacheAccessLog>();
 builder.Services.AddSingleton<TagService>();
 builder.Services.AddSingleton(services =>
@@ -40,7 +46,9 @@ if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
     builder.Services.AddHostedService(services => services.GetRequiredService<ScanWorker>());
     builder.Services.AddHostedService<ProcessingWorker>();
+    builder.Services.AddHostedService<SourcePresenceWorker>();
     builder.Services.AddHostedService(services => services.GetRequiredService<CacheAccessLog>());
+    builder.Services.AddHostedService(services => services.GetRequiredService<CacheContent>());
 }
 builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(10));
 builder.Services.ConfigureHttpJsonOptions(options =>

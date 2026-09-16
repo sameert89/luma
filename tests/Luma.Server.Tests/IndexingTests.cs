@@ -19,6 +19,117 @@ namespace Luma.Server.Tests;
 public sealed class IndexingTests
 {
     [Fact]
+    public async Task Interrupted_folder_discovery_recovers_without_expanding_to_a_library_scan()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var folderId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='album'");
+        var scan = await f.NewScanAsync();
+        await db.ExecuteAsync("UPDATE Scans SET FolderId=@folderId,State='interrupted' WHERE Id=@Id", new { folderId, scan.Id });
+        await new IndexingSetup(f.Database, f.Options).InitializeAsync(default);
+        Assert.Equal(folderId, await db.ExecuteScalarAsync<long>("SELECT FolderId FROM Scans WHERE State='queued'"));
+    }
+
+    [Fact]
+    public async Task Folder_discovery_is_direct_and_does_not_reconcile_other_folders()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("outside.png");
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "nested"));
+        await f.CreateImageAsync("album/old.png");
+        await f.CreateImageAsync("album/nested/retained.png");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var folderId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='album'");
+        await db.ExecuteAsync("UPDATE Media SET Preference='liked'");
+        File.Delete(Path.Combine(f.Root.Path, "outside.png"));
+        File.Delete(Path.Combine(f.Root.Path, "album", "old.png"));
+        await f.CreateImageAsync("album/new.png");
+        await f.CreateImageAsync("album/nested/undiscovered.png");
+        var scan = await f.NewScanAsync();
+        scan.FolderId = folderId;
+        await db.ExecuteAsync("UPDATE Scans SET FolderId=@FolderId WHERE Id=@Id", scan);
+        await f.Scanner.ScanAsync(scan, f.Root, default);
+        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE RelativePath='album/old.png'"));
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE RelativePath='outside.png'"));
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE RelativePath='album/nested/retained.png'"));
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Media WHERE RelativePath='album/nested/undiscovered.png'"));
+        Assert.Equal("liked", await db.ExecuteScalarAsync<string>("SELECT Preference FROM Media WHERE RelativePath='album/old.png'"));
+        await f.ProcessAllAsync();
+        Assert.Equal("ready", await db.ExecuteScalarAsync<string>("SELECT ProcessingStatus FROM Media WHERE RelativePath='album/new.png'"));
+    }
+
+    [Fact]
+    public async Task Idle_folder_endpoint_resumes_partial_indexing_and_is_idempotent_when_complete()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await f.CreateImageAsync("album/photo.png");
+        var scan = await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var folderId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='album'");
+        await db.ExecuteAsync("UPDATE Scans SET State='cancelled' WHERE Id=@Id; UPDATE ProcessingJobs SET State='waiting'", scan);
+        await using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Testing")
+            .UseSetting("Luma:DatabasePath", f.Database.Path).UseSetting("Luma:Indexing:CachePath", f.Options.CachePath)
+            .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Fixture")
+            .UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path).UseSetting("Luma:Indexing:Libraries:0:ScanOnStartup", "false"));
+        using var client = host.CreateClient();
+        var response = await client.PostAsync($"/api/folders/{folderId}/index", null);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var accepted = await response.Content.ReadFromJsonAsync<ScanAccepted>();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (await db.ExecuteScalarAsync<string>("SELECT ProcessingStatus FROM Media") != "ready") await Task.Delay(100, timeout.Token);
+        Assert.Equal(folderId, await db.ExecuteScalarAsync<long>("SELECT FolderId FROM Scans WHERE Id=@Id", accepted));
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/api/folders/{folderId}/index", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync("/api/folders/9999/index", null)).StatusCode);
+        var count = await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans");
+        await db.ExecuteAsync("UPDATE Folders SET DirectIndexedAt=NULL WHERE Id=@folderId; INSERT INTO Scans(LibraryId,State,StartedAt) VALUES(1,'running','now')", new { folderId });
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync($"/api/folders/{folderId}/index", null)).StatusCode);
+        Assert.Equal(count + 1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans"));
+    }
+
+    [Fact]
+    public async Task Reused_decoder_recovers_from_invalid_media_and_periodic_recycling()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("image.png");
+        using var decoder = new MediaProcessor(f.Options);
+        var thumbnail = Path.Combine(f.DirectoryPath, "thumb.webp");
+        var preview = Path.Combine(f.DirectoryPath, "preview.jpg");
+        var invalid = Path.Combine(f.DirectoryPath, "invalid.png");
+        await File.WriteAllTextAsync(invalid, "invalid image");
+        await Assert.ThrowsAsync<ProcessingException>(() => decoder.ProcessAsync(invalid, "image", thumbnail, preview, default));
+        for (var i = 0; i < 130; i++)
+        {
+            var result = await decoder.ProcessAsync(Path.Combine(f.Root.Path, "image.png"), "image", thumbnail, preview, default);
+            Assert.Equal(128, result.Metadata!.Width);
+            Assert.Equal(2, result.Variants.Count);
+        }
+    }
+
+    [Fact]
+    public async Task Background_presence_checks_hide_deleted_paths_but_preserve_unavailable_roots()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("deleted.png");
+        await f.CreateImageAsync("retained.png");
+        await f.ScanAsync();
+        using var worker = new SourcePresenceWorker(f.Database, f.Options, NullLogger<SourcePresenceWorker>.Instance);
+        File.Delete(Path.Combine(f.Root.Path, "deleted.png"));
+        await worker.CheckBatchAsync(default);
+        await using var db = await f.Database.OpenAsync(default);
+        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE FileName='deleted.png'"));
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE FileName='retained.png'"));
+        var original = f.Root.Path;
+        f.Root.Path = Path.Combine(f.DirectoryPath, "unmounted");
+        await worker.CheckBatchAsync(default);
+        f.Root.Path = original;
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE FileName='retained.png'"));
+    }
+
+    [Fact]
     public async Task Cache_write_failure_is_retryable_and_does_not_report_source_loss()
     {
         await using var f = await PipelineFixture.CreateAsync();
@@ -453,6 +564,7 @@ internal sealed class PipelineFixture : IAsyncDisposable
     public ScanWorker Scanner { get; private set; } = null!;
     public GeneratedCache Cache { get; private set; } = null!;
     public ProcessingWorker Processor { get; private set; } = null!;
+    private MediaProcessor decoder = null!;
 
     public static async Task<PipelineFixture> CreateAsync()
     {
@@ -467,7 +579,8 @@ internal sealed class PipelineFixture : IAsyncDisposable
         await new IndexingSetup(f.Database, f.Options).InitializeAsync(default);
         f.Scanner = new(f.Database, f.Options, NullLogger<ScanWorker>.Instance);
         f.Cache = new(f.Database, f.Options);
-        f.Processor = new(f.Database, f.Options, new(f.Options), f.Cache, NullLogger<ProcessingWorker>.Instance);
+        f.decoder = new(f.Options);
+        f.Processor = new(f.Database, f.Options, f.decoder, f.Cache, NullLogger<ProcessingWorker>.Instance);
         return f;
     }
 
@@ -518,6 +631,7 @@ internal sealed class PipelineFixture : IAsyncDisposable
     {
         Scanner.Dispose();
         Processor.Dispose();
+        decoder.Dispose();
         SqliteConnection.ClearAllPools();
         foreach (var path in Directory.EnumerateFiles(DirectoryPath, "*", SearchOption.AllDirectories)) File.SetAttributes(path, FileAttributes.Normal);
         Directory.Delete(DirectoryPath, true);

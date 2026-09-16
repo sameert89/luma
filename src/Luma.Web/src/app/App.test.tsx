@@ -13,6 +13,15 @@ function emptyApi() {
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url.startsWith('/api/libraries') ? [] : { items: [], nextCursor: null, previousCursor: null }), { headers: { 'Content-Type': 'application/json' } }))))
 }
 describe('browsing shell', () => {
+  it('shows libraries on home without fetching the combined media feed', async () => {
+    const fetch = vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/libraries'
+      ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+      : { libraries: [] }), { headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetch)
+    renderApp()
+    expect(await screen.findByRole('heading', { name: 'Photos' })).toBeVisible()
+    expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/media'))).toBe(false)
+  })
   it('explains how to connect an empty library', async () => {
     emptyApi(); renderApp()
     expect(await screen.findByRole('heading', { name: 'Connect your first library' })).toBeVisible()
@@ -31,9 +40,51 @@ describe('browsing shell', () => {
     emptyApi(); renderApp()
     await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'Summer{Enter}')
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Preference' }), 'liked')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Favourite state' }), 'liked')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(window.location.search).toContain('q=Summer')
     expect(window.location.search).toContain('preference=liked')
+  })
+  it('opens reels as a global video feed instead of the current folder', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+    const clip = { id: 10, libraryId: 1, folderId: 2, fileName: 'clip.mp4', mediaType: 'video', extension: '.mp4', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preview: { status: 'pending' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
+    const fetch = vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const data = text.startsWith('/api/libraries') ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+        : text.startsWith('/api/indexing') ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
+        : text.startsWith('/api/folders') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
+        : text.includes('/neighbors?') ? { previous: null, next: null }
+            : /\/api\/media\/\d+$/.test(text) ? clip
+              : { items: [clip], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/media?') && String(url).includes('mediaType=video') && !String(url).includes('folderId=2') && !String(url).includes('libraryId=1'))).toBe(true))
+    expect(window.location.search).toContain('mediaType=video')
+    expect(window.location.search).not.toContain('folderId=2')
+  })
+  it('does not show a random feed on the empty search destination', async () => {
+    const fetch = vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const data = text.startsWith('/api/libraries')
+        ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+        : text.startsWith('/api/indexing')
+          ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
+          : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderApp()
+    await screen.findByRole('heading', { name: 'Photos' })
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Search' })).find(button => button.textContent?.includes('Search'))!)
+    expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
+    expect(screen.queryByTestId('gallery-scroll')).not.toBeInTheDocument()
   })
 })

@@ -1,6 +1,97 @@
 @import "tailwindcss" source("../");
 
 @theme {
+  --color-canvas: #111319;
+  --color-surface: #1e1f26;
+  --color-line: #454653;
+  --color-ink: #e2e2eb;
+  --color-muted: #c6c5d5;
+  --color-accent: #bdc2ff;
+  --color-on-accent: #111319;
+  --color-positive: #a6e3a1;
+  --color-danger: #f38ba8;
+  --font-sans: "Inter Variable", system-ui, sans-serif;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply m-0 min-w-80 overflow-hidden bg-canvas font-sans text-ink antialiased; }
+  button, a, input, select, summary { @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent; }
+  button { @apply cursor-pointer disabled:cursor-wait; }
+  @media (prefers-reduced-motion: no-preference) {
+    button, a, input, select { @apply transition-colors duration-150; }
+  }
+}
+
+@layer utilities {
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+.motion-overlay[data-state='closed'] { pointer-events: none; }
+.search-reveal { display: grid; grid-template-columns: 0fr; width: 0; opacity: 0; visibility: hidden; }
+.search-reveal[data-open='true'] { grid-template-columns: 1fr; width: 100%; opacity: 1; visibility: visible; transition-delay: 0s; }
+/* Radix retains closing dialogs until their exit animation ends. Individual scale
+   preserves the positioning transform on centered dialogs. */
+@keyframes luma-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes luma-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes luma-dialog-in { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: translateY(0); } }
+@keyframes luma-dialog-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(0.5rem); } }
+@keyframes luma-sheet-in { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
+@keyframes luma-sheet-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(1rem); } }
+@keyframes luma-page-in { from { opacity: 0; transform: translateY(.5rem); } to { opacity: 1; transform: translateY(0); } }
+@keyframes luma-media-in { from { opacity: 0; transform: translateX(var(--media-entry, 1rem)); } to { opacity: 1; transform: translateX(0); } }
+@keyframes luma-media-y-in { from { opacity: 0; transform: translateY(var(--media-entry-y, 1rem)); } to { opacity: 1; transform: translateY(0); } }
+.motion-media[data-direction='previous'] { --media-entry: -1rem; }
+.motion-media[data-axis='vertical'][data-direction='previous'] { --media-entry-y: -1rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .motion-overlay[data-state='open'], [data-motion='viewer'][data-state='open'] { animation: luma-fade-in 150ms ease-out; }
+  .motion-overlay[data-state='closed'], [data-motion='viewer'][data-state='closed'] { animation: luma-fade-out 150ms ease-in; }
+  [data-motion='dialog'][data-state='open'], [data-motion='sheet'][data-state='open'] { animation: luma-fade-in 180ms ease-out; }
+  [data-motion='dialog'][data-state='closed'], [data-motion='sheet'][data-state='closed'] { animation: luma-fade-out 150ms ease-in; }
+  [data-motion='dialog'][data-state='open'] [data-motion-panel], [data-motion='sheet'][data-state='open'] [data-motion-panel] { animation: luma-dialog-in 180ms ease-out; }
+  [data-motion='dialog'][data-state='closed'] [data-motion-panel], [data-motion='sheet'][data-state='closed'] [data-motion-panel] { animation: luma-dialog-out 150ms ease-in; }
+  .motion-page { animation: luma-page-in 180ms ease-out; }
+  .motion-media { animation: luma-media-in 180ms ease-out; }
+  .motion-media[data-axis='vertical'] { animation-name: luma-media-y-in; }
+  .motion-preview { animation: luma-fade-in 150ms ease-out; }
+  details[open] > :not(summary) { animation: luma-fade-in 150ms ease-out; }
+  nav button svg { transition: transform 150ms ease-out; }
+  nav button[aria-current='page'] svg { transform: translateY(-.125rem); }
+  @media (max-width: 639px) {
+    [data-motion='sheet'][data-state='open'] [data-motion-panel] { animation-name: luma-sheet-in; }
+    [data-motion='sheet'][data-state='closed'] [data-motion-panel] { animation-name: luma-sheet-out; }
+  }
+  .search-reveal { transition: grid-template-columns 180ms ease, width 180ms ease, opacity 150ms ease, visibility 0s linear 180ms; }
+  .search-reveal[data-open='true'] { transition-delay: 0s; }
+}
+
+[data-theme='obsidian'] {
+  --color-canvas: #111319;
+  --color-surface: #1e1f26;
+  --color-line: #454653;
+  --color-ink: #e2e2eb;
+  --color-muted: #c6c5d5;
+  --color-accent: #bdc2ff;
+  --color-on-accent: #111319;
+  color-scheme: dark;
+}
+[data-theme='light'] {
+  --color-canvas: #f8fafc;
+  --color-surface: #ffffff;
+  --color-line: #cbd5e1;
+  --color-ink: #0f172a;
+  --color-muted: #475569;
+  --color-accent: #1d4ed8;
+  --color-on-accent: #ffffff;
+  --color-danger: #be123c;
+  --color-positive: #166534;
+  color-scheme: light;
+}
+
+[data-theme='catppuccin'] {
+  color-scheme: dark;
   --color-canvas: #1e1e2e;
   --color-surface: #313244;
   --color-line: #585b70;
@@ -8,13 +99,64 @@
   --color-muted: #bac2de;
   --color-accent: #cba6f7;
   --color-on-accent: #1e1e2e;
-  --color-positive: #a6e3a1;
-  --color-danger: #f38ba8;
-  --font-sans: "Inter Variable", system-ui, sans-serif;
 }
 
-@layer base {
-  body { @apply m-0 min-w-80 bg-canvas font-sans text-ink antialiased; }
-  button, a, input, select { @apply focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent; }
-  button { @apply cursor-pointer disabled:cursor-wait; }
+[data-theme='ember'] {
+  color-scheme: dark;
+  --color-canvas: #050505;
+  --color-surface: #121212;
+  --color-line: #3a3a3a;
+  --color-ink: #f5f5f5;
+  --color-muted: #a3a3a3;
+  --color-accent: #f97316;
+  --color-on-accent: #050505;
+}
+
+[data-theme='crimson'] {
+  color-scheme: light;
+  --color-danger: #be123c;
+  --color-positive: #166534;
+  --color-canvas: #fffafa;
+  --color-surface: #ffffff;
+  --color-line: #f0caca;
+  --color-ink: #2b1114;
+  --color-muted: #73545a;
+  --color-accent: #dc2626;
+  --color-on-accent: #ffffff;
+}
+
+[data-theme='cinema'], [data-theme='midnight'], [data-theme='oled'], [data-theme='forest'] {
+  color-scheme: dark;
+  --color-ink: #f5f5f5;
+  --color-muted: #b5b8bf;
+  --color-danger: #f38ba8;
+  --color-positive: #a6e3a1;
+}
+[data-theme='cinema'] {
+  --color-canvas: #101010;
+  --color-surface: #202020;
+  --color-line: #484848;
+  --color-accent: #dc1f2a;
+  --color-on-accent: #ffffff;
+}
+[data-theme='midnight'] {
+  --color-canvas: #080f19;
+  --color-surface: #142131;
+  --color-line: #3c5269;
+  --color-accent: #38bdf8;
+  --color-on-accent: #080f19;
+}
+[data-theme='oled'] {
+  --color-canvas: #000000;
+  --color-surface: #141414;
+  --color-line: #404040;
+  --color-accent: #eeeeee;
+  --color-on-accent: #000000;
+}
+[data-theme='forest'] {
+  --color-canvas: #0e1411;
+  --color-surface: #1c2821;
+  --color-line: #40564a;
+  --color-accent: #4ade80;
+  --color-on-accent: #0e1411;
 }

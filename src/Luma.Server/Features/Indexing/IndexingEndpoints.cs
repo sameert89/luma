@@ -20,6 +20,29 @@ public static class IndexingEndpoints
 {
     public static void MapIndexing(this WebApplication app)
     {
+        app.MapPost("/api/folders/{id:long}/index", async Task<Results<Accepted<ScanAccepted>, NoContent, ProblemHttpResult>>
+            (long id, Database database, HttpContext context, CancellationToken ct) =>
+        {
+            await using var db = await database.OpenAsync(ct);
+            using var tx = db.BeginTransaction();
+            var folder = await db.QuerySingleOrDefaultAsync<FolderIndexRow>(new CommandDefinition("""
+                SELECT f.LibraryId,f.DirectIndexedAt FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
+                WHERE f.Id=@id AND l.Enabled=1
+                """, new { id }, tx, cancellationToken: ct));
+            if (folder is null) return Problem(404, context);
+            if (folder.DirectIndexedAt is not null && !await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
+                SELECT EXISTS(SELECT 1 FROM Media m WHERE m.FolderId=@id AND m.Availability='present' AND m.ProcessingStatus='pending'
+                  AND NOT EXISTS(SELECT 1 FROM ProcessingJobs j JOIN Scans s ON s.Id=j.ScanId
+                    WHERE j.MediaId=m.Id AND j.SourceRevision=m.SourceRevision AND j.EncoderVersion=@version
+                      AND j.State IN ('pending','running') AND s.State IN ('running','completed')))
+                """, new { id, version = IndexingOptions.EncoderVersion }, tx, cancellationToken: ct))) return TypedResults.NoContent();
+            if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))", folder, tx, cancellationToken: ct))) return Problem(409, context);
+            var scanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
+                INSERT INTO Scans(LibraryId,FolderId,State,StartedAt) VALUES(@LibraryId,@id,'queued',@now) RETURNING Id
+                """, new { folder.LibraryId, id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+            tx.Commit();
+            return TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId));
+        }).WithName("IndexFolder").Produces<ApiProblem>(404, "application/problem+json").Produces<ApiProblem>(409, "application/problem+json");
         app.MapGet("/api/indexing", async (Database database, IndexingOptions options, MediaProcessing.GeneratedCache cache, CancellationToken ct) =>
         {
             await using var db = await database.OpenAsync(ct);
@@ -92,6 +115,11 @@ public static class IndexingEndpoints
         public string State { get; set; } = "";
         public long Count { get; set; }
     }
+    private sealed class FolderIndexRow
+    {
+        public long LibraryId { get; set; }
+        public string? DirectIndexedAt { get; set; }
+    }
     private sealed class LibraryRow
     {
         public long Id { get; set; }
@@ -103,6 +131,7 @@ public static class IndexingEndpoints
 
 public sealed class ScanRow
 {
+    public long? FolderId { get; set; }
     public long Id { get; set; }
     public long LibraryId { get; set; }
     public string State { get; set; } = "";

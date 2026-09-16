@@ -62,7 +62,7 @@ Add a `Luma:Indexing` section to the server configuration, for example:
     "Indexing": {
       "CachePath": "/data/cache",
       "Libraries": [
-        { "Id": 1, "Name": "Photos", "Path": "/media/photos", "CaseSensitive": true, "ScanOnStartup": true }
+        { "Id": 1, "Name": "Photos", "Path": "/media/photos", "CaseSensitive": true, "ScanOnStartup": false }
       ],
       "DiscoveryWorkers": 1,
       "ImageWorkers": 1,
@@ -74,7 +74,7 @@ Add a `Luma:Indexing` section to the server configuration, for example:
 }
 ```
 
-Use absolute Windows paths on Windows and `CaseSensitive: false` for a normal NTFS root. Paths and IDs must be distinct; overlapping roots and symlink/reparse roots are rejected. Keep database/cache outside all media roots. Choose stable positive IDs: changing the path or case policy for an existing ID is rejected. Omitting a root disables its work without deleting its records. Originals may be mounted read-only.
+For the simple Docker setup, use one base media folder and let Luma index all child folders beneath it. The configured `Name` is only the display label shown in the app; use a practical label such as "Media", "Photos" or "Family archive". Advanced deployments may configure multiple libraries with separate IDs and paths, but paths must be distinct; overlapping roots and symlink/reparse roots are rejected. Use absolute Windows paths on Windows and `CaseSensitive: false` for a normal NTFS root. Keep database/cache outside all media roots. Choose stable positive IDs: changing the path or case policy for an existing ID is rejected. Omitting a root disables its work without deleting its records. Originals may be mounted read-only.
 
 Environment variables use double underscores: `Luma__Indexing__Libraries__0__Path`, `Luma__Indexing__Libraries__0__Id`, `Luma__Indexing__CachePath`, etc. `FfmpegPath` and `FfprobePath` default to `ffmpeg` and `ffprobe`. Worker counts range from 1–4; image/video limits may not exceed the aggregate `ProcessingWorkers`. Queue capacity is 16–1024. `CacheQuotaBytes` defaults to 20 GiB (minimum 1 GiB); `ReserveFreeBytes` defaults to 1 GiB (minimum 1 GiB). `VerificationIntervalSeconds` defaults to 300.
 

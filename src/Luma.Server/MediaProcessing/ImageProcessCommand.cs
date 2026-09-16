@@ -15,16 +15,38 @@ namespace Luma.Server.MediaProcessing;
 // The parent kills this process on timeout/cancellation, including synchronous decoder/resize work.
 public static class ImageProcessCommand
 {
+    private static readonly Configuration DecoderConfiguration = CreateConfiguration();
+
+    private static Configuration CreateConfiguration()
+    {
+        var configuration = Configuration.Default.Clone();
+        configuration.MaxDegreeOfParallelism = 1;
+        configuration.MemoryAllocator = MemoryAllocator.Create(new MemoryAllocatorOptions
+        { MaximumPoolSizeMegabytes = 16, AllocationLimitMegabytes = 400 });
+        return configuration;
+    }
+
+    public static async Task RunWorkerAsync(CancellationToken ct)
+    {
+        // Recycle periodically to bound retained decoder state and native resources.
+        for (var count = 0; count < 128; count++)
+        {
+            var line = await Console.In.ReadLineAsync(ct);
+            if (line is null) return;
+            var args = JsonSerializer.Deserialize<string[]>(line) ?? [];
+            await RunAsync(args, ct);
+            await Console.Out.WriteLineAsync();
+            await Console.Out.FlushAsync(ct);
+        }
+    }
+
     public static async Task RunAsync(string[] args, CancellationToken ct)
     {
         var writingCache = false;
         try
         {
             if (args.Length != 5 || args[4] is not ("preview" or "poster")) throw new ProcessingException("invalid_media");
-            var configuration = Configuration.Default.Clone();
-            configuration.MaxDegreeOfParallelism = 1;
-            configuration.MemoryAllocator = MemoryAllocator.Create(new MemoryAllocatorOptions
-            { MaximumPoolSizeMegabytes = 16, AllocationLimitMegabytes = 400 });
+            var configuration = DecoderConfiguration;
             var decoder = new DecoderOptions { Configuration = configuration, MaxFrames = 1 };
             var info = await Image.IdentifyAsync(decoder, args[1], ct);
             if (info.Width <= 0 || info.Height <= 0) throw new ProcessingException("invalid_media");

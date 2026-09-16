@@ -27,20 +27,30 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
 
     private async Task RunAsync(string type, CancellationToken ct)
     {
+        var recoverAfter = DateTimeOffset.MinValue;
         while (!ct.IsCancellationRequested)
         {
             try
             {
+                var foundWork = false;
                 await aggregate.WaitAsync(ct);
                 try
                 {
                     await using var db = await database.OpenAsync(ct);
-                    await db.ExecuteAsync(new CommandDefinition("""
+                    if (DateTimeOffset.UtcNow >= recoverAfter)
+                    {
+                        await db.ExecuteAsync(new CommandDefinition("""
                         UPDATE ProcessingJobs SET State='pending',Claim=NULL,LeaseUntil=NULL
                         WHERE rowid IN (SELECT rowid FROM ProcessingJobs INDEXED BY IX_Jobs_Lease
                           WHERE State='running' AND MediaType=@type AND LeaseUntil<@now LIMIT 200)
                         """, new { type, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
-                    var job = await db.QuerySingleOrDefaultAsync<ProcessingJob>(new CommandDefinition("""
+                        recoverAfter = DateTimeOffset.UtcNow.AddSeconds(30);
+                    }
+                    var available = await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
+                        SELECT EXISTS(SELECT 1 FROM ProcessingJobs INDEXED BY IX_Jobs_Ready
+                          WHERE State='pending' AND MediaType=@type AND NextAttemptAt<=@now AND EncoderVersion=@version)
+                        """, new { type, now = DateTimeOffset.UtcNow.ToString("O"), version = IndexingOptions.EncoderVersion }, cancellationToken: ct));
+                    var job = !available ? null : await db.QuerySingleOrDefaultAsync<ProcessingJob>(new CommandDefinition("""
                         UPDATE ProcessingJobs SET State='running',Claim=@claim,LeaseUntil=@lease WHERE rowid=(
                           SELECT j.rowid FROM ProcessingJobs j INDEXED BY IX_Jobs_Ready
                           WHERE j.State='pending' AND j.NextAttemptAt<=@now AND j.MediaType=@type AND j.EncoderVersion=@version
@@ -50,10 +60,14 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
                           ORDER BY j.NextAttemptAt,j.MediaId LIMIT 1) RETURNING *
                         """, new { type, version = IndexingOptions.EncoderVersion, claim = Guid.NewGuid().ToString("N"),
                             now = DateTimeOffset.UtcNow.ToString("O"), lease = DateTimeOffset.UtcNow.AddMinutes(2).ToString("O") }, cancellationToken: ct));
-                    if (job is not null) await ProcessAsync(job, type, ct);
+                    if (job is not null)
+                    {
+                        foundWork = true;
+                        await ProcessAsync(job, type, ct);
+                    }
                 }
                 finally { aggregate.Release(); }
-                await Task.Delay(500, ct);
+                if (!foundWork) await Task.Delay(500, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (SqliteException error) when (error.SqliteErrorCode is 5 or 6) { await Task.Delay(5000, ct); }

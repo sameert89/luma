@@ -1,5 +1,9 @@
 # Indexing contract
 
+## Folder-demand discovery
+
+Opening an incompletely indexed folder queues direct-folder discovery through a separate POST while the library is idle. The worker discovers its direct media and child-folder entries using the existing bounds. Successful reconciliation is restricted to that folder; unrelated folders remain untouched. Completed direct discovery is recorded and ordinary revisits do not scan again. Paused pending previews can resume on a later visit. Full rescans remain explicit for subsequent additions/changes. See [the API contract](API-FOLDER-INDEXING.md) and [decision](adr/0007-folder-demand-indexing.md).
+
 Implemented in stage 3; see [verification](STAGE-3-VERIFICATION.md). The server coordinates discovery and processing in background workers, never in browse handlers. Originals are opened read-only.
 
 ## Roots, folders and identity
@@ -30,8 +34,18 @@ Defaults: discovery workers 1, metadata/image workers 1, external video processe
 
 Roots are local `Luma:Indexing:Libraries` configuration with explicit stable IDs. Case sensitivity defaults to false on Windows and true elsewhere; configure it to match the actual source filesystem. Root configuration does not create or write into media directories. Removed roots are disabled and retained. A root ID cannot silently change path/case semantics.
 
-Traversal is depth-first and retains at most 128 directory enumerators plus the configured bounded channel. Exceeding this depth fails traversal safely. An unsupported extension is skipped. One discovered entry is persisted per short transaction, including its folder ancestry, within the 200-record batch ceiling. `completed` in scan status means traversal/reconciliation succeeded, not that all cache work succeeded. Processing counts and paginated historical failures are separate. A new traversal may adopt pending/ready work from the preceding scan.
+Traversal is depth-first and retains at most 128 directory enumerators plus the configured bounded channel. Exceeding this depth fails traversal safely. An unsupported extension is skipped. Discovery batches contain at most 32 entries and stop after 25 ms of work, with a yield between transactions. `completed` in scan status means traversal/reconciliation succeeded, not that all cache work succeeded. Processing counts and paginated historical failures are separate. A new traversal may adopt pending/ready work from the preceding scan.
 
 Captured EXIF `DateTimeOriginal` uses `OffsetTimeOriginal` when available. Without an offset, Luma consistently interprets that wall time as UTC; malformed dates remain null and fall back to modification time. Image dimensions reflect applied EXIF orientation. Video dimensions reflect display rotation reported by FFprobe.
 
-ImageSharp runs in a bounded child invocation of the application; FFprobe/FFmpeg are used for videos. The 30/60-second deadlines cover the whole processing job, including generated-output validation. See [the media pipeline ADR](adr/0002-bounded-media-pipeline.md). Encoder-version changes schedule a fresh traversal. A waiting source or cancelled scan is retried when a later scan discovers the path; no browse request accesses the source.
+ImageSharp runs in bounded reusable child processes, recycled after 128 requests; FFprobe/FFmpeg are used for videos. The 30/60-second deadlines cover the whole processing job, including generated-output validation. See [the media pipeline ADR](adr/0002-bounded-media-pipeline.md) and [throughput and presence checks](adr/0005-indexing-feedback.md). Encoder-version changes schedule a fresh traversal. A waiting source or cancelled scan is retried when a later scan discovers the path; no browse request accesses the source.
+
+## Cancelling and shutting down
+
+Cancel is safe: originals are never modified, prepared previews and tags remain, and uncommitted discovery work rolls back. Workers stop claiming the cancelled scan; active decoders are cancelled. Incomplete traversal never marks undiscovered records missing. Start a normal scan to resume: it walks folders again but reuses unchanged ready work. A forced scan deliberately regenerates everything.
+
+On graceful shutdown, active processing returns to the durable queue and incomplete traversal becomes interrupted. On restart, interrupted scans get a fresh traversal and expired claims recover. Initial indexing is opt-in: `ScanOnStartup=false` is the default. Set it to true only when every configured library should begin scanning at startup. Opening an unindexed library from Luma offers an explicit start action; it does not scan unrelated configured libraries. Do not delete the persistent data volume when restarting.
+
+## Deleted originals
+
+A separate background worker checks 100 known paths every 10 seconds without enumerating directories. Missing paths under accessible roots are hidden by default and retain their tags/cache. Active scans and disabled roots are skipped; unavailable roots are not treated as deleted. At 177,000 records, a complete pass takes roughly five hours plus I/O time. Configure `Luma:Indexing:SourceVerificationIntervalSeconds` to change the interval. Explicit scans discover additions, replacements and restored paths and reconcile deletions sooner. Normal browsing remains SQLite/cache-only.

@@ -1,5 +1,7 @@
 # Stages 4–5 verification
 
+The subsequent real-library fixes and current verification results are recorded in [stage 4 feedback verification](STAGE-4-FEEDBACK-VERIFICATION.md).
+
 Implemented 2026-09-16. Stages 4 and 5 add SQLite-only library/folder browsing, signed cursor pagination, generated-cache HTTP serving, a responsive virtualized gallery and viewer, the initial search/filter contract, tag editing and bulk operations, and persisted preferences.
 
 ## Functional evidence

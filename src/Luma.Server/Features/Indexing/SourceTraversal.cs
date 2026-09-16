@@ -3,7 +3,7 @@ namespace Luma.Server.Features.Indexing;
 internal static class SourceTraversal
 {
     // Depth-first enumeration retains one directory handle per level, never a breadth-sized queue.
-    public static IEnumerable<FileSystemInfo> Enumerate(string root)
+    public static IEnumerable<FileSystemInfo> Enumerate(string root, bool recursive = true)
     {
         var options = new EnumerationOptions { RecurseSubdirectories = false, IgnoreInaccessible = false,
             AttributesToSkip = FileAttributes.ReparsePoint, ReturnSpecialDirectories = false };
@@ -16,7 +16,7 @@ internal static class SourceTraversal
                 if (!current.MoveNext()) { stack.Pop().Dispose(); continue; }
                 var entry = current.Current;
                 yield return entry;
-                if (entry.Attributes.HasFlag(FileAttributes.Directory))
+                if (recursive && entry.Attributes.HasFlag(FileAttributes.Directory))
                 {
                     if (File.GetAttributes(entry.FullName).HasFlag(FileAttributes.ReparsePoint)) throw new IOException("Directory changed into a link.");
                     if (stack.Count >= 128) throw new IOException("Directory depth limit exceeded.");
