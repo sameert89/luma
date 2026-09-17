@@ -19,7 +19,7 @@ it('retains only current query data and one nearby preview during sequential bro
   }))
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   try {
-    const { unmount } = render(<QueryClientProvider client={client}><Reels filters={{ q: 'item', order: 'asc', libraryId: 1, folderId: 2 }} onFilters={vi.fn()} /></QueryClientProvider>)
+    const { unmount } = render(<QueryClientProvider client={client}><Reels filters={{ q: 'item', order: 'asc', libraryId: 1, folderId: 2 }} onFilters={vi.fn()} onOpenViewer={vi.fn()} /></QueryClientProvider>)
     const next = await screen.findByRole('button', { name: /^Next$/ })
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('mediaType=video') && !String(url).includes('folderId=2'))).toBe(true))
     for (let index = 0; index < 10; index++) {

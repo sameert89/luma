@@ -70,6 +70,26 @@ describe('browsing shell', () => {
     expect(window.location.search).toContain('mediaType=video')
     expect(window.location.search).not.toContain('folderId=2')
   })
+  it('clears the reels video filter when opening search', async () => {
+    window.history.replaceState(null, '', '/?mediaType=video')
+    const fetch = vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const data = text.startsWith('/api/libraries')
+        ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+        : text.startsWith('/api/indexing')
+          ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
+          : text.includes('/neighbors?') ? { previous: null, next: null }
+            : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderApp()
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    expect(window.location.search).toContain('mediaType=video')
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Search' })).find(button => button.textContent?.includes('Search'))!)
+    expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
+    expect(window.location.search).not.toContain('mediaType=video')
+  })
   it('does not show a random feed on the empty search destination', async () => {
     const fetch = vi.fn().mockImplementation((url: string) => {
       const text = String(url)

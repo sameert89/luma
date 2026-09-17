@@ -31,6 +31,24 @@ describe('media viewing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
     expect(screen.getByRole('button', { name: 'Fit' })).toBeVisible()
   })
+  it('defaults normal media to fit but reels to fill and allows toggling reels back to fit', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    localStorage.clear()
+    try {
+      const { unmount } = render(<MediaStage item={image} onNavigate={vi.fn()} />)
+      expect(screen.getByRole('img')).toHaveClass('object-contain')
+      unmount()
+      const reels = render(<MediaStage item={{ ...image, mediaType: 'video' }} reels muted onNavigate={vi.fn()} />)
+      const video = screen.getByLabelText('image.jpg')
+      expect(video).toHaveClass('object-cover')
+      await userEvent.click(screen.getByRole('button', { name: 'More options' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Fit' }))
+      expect(video).toHaveClass('object-contain')
+      reels.unmount()
+    } finally { vi.restoreAllMocks() }
+  })
   it('retains playback after StrictMode setup, handles blocked autoplay, and releases inactive playback', async () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('blocked'))
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})

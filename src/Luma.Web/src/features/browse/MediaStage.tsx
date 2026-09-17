@@ -5,7 +5,7 @@ import { CachedImage } from '../../components/ui/CachedImage'
 import { Modal } from '../../components/ui/Modal'
 import type { Media } from './api'
 
-const fillKey = 'luma-viewer-fill'
+const fillKeys = { viewer: 'luma-viewer-fill', reels: 'luma-reels-fill' }
 
 function formatTime(value: number) {
   if (!Number.isFinite(value) || value < 0) return '0:00'
@@ -14,8 +14,8 @@ function formatTime(value: number) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-export function MediaStage({ item, reels = false, muted = false, onEnded, onNavigate, fullscreenRoot }: {
-  item: Media; reels?: boolean; muted?: boolean; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>
+export function MediaStage({ item, reels = false, muted = false, onEnded, onNavigate, fullscreenRoot, onOpenViewer }: {
+  item: Media; reels?: boolean; muted?: boolean; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>; onOpenViewer?: (item: Media) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -26,7 +26,10 @@ export function MediaStage({ item, reels = false, muted = false, onEnded, onNavi
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [fill, setFill] = useState(() => localStorage.getItem(fillKey) === '1')
+  const [fill, setFill] = useState(() => {
+    const stored = localStorage.getItem(reels ? fillKeys.reels : fillKeys.viewer)
+    return stored === null ? reels : stored === '1'
+  })
   const [original, setOriginal] = useState(false)
   const [failure, setFailure] = useState('')
   const [optionsOpen, setOptionsOpen] = useState(false)
@@ -35,13 +38,13 @@ export function MediaStage({ item, reels = false, muted = false, onEnded, onNavi
   const [duration, setDuration] = useState(0)
   const [rate, setRate] = useState(1)
   const originalUrl = `/api/media/${item.id}/original`
-  const displayFill = reels || fill
+  const displayFill = fill
   const progress = duration > 0 ? Math.min(100, Math.max(0, time / duration * 100)) : 0
   function scale(value: number) { setZoom(Math.max(0.1, Math.min(8, value))); if (value <= 1) setPan({ x: 0, y: 0 }) }
   function toggleFill() {
     setFill(value => {
       const next = !value
-      localStorage.setItem(fillKey, next ? '1' : '0')
+      localStorage.setItem(reels ? fillKeys.reels : fillKeys.viewer, next ? '1' : '0')
       return next
     })
     scale(1)
@@ -108,18 +111,19 @@ export function MediaStage({ item, reels = false, muted = false, onEnded, onNavi
         <span className="tabular-nums text-xs text-ink">{formatTime(time)} / {formatTime(duration)}</span>
         <QuietButton className="min-h-10 px-3" aria-label="Playback speed" onClick={() => { const rates = [1, 1.5, 2, 0.5]; const current = video.current?.playbackRate ?? 1; const next = rates[(rates.indexOf(current) + 1) % rates.length]; if (video.current) video.current.playbackRate = next; setRate(next) }}>{rate}×</QuietButton>
       </div>}
-      {item.mediaType === 'video' && reels && <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-1 pt-8">
-        <button type="button" aria-label="Seek video" className="block h-5 w-full py-2 focus-visible:outline-2 focus-visible:outline-accent" onClick={seekFromBar}>
-          <span className="block h-1 overflow-hidden rounded-full bg-canvas/50"><span className="block h-full rounded-full bg-accent" style={{ width: `${progress}%` }} /></span>
+      {item.mediaType === 'video' && reels && <div className="absolute inset-x-0 bottom-16 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 md:bottom-0">
+        <button type="button" aria-label="Seek video" className="flex h-6 w-full items-end focus-visible:outline-2 focus-visible:outline-accent" onClick={seekFromBar}>
+          <span className="block h-1 w-full overflow-hidden rounded-full bg-canvas/50"><span className="block h-full rounded-full bg-accent" style={{ width: `${progress}%` }} /></span>
         </button>
       </div>}
-      <IconButton label="More options" className={`absolute right-3 border-transparent bg-canvas/85 ${reels ? 'bottom-16' : 'top-28'}`} onClick={() => setOptionsOpen(true)}><EllipsisVertical className="size-5" /></IconButton>
+      <IconButton label="More options" className={`absolute right-3 border-transparent bg-canvas/85 sm:right-5 ${reels ? 'bottom-32 md:bottom-16' : 'top-28'}`} onClick={() => setOptionsOpen(true)}><EllipsisVertical className="size-5" /></IconButton>
     </div>
     {failure && <p role="status" className="bg-canvas px-3 py-2 text-sm text-ink">{failure}</p>}
     <Modal open={optionsOpen} onOpenChange={setOptionsOpen} title="View options" description="Fit, playback and download actions for this item." sheet>
       <div className="flex flex-wrap gap-2 p-5">
         <QuietButton onClick={() => { toggleFill() }}>{fill ? 'Fit' : 'Fill'}</QuietButton>
         {item.mediaType === 'image' && <><QuietButton aria-label="Zoom out" onClick={() => scale(zoom / 1.25)}>−</QuietButton><QuietButton aria-label="Reset zoom" onClick={() => scale(1)}>{Math.round(zoom * 100)}%</QuietButton><QuietButton aria-label="Zoom in" onClick={() => scale(zoom * 1.25)}>+</QuietButton><QuietButton onClick={actualSize}>Actual size</QuietButton><QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>Rotate</QuietButton></>}
+        {reels && onOpenViewer && <QuietButton onClick={() => { onOpenViewer(item); setOptionsOpen(false) }}>Open in viewer</QuietButton>}
         {item.mediaType === 'video' && <div className="w-32 shrink-0"><Select aria-label="Playback speed" defaultValue="1" onChange={event => { if (video.current) video.current.playbackRate = Number(event.target.value) }}><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></Select></div>}
         <QuietButton onClick={() => { void fullscreen(); setOptionsOpen(false) }}><Maximize className="size-4" />Fullscreen</QuietButton>
         <QuietLink href={`${originalUrl}?download=true`}><Download className="size-4" />Download</QuietLink>
