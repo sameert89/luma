@@ -3,6 +3,7 @@ import { Download, EllipsisVertical, Heart, Maximize, Pause, Play, Volume2, Volu
 import { IconButton, QuietButton, QuietLink, Range, Select } from '../../components/ui/Controls'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Modal } from '../../components/ui/Modal'
+import { useFullscreen } from './useFullscreen'
 import type { Media } from './api'
 
 const fillKeys = { viewer: 'luma-viewer-fill', reels: 'luma-reels-fill' }
@@ -21,6 +22,7 @@ const doubleTapMs = 280
 export function MediaStage({ item, reels = false, muted = false, suspended = false, direction = 'next', optionsOpen: controlledOptionsOpen, onOptionsOpenChange, onEnded, onNavigate, fullscreenRoot, onOpenViewer, onLike }: {
   item: Media; reels?: boolean; muted?: boolean; suspended?: boolean; direction?: 'next' | 'previous'; optionsOpen?: boolean; onOptionsOpenChange?: (open: boolean) => void; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>; onOpenViewer?: (item: Media) => void; onLike?: () => void
 }) {
+  const isFullscreen = useFullscreen()
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const seekStrip = useRef<HTMLDivElement>(null)
@@ -187,7 +189,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
       {/* Liking is a universal, brand-independent gesture: it stays red in every theme,
           like the persistent Liked heart elsewhere would if it needed the same emphasis. */}
       {burst > 0 && <Heart key={burst} aria-hidden="true" onAnimationEnd={() => setBurst(0)} className="motion-like pointer-events-none absolute size-24 fill-red-500 text-red-500" />}
-      {controlledOptionsOpen === undefined && <IconButton label="More options" className={`absolute right-3 border-transparent bg-canvas/85 sm:right-5 ${reels ? 'bottom-32 md:bottom-16' : 'top-28'}`} onClick={() => setOptionsOpen(true)}><EllipsisVertical className="size-5" /></IconButton>}
+      {!isFullscreen && controlledOptionsOpen === undefined && <IconButton label="More options" className={`absolute right-3 border-transparent bg-canvas/85 sm:right-5 ${reels ? 'bottom-32 md:bottom-16' : 'top-28'}`} onClick={() => setOptionsOpen(true)}><EllipsisVertical className="size-5" /></IconButton>}
       {/* Reels has no chrome to carry a small status strip: a failed item must stay
           legible against the full-bleed black stage, not read as an unresponsive one. */}
       {failure && reels && <p role="status" className="pointer-events-none absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-2xl bg-canvas/90 p-4 text-center text-sm text-ink">{failure}</p>}

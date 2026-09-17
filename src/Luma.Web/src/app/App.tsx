@@ -10,6 +10,7 @@ import { SearchHeader } from '../components/ui/SearchHeader'
 import { ThemePicker, themes, type Theme } from '../components/ui/ThemePicker'
 import { RescanButton } from '../features/browse/RescanButton'
 import { FolderActions } from '../features/browse/FolderActions'
+import { shuffleSeed } from '../features/browse/shuffleSeed'
 import { FilterForm } from '../features/browse/FilterForm'
 import { Collections } from '../features/browse/Collections'
 import { Gallery } from '../features/browse/Gallery'
@@ -68,7 +69,7 @@ function readFilters(): Filters {
     if (key === 'cursor' || key === 'limit') continue
     result[key] = key === 'tag' || key === 'extension' ? params.getAll(key) : numeric.has(key) ? Number(value) : key === 'recursive' || key === 'tagged' ? value === 'true' : value
   }
-  if (result.sort === 'shuffle' && !result.seed) result.seed = crypto.randomUUID()
+  if (result.sort === 'shuffle' && !result.seed) result.seed = shuffleSeed()
   return result as Filters
 }
 

@@ -6,6 +6,7 @@ import { Modal } from '../../components/ui/Modal'
 import { MediaStage } from './MediaStage'
 import { MediaInformation } from './MediaInformation'
 import { TagEditor } from '../tags/TagEditor'
+import { useFullscreen } from './useFullscreen'
 import { usePreviewPriority } from './usePreviewPriority'
 import { ApiError } from '../../lib/api/client'
 import { errorMessage, queryString, request, type Filters, type Media, type MediaPage, type Neighbors } from './api'
@@ -23,6 +24,7 @@ function savedReelsState(query: string) {
 }
 
 export function Reels({ filters, viewerOpen = false, onFilters, onOpenViewer }: { filters: Filters; viewerOpen?: boolean; onFilters: () => void; onOpenViewer: (item: Media) => void }) {
+  const isFullscreen = useFullscreen()
   const root = useRef<HTMLElement>(null)
   const queryFilters: Filters = filters
   const positionQuery = new URLSearchParams(queryString(queryFilters))
@@ -83,7 +85,7 @@ export function Reels({ filters, viewerOpen = false, onFilters, onOpenViewer }: 
       <p className="pointer-events-auto rounded-full bg-canvas/80 px-3 py-1 text-lg font-semibold tracking-tight">luma<span className="text-accent">.</span><Clapperboard className="ml-1 inline size-3 align-super text-accent" aria-hidden="true" /><span className="sr-only"> reels</span></p>
       {/* Only the toggle sits on the stage by default; the rest drops open below it so
           the viewport stays clear of controls until someone actually wants them. */}
-      <div className="pointer-events-auto flex flex-col items-end gap-2">
+      <div hidden={isFullscreen} className="pointer-events-auto flex flex-col items-end gap-2">
         <IconButton label={menuOpen ? 'Close reels menu' : 'Reels menu'} aria-expanded={menuOpen} aria-controls="reels-menu" className="border-transparent bg-canvas/85" onClick={() => setMenuOpen(value => !value)}>{menuOpen ? <X className="size-4" /> : <EllipsisVertical className="size-4" />}</IconButton>
         <div id="reels-menu" className="motion-drop" data-open={menuOpen} inert={!menuOpen}>
           <div className="flex min-h-0 flex-col items-end gap-2 overflow-hidden pt-0.5">

@@ -24,6 +24,32 @@ function browsingApi() {
 }
 
 describe('browsing shell', () => {
+  it('selects shuffle and reshuffles without randomUUID on HTTP hosts', async () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
+    browsingApi()
+    renderApp()
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'shuffle')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+    const firstSeed = new URLSearchParams(window.location.search).get('seed')
+    expect(firstSeed).toMatch(/^[0-9a-f]{32}$/)
+    expect(screen.getByTestId('gallery-scroll')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+    expect(new URLSearchParams(window.location.search).get('seed')).not.toBe(firstSeed)
+  })
+
+  it('restores a seedless shuffle URL without randomUUID on HTTP hosts', async () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
+    browsingApi()
+    localStorage.clear()
+    window.history.replaceState(null, '', '/?sort=shuffle')
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('seed')).toMatch(/^[0-9a-f]{32}$/))
+    expect(screen.getByTestId('gallery-scroll')).toBeVisible()
+  })
+
   it('sorts a library in place and keeps selection and folder actions in its compact header', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
     localStorage.clear()

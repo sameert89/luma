@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { shuffleSeed } from './shuffleSeed'
 import { Button } from '../../components/ui/Button'
 import { Checkbox, Field, Input, QuietButton, Select } from '../../components/ui/Controls'
 import { request, type Filters, type Tag, type Library } from './api'
@@ -20,10 +21,10 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
   const twoColumns = 'grid grid-cols-1 gap-3 sm:grid-cols-2'
   return <form className="flex min-h-0 min-w-0 flex-col" onSubmit={event => { event.preventDefault(); onApply(draft) }}><div className="min-w-0 space-y-6 p-5">
     <FilterSection title="Order and grouping"><div className={twoColumns}>
-      <Field label="Sort by"><Select value={draft.sort ?? 'modified'} onChange={event => setDraft(old => ({ ...old, sort: event.target.value, seed: event.target.value === 'shuffle' ? old.seed ?? crypto.randomUUID() : undefined }))}><option value="modified">Modified date</option><option value="captured">Captured date</option><option value="name">Name</option><option value="type">Type</option><option value="size">Size</option><option value="shuffle">Shuffle</option></Select></Field>
+      <Field label="Sort by"><Select value={draft.sort ?? 'modified'} onChange={event => setDraft(old => ({ ...old, sort: event.target.value, seed: event.target.value === 'shuffle' ? old.seed ?? shuffleSeed() : undefined }))}><option value="modified">Modified date</option><option value="captured">Captured date</option><option value="name">Name</option><option value="type">Type</option><option value="size">Size</option><option value="shuffle">Shuffle</option></Select></Field>
       <Field label="Sort direction"><Select value={draft.order ?? 'desc'} onChange={event => set('order', event.target.value)} disabled={draft.sort === 'shuffle'}><option value="desc">Descending</option><option value="asc">Ascending</option></Select></Field>
       <Field label="Group by"><Select value={draft.groupBy ?? 'none'} onChange={event => set('groupBy', event.target.value)}><option value="none">No grouping</option><option value="folder">Folder</option><option value="date">Date</option><option value="type">Type</option></Select></Field>
-      {draft.sort === 'shuffle' && <QuietButton onClick={() => set('seed', crypto.randomUUID())}>Reshuffle</QuietButton>}
+      {draft.sort === 'shuffle' && <QuietButton onClick={() => set('seed', shuffleSeed())}>Reshuffle</QuietButton>}
     </div></FilterSection>
     <FilterSection title="Media"><div className={twoColumns}>
       <Field label="Media type"><Select value={draft.mediaType ?? ''} onChange={event => set('mediaType', event.target.value || undefined)}><option value="">Photos and videos</option><option value="image">Photos</option><option value="video">Videos</option></Select></Field>

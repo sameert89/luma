@@ -8,6 +8,32 @@ import type { Media } from './api'
 const image = { id: 1, fileName: 'image.jpg', mediaType: 'image', width: 640, height: 480, preview: { url: '/cached.jpg', status: 'ready' } } as Media
 
 describe('media viewing', () => {
+  it('hides the options trigger during element and native video fullscreen and restores it on exit', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    let fullscreen: Element | null = null
+    const descriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement')
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => fullscreen })
+    try {
+      const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={vi.fn()} />)
+      expect(screen.getByRole('button', { name: 'More options' })).toBeVisible()
+      fullscreen = container.querySelector('video')!
+      fireEvent(document, new Event('fullscreenchange'))
+      expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument()
+      fullscreen = null
+      fireEvent(document, new Event('fullscreenchange'))
+      expect(screen.getByRole('button', { name: 'More options' })).toBeVisible()
+      fireEvent(container.querySelector('video')!, new Event('webkitbeginfullscreen'))
+      expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument()
+      fireEvent(container.querySelector('video')!, new Event('webkitendfullscreen'))
+      expect(screen.getByRole('button', { name: 'More options' })).toBeVisible()
+    } finally {
+      if (descriptor) Object.defineProperty(document, 'fullscreenElement', descriptor)
+      else Reflect.deleteProperty(document, 'fullscreenElement')
+      vi.restoreAllMocks()
+    }
+  })
+
   it('pauses before opening the viewer and resumes only previously playing reels when the viewer closes', async () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
     let paused = false
