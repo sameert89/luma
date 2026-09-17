@@ -131,12 +131,30 @@ describe('media viewing', () => {
       const stage = container.querySelector('[data-testid="reels-seek"]')!.parentElement!
       vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ top: 0, left: 0, width: 400, height: 800 } as DOMRect)
       const seek = () => container.querySelector('[data-testid="reels-seek"]')!
+      const video = container.querySelector('video')!
+      Object.defineProperty(video, 'duration', { configurable: true, value: 120 })
+      fireEvent.durationChange(video)
+      const slider = screen.getByRole('slider', { name: 'Seek video' })
 
       expect(seek()).toHaveAttribute('data-visible', 'false')
+      expect(slider).toHaveClass('pointer-events-none')
       tap(stage, 200, 760)
       await act(async () => { await vi.advanceTimersByTimeAsync(10) })
       expect(seek()).toHaveAttribute('data-visible', 'true')
+      expect(video.currentTime).toBe(0)
+      expect(slider).not.toHaveClass('pointer-events-none')
+      fireEvent.change(slider, { target: { value: '30' } })
+      expect(video.currentTime).toBe(30)
       expect(pause).not.toHaveBeenCalled()
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100) })
+      expect(seek()).toHaveAttribute('data-visible', 'false')
+      fireEvent.change(slider, { target: { value: '60' } })
+      expect(video.currentTime).toBe(30)
+      expect(seek()).toHaveAttribute('data-visible', 'true')
+      act(() => slider.focus())
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100) })
+      expect(seek()).toHaveAttribute('data-visible', 'true')
+      act(() => slider.blur())
       await act(async () => { await vi.advanceTimersByTimeAsync(3100) })
       expect(seek()).toHaveAttribute('data-visible', 'false')
 

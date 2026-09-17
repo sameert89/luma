@@ -23,6 +23,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
 }) {
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
+  const seekStrip = useRef<HTMLDivElement>(null)
   const resumePlayback = useRef(false)
   const playbackSuspended = useRef(suspended)
   playbackSuspended.current = suspended
@@ -94,7 +95,9 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
   function revealSeek() {
     setSeekVisible(true)
     window.clearTimeout(seekTimer.current)
-    seekTimer.current = window.setTimeout(() => setSeekVisible(false), 3000)
+    seekTimer.current = window.setTimeout(() => {
+      if (!seekStrip.current?.contains(document.activeElement)) setSeekVisible(false)
+    }, 3000)
   }
   function tap(event: React.PointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect()
@@ -177,9 +180,9 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         <QuietButton className="min-h-10 px-3" aria-label="Playback speed" onClick={() => { const rates = [1, 1.5, 2, 0.5]; const current = video.current?.playbackRate ?? 1; const next = rates[(rates.indexOf(current) + 1) % rates.length]; if (video.current) video.current.playbackRate = next; setRate(next) }}>{rate}×</QuietButton>
       </div>}
       {/* Reels stay uncluttered: the seek control fades in when its strip is tapped or focused. */}
-      {item.mediaType === 'video' && reels && <div data-testid="reels-seek" data-visible={seekVisible}
-        className={`absolute inset-x-0 bottom-16 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 transition-opacity duration-200 focus-within:pointer-events-auto focus-within:opacity-100 md:bottom-0 ${seekVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
-        <Range aria-label="Seek video" aria-valuetext={`${formatTime(time)} of ${formatTime(duration)}`} min={0} max={Number.isFinite(duration) ? duration : 0} step={0.1} value={time} disabled={!Number.isFinite(duration) || duration <= 0} className="w-full" onFocus={revealSeek} onChange={event => { revealSeek(); seek(Number(event.target.value)) }} />
+      {item.mediaType === 'video' && reels && <div ref={seekStrip} data-testid="reels-seek" data-visible={seekVisible}
+        className={`absolute inset-x-0 bottom-16 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 transition-opacity duration-200 md:bottom-0 ${seekVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+        <Range aria-label="Seek video" aria-valuetext={`${formatTime(time)} of ${formatTime(duration)}`} min={0} max={Number.isFinite(duration) ? duration : 0} step={0.1} value={time} disabled={!Number.isFinite(duration) || duration <= 0} className={`w-full ${seekVisible ? '' : 'pointer-events-none'}`} onFocus={revealSeek} onBlur={revealSeek} onChange={event => { if (!seekVisible) { revealSeek(); return }; revealSeek(); seek(Number(event.target.value)) }} />
       </div>}
       {/* Liking is a universal, brand-independent gesture: it stays red in every theme,
           like the persistent Liked heart elsewhere would if it needed the same emphasis. */}
