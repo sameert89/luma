@@ -8,6 +8,50 @@ import type { Media } from './api'
 const image = { id: 1, fileName: 'image.jpg', mediaType: 'image', width: 640, height: 480, preview: { url: '/cached.jpg', status: 'ready' } } as Media
 
 describe('media viewing', () => {
+  it('pauses before opening the viewer and resumes only previously playing reels when the viewer closes', async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    let paused = false
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => { paused = true })
+    vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockImplementation(() => paused)
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    const openViewer = vi.fn(() => expect(paused).toBe(true))
+    const item = { ...image, mediaType: 'video' }
+    try {
+      const { rerender } = render(<MediaStage item={item} reels onNavigate={vi.fn()} onOpenViewer={openViewer} />)
+      await userEvent.click(screen.getByRole('button', { name: 'More options' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Open in viewer' }))
+      expect(openViewer).toHaveBeenCalledWith(item)
+      expect(pause).toHaveBeenCalled()
+      const playCalls = play.mock.calls.length
+      rerender(<MediaStage item={item} reels suspended onNavigate={vi.fn()} />)
+      expect(play).toHaveBeenCalledTimes(playCalls)
+      rerender(<MediaStage item={item} reels onNavigate={vi.fn()} />)
+      await waitFor(() => expect(play).toHaveBeenCalledTimes(playCalls + 1))
+
+      // A manually paused reel must remain paused across another viewer visit.
+      rerender(<MediaStage item={item} reels suspended onNavigate={vi.fn()} />)
+      rerender(<MediaStage item={item} reels onNavigate={vi.fn()} />)
+      expect(play).toHaveBeenCalledTimes(playCalls + 1)
+    } finally { vi.restoreAllMocks() }
+  })
+
+  it('keeps options outside the slide and resets photo transforms and original access across repeated navigation', async () => {
+    const { rerender } = render(<MediaStage item={image} onNavigate={vi.fn()} />)
+    const options = screen.getByRole('button', { name: 'More options' })
+    expect(options.closest('.motion-media')).toBeNull()
+    await userEvent.keyboard('+r1')
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/api/media/1/original')
+    for (const id of [2, 3, 4, 5]) {
+      rerender(<MediaStage item={{ ...image, id, fileName: `${id}.jpg`, preview: { ...image.preview, url: `/cached-${id}.jpg` } }} onNavigate={vi.fn()} />)
+      expect(screen.getByRole('button', { name: 'More options' })).toBe(options)
+      const photo = screen.getByRole('img')
+      expect(photo).toHaveAttribute('src', `/cached-${id}.jpg`)
+      expect(photo.parentElement?.style.transform).toContain('scale(1) rotate(0deg)')
+      fireEvent.load(photo)
+      expect(photo).not.toHaveClass('motion-preview')
+    }
+  })
+
   it('uses cached images until explicit original access and supports keyboard zoom and rotation', async () => {
     render(<MediaStage item={image} onNavigate={vi.fn()} />)
     expect(screen.getByRole('img')).toHaveAttribute('src', '/cached.jpg')

@@ -24,7 +24,7 @@
 }
 
 @layer utilities {
-  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pb-safe-2 { padding-bottom: calc(var(--spacing) * 2 + env(safe-area-inset-bottom, 0px)); }
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
 }
@@ -45,8 +45,8 @@
 @keyframes luma-sheet-in { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
 @keyframes luma-sheet-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(1rem); } }
 @keyframes luma-page-in { from { opacity: 0; transform: translateY(.5rem); } to { opacity: 1; transform: translateY(0); } }
-@keyframes luma-media-in { from { opacity: 0; transform: translateX(var(--media-entry, 1rem)); } to { opacity: 1; transform: translateX(0); } }
-@keyframes luma-media-y-in { from { opacity: 0; transform: translateY(var(--media-entry-y, 1rem)); } to { opacity: 1; transform: translateY(0); } }
+@keyframes luma-media-in { from { transform: translateX(var(--media-entry, 1rem)); } to { transform: translateX(0); } }
+@keyframes luma-media-y-in { from { transform: translateY(var(--media-entry-y, 1rem)); } to { transform: translateY(0); } }
 /* The fade-out leg gets its own (ease-in) timing function so opacity accelerates
    smoothly to exactly 0 instead of lingering near-invisible and appearing to blink. */
 @keyframes luma-like { 0% { opacity: 0; transform: scale(.6); } 35% { opacity: 1; transform: scale(1.15); animation-timing-function: ease-in; } 100% { opacity: 0; transform: scale(1); } }
@@ -60,9 +60,8 @@
   [data-motion='dialog'][data-state='open'] [data-motion-panel], [data-motion='sheet'][data-state='open'] [data-motion-panel] { animation: luma-dialog-in 180ms ease-out; }
   [data-motion='dialog'][data-state='closed'] [data-motion-panel], [data-motion='sheet'][data-state='closed'] [data-motion-panel] { animation: luma-dialog-out 150ms ease-in; }
   .motion-page { animation: luma-page-in 180ms ease-out; }
-  .motion-media { animation: luma-media-in 180ms ease-out; }
+  .motion-media { animation: luma-media-in 180ms ease-out both; }
   .motion-media[data-axis='vertical'] { animation-name: luma-media-y-in; }
-  .motion-preview { animation: luma-fade-in 150ms ease-out; }
   details[open] > :not(summary) { animation: luma-fade-in 150ms ease-out; }
   nav button svg { transition: transform 150ms ease-out; }
   nav button[aria-current='page'] svg { transform: translateY(-.125rem); }
@@ -78,9 +77,9 @@
 
 /* Brief confirmation for the double-tap like; it removes itself when the animation ends,
    so reduced motion gets a plain fade rather than no animation event at all. */
-.motion-like { animation: luma-like 400ms ease-out; }
+.motion-like { animation: luma-like 400ms ease-out both; }
 @media (prefers-reduced-motion: reduce) {
-  .motion-like { animation: luma-fade-out 400ms ease-out; }
+  .motion-like { animation: luma-fade-out 400ms ease-out both; }
 }
 
 [data-theme='obsidian'] {

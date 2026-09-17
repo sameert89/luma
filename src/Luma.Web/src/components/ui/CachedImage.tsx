@@ -5,7 +5,6 @@ import { QuietButton } from './Controls'
 export function CachedImage({ url, alt, status = 'ready', className = '', preview = false }: { url: string; alt: string; status?: string; className?: string; preview?: boolean }) {
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
-  const [loaded, setLoaded] = useState(false)
   useEffect(() => {
     if (!failed || attempt >= 10) return
     const timeout = window.setTimeout(() => { setAttempt(value => value + 1); setFailed(false) }, attempt < 3 ? 3000 : 30000)
@@ -19,5 +18,5 @@ export function CachedImage({ url, alt, status = 'ready', className = '', previe
     <span className="text-xs">Preview unavailable</span>
     {preview && <QuietButton onClick={() => { setAttempt(x => x + 1); setFailed(false) }}><RefreshCw className="size-4" />Retry preview</QuietButton>}
   </div>
-  return <img draggable={false} key={attempt} src={url} alt={alt} loading={preview ? 'eager' : 'lazy'} decoding="async" className={`${className} ${preview && loaded ? 'motion-preview' : ''}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+  return <img draggable={false} key={attempt} src={url} alt={alt} loading={preview ? 'eager' : 'lazy'} decoding="async" className={className} onError={() => setFailed(true)} />
 }

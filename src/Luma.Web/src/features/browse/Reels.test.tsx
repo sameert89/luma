@@ -1,9 +1,57 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { Reels } from './Reels'
 import type { Media } from './api'
+
+beforeEach(() => localStorage.clear())
+
+function clip(id: number): Media {
+  return {
+    id, libraryId: 1, folderId: 1, fileName: `${id}.mp4`, mediaType: 'video', extension: '.mp4', sizeBytes: 1024,
+    width: 640, height: 480, durationMs: 10000, modifiedAt: '2026-01-01T00:00:00Z',
+    effectiveDate: '2026-01-01T00:00:00Z', capturedAt: null, preference: 'neutral', availability: 'present',
+    preview: { status: 'ready', url: `/poster-${id}.jpg`, width: 640, height: 480 },
+    thumbnail: { status: 'ready', url: `/thumb-${id}.jpg`, width: 160, height: 120 }, tags: [],
+  }
+}
+
+it('restores the current reel, mute and auto-scroll after leaving and returning, and resets position for changed filters', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const items = [1, 2].map(clip)
+  const fetch = vi.fn().mockImplementation((url: string) => {
+    const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
+    const data = url.includes('/neighbors?') ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+      : /media\/\d+$/.test(url) ? items[id - 1] : { items: [items[0]] }
+    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+  })
+  vi.stubGlobal('fetch', fetch)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  const mount = (filters = { mediaType: 'video', order: 'asc' }) => render(<QueryClientProvider client={client}><Reels filters={filters} onFilters={vi.fn()} onOpenViewer={vi.fn()} /></QueryClientProvider>)
+  try {
+    const first = mount()
+    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Unmute' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Auto-scroll' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByLabelText('2.mp4')
+    first.unmount()
+    const feedsBefore = fetch.mock.calls.filter(([url]) => url.startsWith('/api/media?')).length
+    const returned = mount()
+    expect(await screen.findByLabelText('2.mp4')).toHaveProperty('muted', false)
+    await userEvent.click(screen.getByRole('button', { name: 'Reels menu' }))
+    expect(screen.getByRole('button', { name: 'Mute' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Auto-scroll' })).toHaveAttribute('aria-pressed', 'true')
+    expect(fetch.mock.calls.filter(([url]) => url.startsWith('/api/media?'))).toHaveLength(feedsBefore)
+    returned.unmount()
+    mount({ mediaType: 'video', order: 'desc' })
+    expect(await screen.findByLabelText('1.mp4')).toHaveProperty('muted', false)
+  } finally { vi.restoreAllMocks(); client.clear() }
+})
 
 it('retains only current query data and one nearby preview during sequential browsing', async () => {
   const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
@@ -38,4 +86,53 @@ it('retains only current query data and one nearby preview during sequential bro
     vi.restoreAllMocks()
     client.clear()
   }
+})
+
+it('consolidates view options and closes tags with the cross, outside click and Escape', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const item = clip(1)
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+    const data = url.includes('/neighbors?') ? { previous: null, next: null } : /media\/\d+$/.test(url) ? item : { items: [item] }
+    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+  }))
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  try {
+    render(<QueryClientProvider client={client}><Reels filters={{}} onFilters={vi.fn()} onOpenViewer={vi.fn()} /></QueryClientProvider>)
+    const menu = await screen.findByRole('button', { name: 'Reels menu' })
+    expect(menu).toHaveAttribute('aria-expanded', 'false')
+    expect(menu.querySelector('svg')).toHaveClass('lucide-ellipsis-vertical')
+    expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View options' }).closest('[inert]')).not.toBeNull()
+    await userEvent.click(menu)
+    const closeMenu = screen.getByRole('button', { name: 'Close reels menu' })
+    expect(closeMenu).toHaveAttribute('aria-expanded', 'true')
+    expect(closeMenu.querySelector('svg')).toHaveClass('lucide-x')
+    const viewOptions = screen.getByRole('button', { name: 'View options' })
+    expect(viewOptions.querySelector('svg')).toHaveClass('lucide-settings-2')
+    await userEvent.click(viewOptions)
+    expect(screen.getByRole('dialog', { name: 'View options' })).toBeVisible()
+    expect(screen.getByRole('combobox', { name: 'Playback speed' })).toBeVisible()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'View options' })).not.toBeInTheDocument())
+    const tags = screen.getByRole('button', { name: 'Tags' })
+    await userEvent.click(tags)
+    const tagSheet = screen.getByRole('dialog', { name: 'Tags' })
+    expect(tagSheet).toBeVisible()
+    await userEvent.click(within(tagSheet).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tags' })).not.toBeInTheDocument())
+    expect(tags).toHaveFocus()
+    await userEvent.click(tags)
+    // The shared sheet's full viewport container represents the area outside its panel.
+    fireEvent.pointerDown(screen.getByRole('dialog', { name: 'Tags' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tags' })).not.toBeInTheDocument())
+    await userEvent.click(tags)
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tags' })).not.toBeInTheDocument())
+    await userEvent.click(closeMenu)
+    expect(screen.getByRole('button', { name: 'Reels menu' }).querySelector('svg')).toHaveClass('lucide-ellipsis-vertical')
+    expect(screen.getByRole('button', { name: 'View options' }).closest('[inert]')).not.toBeNull()
+
+  } finally { vi.restoreAllMocks(); client.clear() }
 })

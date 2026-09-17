@@ -24,6 +24,21 @@ function browsingApi() {
 }
 
 describe('browsing shell', () => {
+  it('opens favourites on mobile without activating the search field, while explicitly opening Search focuses it', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockImplementation(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    browsingApi()
+    renderApp()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Collections' })[0])
+    await userEvent.click(await screen.findByRole('button', { name: 'Open favourites' }))
+    await waitFor(() => expect(window.location.search).toContain('preference=liked'))
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Search media"]')!
+    expect(input).not.toHaveFocus()
+    expect(input.closest('form')).toHaveAttribute('inert')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))!)
+    await waitFor(() => expect(input).toHaveFocus())
+  })
+
   it('clears search back to the last library folder even after returning to Library with the query active', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2&order=asc')
     localStorage.clear()

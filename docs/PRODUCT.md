@@ -26,7 +26,7 @@ When priorities conflict, earlier items generally win.
 
 ### Browse library
 
-Luma opens on a libraries-only home screen. The homepage must not fetch or display a combined media feed. Global search may return results across libraries; search inside a folder includes its descendants by default.
+Luma opens on a libraries-only home screen. The homepage must not fetch or display a combined media feed. Global search may return results across libraries; search inside a folder includes its descendants by default. Collections links such as Favourites may reuse search results without focusing the mobile search field or opening the keyboard; focus is requested only by an explicit search action.
 
 Initial indexing is an explicit, per-library choice. A configured library is idle until the user starts it from its library card (or an administrator explicitly enables startup scanning). Opening a ready library must use SQLite and generated cache files only. Album covers use prepared thumbnails, including media inside nested folders. Status and scan controls are available on demand so they never displace the media grid. Rescanning requires confirmation explaining its disk/CPU cost, and mobile browsing retains a visible scan/preparation indicator.
 
@@ -110,8 +110,8 @@ Requirements:
 
 - vertical navigation between media
 - active videos may autoplay according to browser/platform restrictions.
-- auto-scroll as a simple on/off toggle; enabled videos advance when playback ends and photos advance after a fixed dwell time (3 seconds), with no configurable timing requirement
-- secondary controls (filters, like, mute, auto-scroll, tags, previous/next) collapse behind one toggle so the viewport stays clear until they are wanted; navigation and playback still work without opening it
+- auto-scroll as a simple on/off toggle; enabled videos advance when playback ends and photos advance after a fixed dwell time (3 seconds), with no configurable timing requirement. The active reel is restored after navigating away and back to the same filters/sort; mute and auto-scroll preferences are retained. Changing the feed resets its position. Playback and auto-scroll pause while sheets or the media viewer cover Reels; opening the viewer pauses the underlying stream first, and only previously playing reels resume when it closes
+- secondary controls (filters, like, mute, auto-scroll, tags, view options, previous/next) collapse behind one toggle so the viewport stays clear until they are wanted; the toggle becomes an X when open. View options uses a settings icon within that menu, with no separate bottom options button. Tags and view options use accessible sheets with explicit close buttons, outside-click dismissal and Escape support. Navigation and playback still work without opening the menu
 - only the current and nearby media should be mounted/preloaded
 - images and videos are both supported with option to choose them
 - the same applicable filter and sort capabilities as gallery, with independent mode state rather than a synchronized query
