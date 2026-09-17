@@ -95,7 +95,7 @@ test('selection is visible and its full checkbox target can be tapped', async ({
   await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveAttribute('aria-pressed', 'false')
 })
 
-test('Saved clears browse filters and keeps a persisted like across refresh and navigation', async ({ page }) => {
+test('Collections favourites clear browse filters and keeps a persisted like across refresh and navigation', async ({ page }) => {
   const item = page.getByTestId('media-cell').first().locator('button[data-media-id]')
   const id = await item.getAttribute('data-media-id')
   await item.click()
@@ -107,14 +107,16 @@ test('Saved clears browse filters and keeps a persisted like across refresh and 
   await page.keyboard.press('Escape')
   await expect(viewer).toBeHidden()
   const nav = page.getByRole('navigation', { name: 'Primary navigation' })
-  await nav.getByRole('button', { name: 'Saved', exact: true }).click()
+  await nav.getByRole('button', { name: 'Collections', exact: true }).click()
+  await page.getByRole('button', { name: 'Open favourites', exact: true }).click()
   await expect(page).not.toHaveURL(/folderId|libraryId/)
   const saved = page.locator(`button[data-media-id="${id}"]`)
   await expect(saved).toBeVisible()
   await page.getByRole('button', { name: 'Refresh collection' }).click()
   await expect(saved).toBeVisible()
   await nav.getByRole('button', { name: 'Settings', exact: true }).click()
-  await nav.getByRole('button', { name: 'Saved', exact: true }).click()
+  await nav.getByRole('button', { name: 'Collections', exact: true }).click()
+  await page.getByRole('button', { name: 'Open favourites', exact: true }).click()
   await expect(saved).toBeVisible()
   // Restore the fixture preference for subsequent tests.
   await page.request.put(`/api/media/${id}/preference`, { data: { preference: 'neutral' } })
@@ -202,7 +204,7 @@ test('browses cached media, navigates the viewer, and restores position and focu
   page.on('pageerror', error => errors.push(error.message))
   page.on('response', response => { if (response.url().includes('/cache/') && !response.ok()) cacheFailures.push(`${response.status()} ${response.url()}`) })
   const scroller = page.getByTestId('gallery-scroll')
-  await scroller.evaluate(element => { element.scrollTop = 900; element.dispatchEvent(new Event('scroll')) })
+  await scroller.evaluate(element => { const grid = element.querySelector('[data-testid=gallery-grid]')!; element.scrollTop += grid.getBoundingClientRect().top - element.getBoundingClientRect().top + 900; element.dispatchEvent(new Event('scroll')) })
   await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
   const opened = await scroller.evaluate(element => {
     const viewport = element.getBoundingClientRect()

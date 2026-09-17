@@ -195,9 +195,9 @@ public sealed class BrowsingTests
         Assert.Equal(0,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags WHERE TagId=@id",new{id=ids[^1]}));
     }
 
-    private static async Task<MediaBrowser> BrowserAsync(PipelineFixture f)
+    internal static async Task<MediaBrowser> BrowserAsync(PipelineFixture f)
     {var signer=new CursorSigner(f.Database);await signer.InitializeAsync(default);return new(f.Database,signer);}
-    private static async Task SeedAsync(PipelineFixture f,int count)
+    internal static async Task SeedAsync(PipelineFixture f,int count)
     {
         await f.ScanAsync();await using var db=await f.Database.OpenAsync(default);
         await db.ExecuteAsync("""

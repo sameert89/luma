@@ -10,7 +10,7 @@ const autoScrollSeconds = 3
 
 export function Reels({ filters, onFilters, onOpenViewer }: { filters: Filters; onFilters: () => void; onOpenViewer: (item: Media) => void }) {
   const root = useRef<HTMLElement>(null)
-  const queryFilters: Filters = { ...filters, mediaType: 'video', libraryId: undefined, folderId: undefined }
+  const queryFilters: Filters = filters
   const [active, setActive] = useState<Media | null>(null)
   const [direction, setDirection] = useState<'next' | 'previous'>('next')
   const [muted, setMuted] = useState(true)
@@ -32,7 +32,7 @@ export function Reels({ filters, onFilters, onOpenViewer }: { filters: Filters; 
   useEffect(() => { if (!autoScroll || !item || item.mediaType === 'video' || !next) return; const timer = window.setTimeout(() => { setDirection('next'); setActive(next) }, autoScrollSeconds * 1000); return () => window.clearTimeout(timer) }, [autoScroll, item, next])
   useEffect(() => { function key(event: KeyboardEvent) { if (event.target instanceof HTMLElement && event.target.closest('input,select,textarea,video,button')) return; if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const move = event.key === 'ArrowDown' ? 'next' : 'previous'; const target = neighbors.data?.[move]; if (target) { setDirection(move); setActive(target) } } }; window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key) }, [neighbors.data])
   if (first.isError) return <p role="alert" className="p-5 text-danger">{errorMessage(first.error)}</p>
-  if (!item) return <p role="status" className="p-5 text-muted">{first.isPending ? 'Loading reels...' : 'No videos match these filters.'}</p>
+  if (!item) return <p role="status" className="p-5 text-muted">{first.isPending ? 'Loading reels...' : 'No media match these filters.'}</p>
   return <section ref={root} aria-label="Reels" className="relative flex min-h-0 flex-1 flex-col bg-black">
     <div key={item.id} data-axis="vertical" data-direction={direction} className="motion-media flex min-h-0 flex-1"><MediaStage key={item.id} item={item} reels muted={muted} fullscreenRoot={root} onOpenViewer={onOpenViewer} onNavigate={navigate} onEnded={() => { if (autoScroll && next) { setDirection('next'); setActive(next) } }} /></div>
     <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-3 sm:p-5">

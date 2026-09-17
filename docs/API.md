@@ -1,10 +1,10 @@
 # HTTP API contract
 
-Stages 2�3 implement `GET /api/status`, the indexing/scan endpoints described below and development-only `GET /openapi/v1.json`. Other endpoints remain staged contracts. Same-origin JSON uses camelCase, UTC ISO 8601 timestamps, integer IDs within JavaScript's safe range, and no source paths except the explicit dislike export.
+Gate 7 implements status, indexing/scans, library/folder navigation, media queries/detail/neighbors/cache/original streaming, tags/preferences, custom folder/library covers, cached random image content, Collections tag pages, and metadata jobs. Development OpenAPI and generated `contracts/luma.json` describe implemented HTTP shapes. Same-origin JSON uses camelCase, UTC ISO 8601 timestamps, integer IDs within JavaScript's safe range, and no source paths except the explicit dislike export.
 
 ## Foundation and errors
 
-`GET /api/status` returns 200 `{ "status": "ready", "schemaVersion": 2 }` after a successful SQLite query. Database failure returns 503 `database_unavailable`. Migration failure prevents startup. No root scan or source access is performed.
+`GET /api/status` returns 200 `{ "status": "ready", "schemaVersion": 11 }` after a successful SQLite query. Database failure returns 503 `database_unavailable`. Migration failure prevents startup. No root scan or source access is performed.
 
 Errors use `application/problem+json`: `{ "type": "about:blank", "title": "...", "status": 400, "code": "invalid_request", "traceId": "..." }`. Optional `errors` maps field names to message arrays. Never return stack traces, SQL, absolute paths or exception messages. Codes: 400 `invalid_request`/`invalid_cursor`, 404 `not_found`, 409 `conflict`, 413 `request_too_large`, 429 `rate_limited`, 503 `database_unavailable`/`cache_unavailable`, 500 `internal_error`. A future explicit expired cursor returns 410 `cursor_expired`. Unsupported methods return 405 `method_not_allowed`. Unknown API routes remain JSON 404, never the frontend shell.
 
@@ -37,7 +37,7 @@ All predicates combine with AND, except alternatives within a repeated field. Un
 | seed | Required for repeatable shuffle; server supplies one if absent and returns it with query state |
 | groupBy | none/folder/date/type; presentation headers within paginated results, no full-result materialization |
 
-`effectiveDate = capturedAt ?? modifiedAt ?? indexedAt`, persisted on indexing. The captured sort and date filter use effectiveDate; modified uses `modifiedAt ?? indexedAt`. Group date means UTC day of effectiveDate. Grouping prepends its stored group key to the order and ID tie-breaker; folder grouping uses folder ID, type grouping image before video. Unknown dimensions and metadata sort last where applicable. String ordering is normalized binary ordering; ties always use ID in the chosen direction. Group headers may repeat across page boundaries and clients merge adjacent identical headers.
+`effectiveDate = capturedAt ?? modifiedAt ?? indexedAt`, persisted on indexing. The captured sort and date filter use effectiveDate; modified uses `modifiedAt ?? indexedAt`. Group date means UTC day of effectiveDate. Grouping orders group keys ascending and applies the chosen sort direction and ID tie-breaker within each group; folder grouping uses folder ID, type grouping image before video. Unknown dimensions and metadata sort last where applicable. String ordering is normalized binary ordering; ties always use ID in the chosen direction. Group headers may repeat across page boundaries and clients merge adjacent identical headers.
 
 Opaque base64url cursors encode a versioned payload signed with a persisted server key: canonical filter/sort/group fingerprint, seed, direction, last composite sort tuple and ID. Limits and direction may change, filters/order may not. Bad encoding/signature/fingerprint returns 400. No offset pagination. Previous page uses the inverse seek/order and reverses the returned page. Cursors are not snapshots: concurrent inserts before a cursor are seen after refresh; edits to ordering/filter fields can cause omission/repetition. Clients deduplicate IDs; a refreshed query restarts traversal. Fixed datasets must traverse without gaps or duplicates. Signing-key reset invalidates existing cursors.
 
@@ -64,12 +64,12 @@ Rare broad substring/multifilter queries have a 2 s database execution deadline;
 
 | Endpoint | Behavior / stage |
 | --- | --- |
-| GET /api/libraries; GET /api/folders?parentId=… | ID/name/root availability and paginated direct folders, max 200, SQLite only; stage 4 |
+| GET /api/libraries; GET /api/folders?parentId=â€¦ | ID/name/root availability and paginated direct folders, max 200, SQLite only; stage 4 |
 | POST /api/libraries/{id}/scans; GET /api/scans/{id}; POST /api/scans/{id}/cancel | Start 202 with Location; inspect counters/failures; idempotent cancel 202, conflict if active scan exists; stage 3 |
 | GET /api/media/{id} | Metadata detail, 404 unknown; no filesystem access; stage 4 |
 | GET /api/media/{id}/cache/{revision}/{variant} | Generated content, ETag/304; see MEDIA-CACHE.md; stage 4 |
 | GET /api/media/{id}/original | Explicit original download/stream; single range 206, unsatisfiable 416, unavailable source 503 `source_unavailable`; stage 6 |
-| GET /api/tags?prefix=… | Bounded autocomplete; stage 5 |
+| GET /api/tags?prefix=â€¦ | Bounded autocomplete; stage 5 |
 | POST /api/tags | Create or return existing normalized tag, 201 new/200 existing; stage 5 |
 | POST /api/media/tags | Atomic bulk `{mediaIds, addTagIds, removeTagIds}`, 204; limits in TAGGING.md; stage 5 |
 | PUT /api/media/{id}/preference | `{preference}` neutral/liked/disliked; 204; stage 5 |
@@ -93,10 +93,32 @@ Failure entries contain `{ id, mediaId, code, occurredAt }`, at most 100 per res
 
 `POST /api/scans/{id}/cancel` returns 202 `{ "id": scanId }` with Location, including repeated cancellation. It stops traversal and outstanding processing. If traversal already succeeded, cancellation does not undo its completed reconciliation; otherwise unseen rows are not marked missing. A finished scan with no outstanding work is a no-op; unknown IDs return 404.
 
-Failure codes include `source_unavailable`, `source_changed`, `invalid_media`, `dimensions_exceeded`, `memory_limit`, `invalid_generated_media`, `tool_unavailable`, `tool_output_exceeded`, `cache_io`, `processing_timeout`, `database_busy`, `indexing_failed` and `interrupted`. `cache_pressure` pauses a job and appears in administrative status without exposing a file path. No additional media-content or browsing endpoints are implemented in stage 3.
+Failure codes include `source_unavailable`, `source_changed`, `invalid_media`, `dimensions_exceeded`, `memory_limit`, `invalid_generated_media`, `tool_unavailable`, `tool_output_exceeded`, `cache_io`, `processing_timeout`, `database_busy`, `indexing_failed` and `interrupted`. `cache_pressure` pauses a job and appears in administrative status without exposing a file path. Stage 3 introduced these administration endpoints; subsequent stages add the remaining endpoints above.
 
 ## Stage 6 original access
 
 `GET /api/media/{id}/original` is implemented as explicit source access, separate from indexed browse/detail/cache requests. Inline streaming is the default; optional `download=true` uses attachment disposition with the indexed filename. The server validates the stored relative path against the configured enabled library root and rejects links and paths outside it. Single-byte-range requests return 206; unsatisfiable ranges return 416. ASP.NET Core handles range processing without buffering the whole original. Unknown/disabled records return 404; missing/unreadable source files return 503 `source_unavailable` using the common error contract. Cancellation flows through database lookup and HTTP streaming. Files are opened read-only; there is no decoding or transcoding.
 
 Unsupported browser codecs: copy the absolute original stream URL from the viewer, then paste it into an external player's network-stream command (for example VLC's Open Network Stream). The player must be able to reach this server. The browser can also explicitly open or download the original. There is no server-side player launch or codec conversion.
+
+## Gate 7 implementation details
+
+Media summaries include nullable `groupKey` and `groupLabel`. Clients merge adjacent equal keys across page boundaries. Date grouping uses the stored UTC effective-date day; type grouping puts images before videos. Sort direction applies within each group. Name sorting uses normalized binary keys; captured sorting uses effective date with its documented fallback.
+
+Shuffle seeks ascending random key from a seed-derived pivot and wraps once, including within each group. `order` does not change that permutation. `MediaPage.seed` returns the server-generated seed when absent: send it on subsequent page/neighbor requests. Changed seeds, filters, sorts or grouping invalidate cursors. No query uses full-result random sorting. UI reshuffle creates a new seed.
+
+`GET /api/collections/tags?cursor=...` returns `{ items, nextCursor, previousCursor }`, at most 50 tags in stable creation-ID order with opaque forward/backward cursors. Prefix autocomplete remains separate.
+
+`PUT /api/folders/{id}/cover` accepts `{ "mediaId": 123 }` or `{ "mediaId": null }` to reset. A library uses its `rootFolderId`; no duplicated library cover state is stored. Selection must be a present descendant in the same library. Unknown folders are 404; invalid selections 400. Stale cache revisions, moved/missing selections fall back to automatic. Eligible cached selections survive temporarily unavailable sources. Selection never processes originals.
+
+`GET /api/random` returns generated JPEG preview content with `Cache-Control: no-store`. Shared predicates apply; images are forced. Video-only or cursor requests are 400, no matching indexed image is 404, and matches with no ready preview are 503 `cache_unavailable`. Physical cache loss returns 503 and queues recovery. It returns content directly, never original data, JSON descriptors or redirects. Random-key gap bias is acceptable for decoration.
+
+Metadata POST bodies are `{ "mediaIds": [123], "query": { "libraryId": 1 }, "includeSidecars": true }`. All fields are optional except IDs for imports. IDs are deduplicated and capped at 500; unknown references are 404 and invalid selections/cursors 400. Imports act on the explicit selection. Exports without IDs stream all matching records in 100-row ID batches; sort/group/page limit do not restrict the export set. Dislike exports force disliked preference and all availability states, including missing records.
+
+`POST /api/imports/tags`, `/api/exports/xmp`, `/api/exports/dislikes` return 202 `{ "id": jobId }` and `Location: /api/jobs/{id}`. A single in-process worker drains a durable SQLite queue of at most 16 active jobs; a full queue is 429. `GET /api/jobs/{id}?afterMediaId=...` returns kind/state/timestamps, processed/failed counts, failure code/content URL and at most 100 per-item import results; continue with `nextMediaId`. States: queued/running/completed/failed/expired. Completed imports may have findings; inspect counts and item codes. Resubmit the selected IDs to retry idempotently.
+
+Imports recognize image XMP `dc:subject`, EXIF `XPKeywords`, and video format/stream `keywords`/`subject`. Optional adjacent `original.ext.xmp` and `original.xmp` files are both unioned. Paths remain server-controlled and root/link checked. Image metadata identification runs in a cancellable child with a 128 MiB managed heap cap and a 32 MiB decoder allocation cap; no pixel decoding is needed. Each item has a 30-second deadline. XMP/tool output is capped at 4 MiB; video probes use one thread, a fixed demuxer and local protocols. Existing tag spelling and assignments survive; valid union merging is atomic and enforces 100 tags/item. Findings include invalid_tags, invalid_metadata, source_unavailable and metadata_timeout.
+
+Export `snapshotAt` identifies a SQLite read snapshot established at processing start, not enqueue time. All media/tag batches use it; later edits require a new export. XMP ZIPs contain media-ID `.xmp` files, `paths.jsonl` (media/library IDs, relative paths and sidecar names), and `MERGE-INSTRUCTIONS.txt`. Only explicit disliked JSON Lines downloads contain absolute configured source paths and availability; reconstructing them never stats originals.
+
+`GET /api/jobs/{id}/content` streams completed exports as attachments. Downloads expire after 24 hours and share a separate 1 GiB quota, checked against uncompressed output and final archive bytes. Quota exhaustion is visible as `job_quota_exceeded`; missing/unfinished/expired downloads are 404. Queued jobs survive restart. Running jobs fail as `interrupted`, partial files are discarded and explicit retry is safe. These operations never rewrite embedded metadata, write adjacent source sidecars or delete originals.

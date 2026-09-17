@@ -1,0 +1,990 @@
+{
+  "rows": 120000,
+  "synthetic": true,
+  "environment": "Microsoft Windows 10.0.26200",
+  "reports": [
+    {
+      "sort": "modified",
+      "group": "none",
+      "selective": false,
+      "p50": 0.9745,
+      "p95": 1.9437,
+      "p99": 2.8792,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_Modified (Availability=?)"
+      ]
+    },
+    {
+      "sort": "modified",
+      "group": "none",
+      "selective": true,
+      "p50": 16.1202,
+      "p95": 21.3943,
+      "p99": 26.3928,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "modified",
+      "group": "folder",
+      "selective": false,
+      "p50": 0.7158,
+      "p95": 1.4706,
+      "p99": 1.7275,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_FolderGroupModified (Availability=? AND FolderId=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING COVERING INDEX IX_Media_FolderGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "modified",
+      "group": "folder",
+      "selective": true,
+      "p50": 26.9876,
+      "p95": 33.2574,
+      "p99": 36.2898,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "modified",
+      "group": "date",
+      "selective": false,
+      "p50": 0.6951,
+      "p95": 1.3822,
+      "p99": 1.7602,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_DateGroupModified (Availability=? AND DateDay=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "modified",
+      "group": "date",
+      "selective": true,
+      "p50": 29.8,
+      "p95": 45.4147,
+      "p99": 58.62,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "modified",
+      "group": "type",
+      "selective": false,
+      "p50": 0.7232,
+      "p95": 1.2424,
+      "p99": 1.938,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_TypeGroupModified (Availability=? AND TypeKey=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_TypeGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "modified",
+      "group": "type",
+      "selective": true,
+      "p50": 28.6992,
+      "p95": 33.408,
+      "p99": 36.2114,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "captured",
+      "group": "none",
+      "selective": false,
+      "p50": 0.6624,
+      "p95": 1.2414,
+      "p99": 1.546,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_CapturedOrder (Availability=?)"
+      ]
+    },
+    {
+      "sort": "captured",
+      "group": "none",
+      "selective": true,
+      "p50": 16.1962,
+      "p95": 25.2709,
+      "p99": 27.8043,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "captured",
+      "group": "folder",
+      "selective": false,
+      "p50": 0.7266,
+      "p95": 1.3395,
+      "p99": 1.7542,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_CapturedOrder (Availability=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING COVERING INDEX IX_Media_FolderGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "captured",
+      "group": "folder",
+      "selective": true,
+      "p50": 28.1728,
+      "p95": 38.9273,
+      "p99": 41.4692,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "captured",
+      "group": "date",
+      "selective": false,
+      "p50": 27.8588,
+      "p95": 42.2172,
+      "p99": 55.1821,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=? AND DateDay=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "captured",
+      "group": "date",
+      "selective": true,
+      "p50": 30.2868,
+      "p95": 41.9968,
+      "p99": 48.7963,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "captured",
+      "group": "type",
+      "selective": false,
+      "p50": 0.773,
+      "p95": 1.2711,
+      "p99": 1.4998,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_CapturedOrder (Availability=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_TypeGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "captured",
+      "group": "type",
+      "selective": true,
+      "p50": 27.801,
+      "p95": 34.4937,
+      "p99": 40.763,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "name",
+      "group": "none",
+      "selective": false,
+      "p50": 0.6737,
+      "p95": 1.2557,
+      "p99": 1.4624,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_NameOrder (Availability=?)"
+      ]
+    },
+    {
+      "sort": "name",
+      "group": "none",
+      "selective": true,
+      "p50": 24.926,
+      "p95": 33.4769,
+      "p99": 39.7743,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "name",
+      "group": "folder",
+      "selective": false,
+      "p50": 0.8061,
+      "p95": 1.4058,
+      "p99": 1.9816,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_NameOrder (Availability=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING COVERING INDEX IX_Media_FolderGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "name",
+      "group": "folder",
+      "selective": true,
+      "p50": 28.2875,
+      "p95": 40.8564,
+      "p99": 45.073,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "name",
+      "group": "date",
+      "selective": false,
+      "p50": 27.856,
+      "p95": 36.9977,
+      "p99": 42.5284,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=? AND DateDay=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "name",
+      "group": "date",
+      "selective": true,
+      "p50": 29.7065,
+      "p95": 38.004,
+      "p99": 42.4774,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "name",
+      "group": "type",
+      "selective": false,
+      "p50": 0.8331,
+      "p95": 1.5931,
+      "p99": 2.1254,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_NameOrder (Availability=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_TypeGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "name",
+      "group": "type",
+      "selective": true,
+      "p50": 29.3505,
+      "p95": 38.2297,
+      "p99": 42.4531,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "type",
+      "group": "none",
+      "selective": false,
+      "p50": 0.7036,
+      "p95": 1.2301,
+      "p99": 1.4511,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_TypeOrder (Availability=?)"
+      ]
+    },
+    {
+      "sort": "type",
+      "group": "none",
+      "selective": true,
+      "p50": 24.5466,
+      "p95": 31.6577,
+      "p99": 33.5922,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "type",
+      "group": "folder",
+      "selective": false,
+      "p50": 0.7792,
+      "p95": 1.3395,
+      "p99": 1.5794,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_TypeOrder (Availability=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING COVERING INDEX IX_Media_FolderGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "type",
+      "group": "folder",
+      "selective": true,
+      "p50": 29.1222,
+      "p95": 37.0132,
+      "p99": 38.8429,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "type",
+      "group": "date",
+      "selective": false,
+      "p50": 28.4525,
+      "p95": 38.4488,
+      "p99": 42.587,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=? AND DateDay=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "type",
+      "group": "date",
+      "selective": true,
+      "p50": 29.6589,
+      "p95": 36.5802,
+      "p99": 41.3162,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "type",
+      "group": "type",
+      "selective": false,
+      "p50": 2.8992,
+      "p95": 4.8261,
+      "p99": 5.4735,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_TypeOrder (Availability=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_TypeGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "type",
+      "group": "type",
+      "selective": true,
+      "p50": 29.6469,
+      "p95": 44.13,
+      "p99": 50.4017,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "size",
+      "group": "none",
+      "selective": false,
+      "p50": 0.6466,
+      "p95": 1.2067,
+      "p99": 1.5222,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_SizeOrder (Availability=?)"
+      ]
+    },
+    {
+      "sort": "size",
+      "group": "none",
+      "selective": true,
+      "p50": 23.1257,
+      "p95": 28.5269,
+      "p99": 34.2045,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "size",
+      "group": "folder",
+      "selective": false,
+      "p50": 0.9619,
+      "p95": 1.9399,
+      "p99": 2.9777,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_SizeOrder (Availability=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING COVERING INDEX IX_Media_FolderGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "size",
+      "group": "folder",
+      "selective": true,
+      "p50": 29.0373,
+      "p95": 34.1896,
+      "p99": 36.8383,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "size",
+      "group": "date",
+      "selective": false,
+      "p50": 28.0007,
+      "p95": 37.5197,
+      "p99": 46.9443,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=? AND DateDay=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "size",
+      "group": "date",
+      "selective": true,
+      "p50": 28.982,
+      "p95": 36.1086,
+      "p99": 39.6741,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "size",
+      "group": "type",
+      "selective": false,
+      "p50": 0.6941,
+      "p95": 1.2872,
+      "p99": 1.7555,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_SizeOrder (Availability=?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_TypeGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "size",
+      "group": "type",
+      "selective": true,
+      "p50": 37.3205,
+      "p95": 54.0652,
+      "p99": 63.6411,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "shuffle",
+      "group": "none",
+      "selective": false,
+      "p50": 1.204,
+      "p95": 2.6104,
+      "p99": 3.1109,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_RandomOrder (Availability=? AND RandomKey\u003E?)"
+      ]
+    },
+    {
+      "sort": "shuffle",
+      "group": "none",
+      "selective": true,
+      "p50": 25.5201,
+      "p95": 54.7315,
+      "p99": 79.1956,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "shuffle",
+      "group": "folder",
+      "selective": false,
+      "p50": 3.4723,
+      "p95": 11.9913,
+      "p99": 19.4723,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_FolderGroupRandom (Availability=? AND FolderId=? AND RandomKey\u003E?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING COVERING INDEX IX_Media_FolderGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "shuffle",
+      "group": "folder",
+      "selective": true,
+      "p50": 47.9009,
+      "p95": 87.6603,
+      "p99": 109.6013,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "shuffle",
+      "group": "date",
+      "selective": false,
+      "p50": 1.0259,
+      "p95": 2.174,
+      "p99": 2.9408,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=? AND DateDay=? AND RandomKey\u003E?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_DateGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "shuffle",
+      "group": "date",
+      "selective": true,
+      "p50": 47.5437,
+      "p95": 66.9137,
+      "p99": 83.1775,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "sort": "shuffle",
+      "group": "type",
+      "selective": false,
+      "p50": 2.4966,
+      "p95": 4.639,
+      "p99": 6.7647,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_TypeGroupRandom (Availability=? AND TypeKey=? AND RandomKey\u003E?)",
+        "SCALAR SUBQUERY 1",
+        "SEARCH m USING INDEX IX_Media_TypeGroupRandom (Availability=?)"
+      ]
+    },
+    {
+      "sort": "shuffle",
+      "group": "type",
+      "selective": true,
+      "p50": 70.6584,
+      "p95": 118.4938,
+      "p99": 153.1387,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "SCALAR SUBQUERY 5",
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 4",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 3",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    }
+  ],
+  "traversals": [
+    {
+      "sort": "modified",
+      "rows": 120000,
+      "seconds": 7.8599051
+    },
+    {
+      "sort": "captured",
+      "rows": 120000,
+      "seconds": 7.0451725
+    },
+    {
+      "sort": "name",
+      "rows": 120000,
+      "seconds": 2.9135694
+    },
+    {
+      "sort": "type",
+      "rows": 120000,
+      "seconds": 10.5120265
+    },
+    {
+      "sort": "size",
+      "rows": 120000,
+      "seconds": 2.6449344
+    },
+    {
+      "sort": "shuffle",
+      "rows": 120000,
+      "seconds": 11.1539067
+    }
+  ],
+  "randomReports": [
+    {
+      "selective": false,
+      "p50": 0.1171,
+      "p95": 0.2455,
+      "p99": 0.4989,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_RandomOrder (Availability=? AND RandomKey\u003E?)"
+      ]
+    },
+    {
+      "selective": true,
+      "p50": 18.4297,
+      "p95": 33.2448,
+      "p99": 54.0845,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    }
+  ],
+  "peakWorkingSetBytes": 87707648
+}

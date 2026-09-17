@@ -1,0 +1,202 @@
+using System.IO.Compression;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text;
+using SixLabors.ImageSharp;
+using Dapper;
+using Luma.Server.Features.Libraries;
+using Luma.Server.Features.Media;
+using Luma.Server.Features.Tags;
+using Luma.Server.Http;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+
+namespace Luma.Server.Tests;
+
+public sealed class Gate7Tests
+{
+    [Fact]
+    public async Task Name_cursors_support_full_length_unicode_filenames()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await BrowsingTests.SeedAsync(f,2);
+        await using var db=await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Media SET FileName=@name",new{name=new string('写',251)+".jpg"});
+        var browser=await BrowsingTests.BrowserAsync(f);
+        var query=new MediaQuery{Sort="name",Limit=1}.Normalize();
+        var first=await browser.ListAsync(query,default);
+        Assert.True(first.NextCursor!.Length>2048);
+        var next=await browser.ListAsync(query with {Cursor=first.NextCursor},default);
+        Assert.Equal(2,Assert.Single(first.Items).Id);Assert.Equal(1,Assert.Single(next.Items).Id);
+    }
+    [Theory]
+    [InlineData("modified")]
+    [InlineData("captured")]
+    [InlineData("name")]
+    [InlineData("type")]
+    [InlineData("size")]
+    [InlineData("shuffle")]
+    public async Task Every_sort_traverses_grouped_filtered_ties_in_both_directions_and_neighbors(string sort)
+    {
+        await using var f=await PipelineFixture.CreateAsync();
+        await BrowsingTests.SeedAsync(f,91);
+        await using var db=await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Media SET SizeBytes=(Id%7)*1024,FileName='name-'||(Id%9)||'.jpg',EffectiveDate='2026-01-'||printf('%02d',1+Id%3)||'T00:00:00.0000000Z',RandomKey=Id*100000000000000000");
+        var browser=await BrowsingTests.BrowserAsync(f);
+        foreach(var group in new[]{"none","folder","date","type"}) foreach(var order in new[]{"asc","desc"}) foreach(var mediaType in new string?[]{null,"image"}) {
+            var query=new MediaQuery {Limit=7,Sort=sort,Order=order,GroupBy=group,Seed="release-fixture",MediaType=mediaType}.Normalize();
+            var all=await browser.ListAsync(query with {Limit=200},default);
+            var ids=new List<long>(); var page=await browser.ListAsync(query,default);
+            while(true) {
+                ids.AddRange(page.Items.Select(x=>x.Id));
+                if(page.NextCursor is null) break;
+                var next=await browser.ListAsync(query with {Cursor=page.NextCursor},default);
+                var previous=await browser.ListAsync(query with {Cursor=next.PreviousCursor},default);
+                Assert.Equal(page.Items.Select(x=>x.Id),previous.Items.Select(x=>x.Id));
+                page=next;
+            }
+            Assert.Equal(mediaType is null?91:73,ids.Count); Assert.Equal(ids.Count,ids.Distinct().Count());
+            Assert.Equal(all.Items.Select(x=>x.Id),ids);
+            for(var i=1;i<ids.Count-1;i+=17) {
+                var neighbors=await browser.NeighborsAsync(ids[i],query,default);
+                Assert.Equal(ids[i-1],neighbors.Previous!.Id);Assert.Equal(ids[i+1],neighbors.Next!.Id);
+            }
+            if(sort=="shuffle") Assert.Equal(ids,(await browser.ListAsync(query with {Limit=200},default)).Items.Select(x=>x.Id));
+            else {
+                var direction=order=="asc"?"ASC":"DESC";
+                var key=sort switch {"captured"=>"EffectiveTicks","name"=>"NameKey","type"=>"MediaType","size"=>"SizeBytes",_=>"ModifiedTicks"};
+                var groupKey=group switch {"folder"=>"FolderId ASC,","date"=>"EffectiveTicks/864000000000 ASC,","type"=>"CASE MediaType WHEN 'image' THEN 0 ELSE 1 END ASC,",_=>""};
+                var expected=await db.QueryAsync<long>($"SELECT Id FROM Media WHERE @mediaType IS NULL OR MediaType=@mediaType ORDER BY {groupKey}{key} {direction},Id {direction}",new{mediaType});
+                Assert.Equal(expected,ids);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Custom_covers_persist_validate_reset_and_fall_back_when_stale_without_sources()
+    {
+        await using var f=await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("one.png");await f.CreateImageAsync("two.png");await f.ScanAsync();await f.ProcessAllAsync();
+        var signer=new CursorSigner(f.Database);await signer.InitializeAsync(default);
+        var browser=new LibraryBrowser(f.Database,signer);
+        await using var db=await f.Database.OpenAsync(default);
+        var ids=(await db.QueryAsync<long>("SELECT Id FROM Media ORDER BY Id")).ToArray();
+        await browser.SetCoverAsync(1,ids[0],default);
+        Directory.Move(f.Root.Path,f.Root.Path+"-offline");
+        Assert.Contains($"/media/{ids[0]}/",Assert.Single(await browser.LibrariesAsync(default)).CoverUrl);
+        Assert.Equal(ids[0],await db.ExecuteScalarAsync<long>("SELECT CoverMediaId FROM Folders WHERE Id=1"));
+        await Assert.ThrowsAsync<ApiRequestException>(()=>browser.SetCoverAsync(1,99999,default));
+        await db.ExecuteAsync("UPDATE Media SET Availability='missing' WHERE Id=@id",new{id=ids[0]});
+        Assert.Contains($"/media/{ids[1]}/",Assert.Single(await browser.LibrariesAsync(default)).CoverUrl);
+        await browser.SetCoverAsync(1,null,default);
+        Assert.Null(await db.ExecuteScalarAsync<long?>("SELECT CoverMediaId FROM Folders WHERE Id=1"));
+    }
+
+    [Fact]
+    public async Task Random_returns_filtered_cached_content_without_sources_and_has_explicit_empty_errors()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("one.png");await f.ScanAsync();await f.ProcessAllAsync();
+        await using var host=Host(f);using var client=host.CreateClient();
+        Directory.Move(f.Root.Path,f.Root.Path+"-offline");
+        await using var db=await f.Database.OpenAsync(default);await db.ExecuteAsync("UPDATE Libraries SET Enabled=1");
+        var response=await client.GetAsync("/api/random?mediaType=image&libraryId=1");
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);Assert.Equal("image/jpeg",response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("no-store",response.Headers.CacheControl!.ToString());
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.GetAsync("/api/random?mediaType=video")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await client.GetAsync("/api/random?q=absent")).StatusCode);
+        await db.ExecuteAsync("UPDATE CacheEntries SET State='evicted' WHERE Variant='preview'");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable,(await client.GetAsync("/api/random")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Metadata_import_unions_normalized_tags_idempotently_and_exports_snapshot_paths_and_xmp()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("one.png");await f.ScanAsync();
+        using(var image=SixLabors.ImageSharp.Image.Load(Path.Combine(f.Root.Path,"one.png"))) {
+            image.Metadata.ExifProfile=new SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifProfile();
+            image.Metadata.ExifProfile.SetValue(SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.XPKeywords,"EXIFembedded;CAFE\u0301");
+            image.Metadata.XmpProfile=new SixLabors.ImageSharp.Metadata.Profiles.Xmp.XmpProfile(MetadataKeywords.WriteXmp(["XMPembedded","Café"]));
+            image.Save(Path.Combine(f.Root.Path,"one.png"));
+        }
+        await File.WriteAllBytesAsync(Path.Combine(f.Root.Path,"one.png.xmp"),MetadataKeywords.WriteXmp(["Café","CAFE\u0301","A & B"]));
+        await using var host=Host(f);using var client=host.CreateClient();
+        await using var db=await f.Database.OpenAsync(default);await db.ExecuteAsync("UPDATE Libraries SET Enabled=1");
+        var tag=(await new TagService(f.Database).CreateAsync("existing",default)).Tag;
+        await new TagService(f.Database).BulkAsync(new([1],[tag.Id],[]),default);
+        for(var retry=0;retry<2;retry++) {
+            var accepted=await client.PostAsJsonAsync("/api/imports/tags",new MetadataJobRequest([1],IncludeSidecars:true));
+            Assert.Equal(HttpStatusCode.Accepted,accepted.StatusCode);
+            var job=await AwaitJobAsync(client,(await accepted.Content.ReadFromJsonAsync<JobAccepted>())!.Id);
+            Assert.Equal("completed",job.State);Assert.Equal(0,job.Failed);
+        }
+        Assert.Equal(5,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags"));
+        var export=await client.PostAsJsonAsync("/api/exports/xmp",new MetadataJobRequest([1]));
+        var exported=await AwaitJobAsync(client,(await export.Content.ReadFromJsonAsync<JobAccepted>())!.Id);
+        Assert.Equal("completed",exported.State);Assert.NotNull(exported.SnapshotAt);
+        await new TagService(f.Database).BulkAsync(new([1],[],[tag.Id]),default);
+        using var archive=new ZipArchive(new MemoryStream(await client.GetByteArrayAsync(exported.ContentUrl)));
+        using var xmp=new MemoryStream();await archive.GetEntry("1.xmp")!.Open().CopyToAsync(xmp);
+        Assert.Equal(new[]{"A & B","Café","EXIFembedded","existing","XMPembedded"},MetadataKeywords.ReadXmp(xmp.ToArray()));
+        using var manifest=new StreamReader(archive.GetEntry("paths.jsonl")!.Open());
+        Assert.Contains("one.png",await manifest.ReadToEndAsync());Assert.NotNull(archive.GetEntry("MERGE-INSTRUCTIONS.txt"));
+        await db.ExecuteAsync("UPDATE Media SET Preference='disliked',Availability='missing'");
+        Directory.Move(f.Root.Path,f.Root.Path+"-offline");
+        var dislikes=await client.PostAsJsonAsync("/api/exports/dislikes",new MetadataJobRequest());
+        var disliked=await AwaitJobAsync(client,(await dislikes.Content.ReadFromJsonAsync<JobAccepted>())!.Id);
+        Assert.Equal("completed",disliked.State);
+        var json=await client.GetStringAsync(disliked.ContentUrl);
+        Assert.Contains("missing",json);
+        using var record=System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal(Path.Combine(f.Root.Path,"one.png"),record.RootElement.GetProperty("path").GetString());
+    }
+
+    [Fact]
+    public void Xmp_handles_escaping_and_rejects_external_entities()
+    {
+        Assert.Equal(new[]{"< & >", "Café"},MetadataKeywords.ReadXmp(MetadataKeywords.WriteXmp(["< & >","Café"])));
+        Assert.Throws<System.Xml.XmlException>(()=>MetadataKeywords.ReadXmp(Encoding.UTF8.GetBytes("<!DOCTYPE x [<!ENTITY e SYSTEM 'file:///etc/passwd'>]><x>&e;</x>")));
+    }
+
+    [Fact]
+    public async Task Import_reports_invalid_tags_and_unavailable_items_without_losing_valid_unions()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("one.png");await f.CreateImageAsync("two.png");await f.ScanAsync();
+        await File.WriteAllBytesAsync(Path.Combine(f.Root.Path,"one.png.xmp"),MetadataKeywords.WriteXmp(["Valid",new string('x',101)]));
+        File.Move(Path.Combine(f.Root.Path,"two.png"),Path.Combine(f.Root.Path,"two-offline.png"));
+        await using var host=Host(f);using var client=host.CreateClient();
+        var accepted=await client.PostAsJsonAsync("/api/imports/tags",new MetadataJobRequest([1,2],IncludeSidecars:true));
+        var job=await AwaitJobAsync(client,(await accepted.Content.ReadFromJsonAsync<JobAccepted>())!.Id);
+        Assert.Equal("completed",job.State);Assert.Equal(2,job.Processed);Assert.Equal(2,job.Failed);
+        Assert.Contains(job.Items,item=>item.Code=="invalid_tags");Assert.Contains(job.Items,item=>item.Code=="source_unavailable");
+        await using var db=await f.Database.OpenAsync(default);
+        Assert.Equal(1,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE t.Name='Valid'"));
+    }
+
+    [Fact]
+    public async Task Metadata_queue_and_selection_are_bounded_and_quota_exhaustion_is_visible()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await BrowsingTests.SeedAsync(f,1);
+        using(var service=new MetadataJobs(f.Database,f.Options)) {
+            for(var i=0;i<16;i++) await service.EnqueueAsync("xmp",new MetadataJobRequest([1]),default);
+            Assert.Equal("rate_limited",(await Assert.ThrowsAsync<ApiRequestException>(()=>service.EnqueueAsync("xmp",new MetadataJobRequest([1]),default))).Code);
+            await Assert.ThrowsAsync<ApiRequestException>(()=>service.EnqueueAsync("import",new MetadataJobRequest(new long[501]),default));
+        }
+        await using var db=await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("DELETE FROM MetadataJobs; INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,FinishedAt,ContentBytes) VALUES('xmp','completed','{}',@now,@now,1073741824)",new{now=DateTimeOffset.UtcNow.ToString("O")});
+        await using var host=Host(f);using var client=host.CreateClient();
+        var accepted=await client.PostAsJsonAsync("/api/exports/xmp",new MetadataJobRequest([1]));
+        var job=await AwaitJobAsync(client,(await accepted.Content.ReadFromJsonAsync<JobAccepted>())!.Id);
+        Assert.Equal("failed",job.State);Assert.Equal("job_quota_exceeded",job.FailureCode);Assert.Null(job.ContentUrl);
+    }
+    private static WebApplicationFactory<Program> Host(PipelineFixture f)=>new WebApplicationFactory<Program>().WithWebHostBuilder(builder=>builder.UseEnvironment("Testing")
+        .UseSetting("Luma:DatabasePath",f.Database.Path).UseSetting("Luma:Indexing:CachePath",f.Options.CachePath)
+        .UseSetting("Luma:Indexing:Libraries:0:Id","1").UseSetting("Luma:Indexing:Libraries:0:Name","Test").UseSetting("Luma:Indexing:Libraries:0:Path",f.Root.Path));
+    private static async Task<MetadataJobStatus> AwaitJobAsync(HttpClient client,long id)
+    {
+        for(var attempt=0;attempt<200;attempt++) {
+            var status=(await client.GetFromJsonAsync<MetadataJobStatus>($"/api/jobs/{id}"))!;
+            if(status.State is not ("queued" or "running")) return status;
+            await Task.Delay(50);
+        }
+        throw new TimeoutException("Metadata job did not finish.");
+    }
+}

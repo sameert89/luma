@@ -19,11 +19,26 @@ public static class TagText
         return (name,SearchText.Key(name));
     }
 }
+public sealed record CollectionTagPage(IReadOnlyList<TagSummary> Items,string? NextCursor,string? PreviousCursor);
 public sealed record CreateTagRequest(string Name);
 public sealed record BulkTagsRequest(long[] MediaIds,long[] AddTagIds,long[] RemoveTagIds);
 public sealed record PreferenceRequest(string Preference);
 public sealed class TagService(Database database)
 {
+    public async Task<CollectionTagPage> PageAsync(string? cursor,CursorSigner signer,CancellationToken ct)
+    {
+        const string scope="collection-tags";
+        var position=cursor is null?null:signer.Decode(cursor,scope);
+        var backward=position?.Backward==true;
+        await using var db=await database.OpenAsync(ct);
+        var seek=position is null?"":$"WHERE Id {(backward?"<":">")} @id";
+        var rows=(await db.QueryAsync<TagSummary>(new CommandDefinition($"SELECT Id,Name FROM Tags {seek} ORDER BY Id {(backward?"DESC":"ASC")} LIMIT 51",new{id=position?.Id},cancellationToken:ct))).ToList();
+        var more=rows.Count>50;
+        if(more) rows.RemoveAt(50);
+        if(backward) rows.Reverse();
+        return new(rows,rows.Count>0 && (backward?position is not null:more)?signer.Encode(scope,0,rows[^1].Id,false):null,
+            rows.Count>0 && (backward?more:position is not null)?signer.Encode(scope,0,rows[0].Id,true):null);
+    }
     public async Task<(TagSummary Tag,bool Created)> CreateAsync(string name,CancellationToken ct)
     {
         var normalized=TagText.Normalize(name);

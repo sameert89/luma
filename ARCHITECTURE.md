@@ -218,6 +218,8 @@ Orientation
 
 Presentation modes are views over a query result.
 
+Gallery and Reels reuse the same query contract and applicable filter/sort semantics. Their selected query values are mode-specific UI state; switching modes does not require synchronization or preservation of those values. A viewer navigates within the active query of the mode that opened it.
+
 They should not implement separate search/filter systems.
 
 ## Pagination

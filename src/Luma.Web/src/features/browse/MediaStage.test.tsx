@@ -61,7 +61,7 @@ describe('media viewing', () => {
       expect(video.controls).toBe(false)
       expect(video.muted).toBe(true)
       expect(screen.queryByRole('button', { name: 'Playback speed' })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Seek video' })).toBeVisible()
+      expect(screen.getByRole('slider', { name: 'Seek video' })).toBeVisible()
       expect(screen.queryByRole('button', { name: 'Play' })).not.toBeInTheDocument()
       fireEvent.error(video)
       expect(screen.getByRole('status')).toHaveTextContent('external player')

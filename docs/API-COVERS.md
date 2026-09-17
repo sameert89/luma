@@ -1,9 +1,9 @@
-# Automatic album covers
+# Gallery covers
 
-Stage 4 summary endpoints now include nullable `coverUrl` on library and direct-folder summaries. The generated OpenAPI schema is the contract.
+Library/direct-folder summaries contain nullable `coverUrl`. Gate 7 adds persisted user-selected covers and reset through `PUT /api/folders/{id}/cover`, including library roots. See [API](API.md) and [verification](STAGE-7-VERIFICATION.md).
 
-Covers select an indexed, processed, present descendant whose current source revision and encoder have a ready generated thumbnail. Lookup uses partial processed-media and ancestry indexes and stops at the first eligible thumbnail. It does not sort a whole subtree, access originals, or issue an API query per displayed card.
+A custom cover must be a present descendant in the same library. SQLite lookup validates current folder membership, revision, encoder and ready thumbnail. A stale/missing selection falls back to automatic while retaining the preference for recovery. Temporarily unavailable sources retain eligible cached covers.
 
-An unindexed/unprepared library, a stale revision, or missing media yields no cover. Temporarily unavailable roots do not discard ready cached covers. The UI shows preparation state when no thumbnail is available.
+Automatic covers select the newest modified-date/cache-ready descendant with an ID tie-breaker. Library lookup seeks its cover index. Folder lookup checks ancestry and may sort narrowed SQL candidates; large-tree performance is a release check. No original access or processing occurs.
 
-This defines automatic cover behavior for the implementation rather than the modified-date ordering proposed for future covers in API.md. User-selected covers remain stage 7.
+Unindexed/unprepared folders have no cover and show a placeholder. Selection/reset is available in media details. Tests verify persistence, unavailable sources, reset, invalid selections and stale fallback. Historical Stage 4 records describe the previous first-eligible automatic ordering; Gate 7 replaces it with modified-date order.

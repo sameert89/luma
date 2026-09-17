@@ -1,6 +1,6 @@
 # Luma delivery plan
 
-Status: stages 1–5 are implemented. The user accepted the stages 4–5 UI gate on 2026-09-17; the idle-folder discovery follow-up and transition to stage 6 are recorded in [the handoff](STAGE-6-HANDOFF.md). Target-hardware performance validation remains outstanding and is not implied by UI acceptance. Stage 6 functional implementation is delivered; target-hardware/device acceptance remains pending. Stage 7 remains planned.
+Status: stages 1–6 are functionally implemented and Gate 6 is user-tested and accepted. The user accepted the stages 4–5 UI gate on 2026-09-17; the idle-folder discovery follow-up is recorded in [the handoff](STAGE-6-HANDOFF.md). Target-hardware measurements remain release checks and are not implied by functional acceptance. [Gate 7](GATE-7.md) is planned to close all remaining audit findings, missing features, bugs, and release validation.
 
 This plan sequences the requirements in [PRODUCT.md](PRODUCT.md) within the constraints of [ARCHITECTURE.md](../ARCHITECTURE.md) and [AGENTS.md](../AGENTS.md). It does not replace those contracts. Deferring a feature to a later stage does not remove it from the intended initial product.
 
@@ -122,7 +122,7 @@ This is the first usable milestone, not the complete initial product release.
 
 ### Deliverables
 
-- Implement shared query state for gallery and viewer, ready for reuse by reels.
+- Implement query state shared by gallery and its viewer, and reusable query/filter semantics for Reels with mode-specific state.
 - Add the product's initial searches and filters: keyword/name/path, library, tags, dates, media type, extension, starts/ends with, size, orientation, dimensions, aspect ratio, tagged/untagged, and liked/disliked state.
 - Add tag autocomplete, creation, removal, and fast editing from the viewer.
 - Add dedicated bounded server-side bulk tag operations and gallery selection.
@@ -139,34 +139,40 @@ This is the first usable milestone, not the complete initial product release.
 
 ## Stage 6 — Complete video and reels experiences
 
-Functional implementation delivered 2026-09-17. See [implementation and verification](STAGE-6-VERIFICATION.md). Target-client resource/codec and Raspberry Pi performance gates remain outstanding; this stage is not yet declared complete against every exit criterion.
+Functional implementation delivered and user-tested/accepted 2026-09-17. See [implementation and verification](STAGE-6-VERIFICATION.md). Outstanding target-client and Raspberry Pi measurements are tracked as Gate 7 release checks. Gallery/Reels state synchronization, configurable auto-scroll timing, and the full normal-player control set in Reels are not acceptance requirements.
 
 ### Deliverables
 
 - Add native browser video playback, range-capable streaming, and external-player access for unsupported browser formats.
 - Complete viewer controls: fit/fill, actual-size images, zoom/pan, visual rotation, fullscreen, metadata, original access, and video playback controls.
-- Add reels using the existing query/filter state, with vertical navigation, bounded nearby-item preloading, mute, configurable auto-scroll, and optional visible tags.
+- Add Reels using the same applicable query/filter semantics with mode-specific state, vertical navigation, bounded nearby-item preloading, mute, an on/off auto-scroll toggle, and optional visible tags. Full playback controls apply to the normal video viewer.
 - Document keyboard shortcuts in application help and complete mobile interactions.
 
 ### Exit criteria
 
 - Supported videos play and seek correctly; unsupported formats offer the documented external-player workflow.
 - Only active/nearby reels media are mounted or preloaded, and inactive video playback stops.
-- Switching gallery/reels preserves filters and sorting.
+- Gallery and Reels use consistent applicable filter/sort semantics; switching modes may change selected values and reset library/folder scope. Their state does not need to be synchronized.
 - Browser autoplay restrictions and failed playback produce usable controls and states.
 - Viewer and reels remain responsive on mobile and meet client resource budgets.
 - No automatic original transcoding is introduced.
 
 ## Stage 7 — Complete initial product scope and deployment
 
+Current status: product implementation delivered for staging on 2026-09-17. [Verification](STAGE-7-VERIFICATION.md) records passing local checks and synthetic evidence; [handoff](STAGE-7-HANDOFF.md) records deployment and remaining acceptance work. Raspberry Pi, real-library indexing and real-device long-session requirements remain open.
+
+The authoritative completion checklist is [Gate 7](GATE-7.md), based on the [product implementation audit](PRODUCT-IMPLEMENTATION-AUDIT.md) and the user's clarified requirements. This gate includes all unresolved findings and bugs, not only new Stage 7 features.
+
 ### Deliverables
 
 - Complete remaining sorts, grouping, stable shuffle, custom gallery covers, and the filtered random-image content endpoint.
-- Deliver the three requested themes through shared tokens: Catppuccin, Orange & Black, and Red & White.
+- Close existing workflow gaps: child-folder pagination, mobile sort access, library-scoped search, advanced filter choices, normal video viewer audio controls, keyboard Reels seeking, photo/mixed-media Reels selection, and the Collections destination.
+- Verify the already-delivered themes through shared tokens: Dark, White, Catppuccin, Orange & Black, and Red & White.
 - Add explicit metadata tag import, XMP-only export with merge instructions, and full-path disliked-media list export. Exports do not delete or rewrite originals.
-- Package the application and required media tools in Docker for the target deployment, with read-only `/media` and persistent `/data` mounts.
+- Validate the existing Docker packaging and bundled media tools on the target deployment, with read-only `/media` and persistent `/data` mounts.
 - Document installation, configuration, upgrade/migration handling, consistent database backup and restore, cache regeneration, and failure recovery.
 - Validate the complete initial product requirements and record any unresolved release blockers.
+- Repair stale browser-test selectors and complete the full desktop/mobile browser suite.
 
 ### Exit criteria
 

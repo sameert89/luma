@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace Luma.Server.Features.Media;
 
-public sealed record CursorPosition(int Version, string Fingerprint, long Ticks, long Id, bool Backward);
+public sealed record CursorPosition(int Version, string Fingerprint, long Ticks, long Id, bool Backward, string[]? Tuple = null);
 public sealed class CursorSigner(Database database)
 {
     private byte[] key = [];
@@ -22,11 +22,16 @@ public sealed class CursorSigner(Database database)
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new CursorPosition(1, Hash(fingerprint), ticks,id,backward));
         return WebEncoders.Base64UrlEncode(bytes)+"."+WebEncoders.Base64UrlEncode(HMACSHA256.HashData(key,bytes));
     }
+    public string Encode(string fingerprint, string[] tuple, long id, bool backward)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new CursorPosition(1, Hash(fingerprint), 0, id, backward, tuple));
+        return WebEncoders.Base64UrlEncode(bytes)+"."+WebEncoders.Base64UrlEncode(HMACSHA256.HashData(key,bytes));
+    }
     public CursorPosition Decode(string cursor,string fingerprint)
     {
         try
         {
-            if (cursor.Length>2048) throw new FormatException();
+            if (cursor.Length>8192) throw new FormatException();
             var parts=cursor.Split('.');
             if(parts.Length!=2) throw new FormatException();
             var bytes=WebEncoders.Base64UrlDecode(parts[0]);

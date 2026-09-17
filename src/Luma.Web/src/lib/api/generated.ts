@@ -112,6 +112,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/imports/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImportTags"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exports/xmp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ExportXmp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/exports/dislikes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ExportDislikes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMetadataJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DownloadMetadataJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/random": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRandomImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/folders/{id}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetFolderCover"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/libraries": {
         parameters: {
             query?: never;
@@ -224,6 +336,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collections/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetCollectionTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tags": {
         parameters: {
             query?: never;
@@ -299,6 +427,15 @@ export interface components {
             /** Format: int32 */
             height: number | null;
         };
+        CollectionTagPage: {
+            items: components["schemas"]["TagSummary"][];
+            nextCursor: string | null;
+            previousCursor: string | null;
+        };
+        CoverRequest: {
+            /** Format: int64 */
+            mediaId: number | null;
+        };
         CreateTagRequest: {
             name: string;
         };
@@ -343,6 +480,15 @@ export interface components {
             /** Format: int32 */
             queueCapacity: number;
         };
+        JobAccepted: {
+            /** Format: int64 */
+            id: number;
+        };
+        JobItem: {
+            /** Format: int64 */
+            mediaId: number;
+            code: string;
+        };
         LibrarySummary: {
             /** Format: int64 */
             id: number;
@@ -360,9 +506,54 @@ export interface components {
             items: components["schemas"]["MediaSummary"][];
             nextCursor: string | null;
             previousCursor: string | null;
+            seed?: string | null;
         };
         MediaPriorityRequest: {
             ids: number[];
+        };
+        MediaQuery: {
+            /** Format: int32 */
+            limit?: number | null;
+            cursor?: string | null;
+            /** Format: int64 */
+            libraryId?: number | null;
+            /** Format: int64 */
+            folderId?: number | null;
+            recursive?: boolean | null;
+            q?: string | null;
+            path?: string | null;
+            startsWith?: string | null;
+            endsWith?: string | null;
+            tag?: string[] | null;
+            tagMode?: string | null;
+            tagged?: boolean | null;
+            mediaType?: string | null;
+            extension?: string[] | null;
+            dateFrom?: string | null;
+            dateTo?: string | null;
+            /** Format: int64 */
+            minSizeBytes?: number | null;
+            /** Format: int64 */
+            maxSizeBytes?: number | null;
+            orientation?: string | null;
+            /** Format: int32 */
+            minWidth?: number | null;
+            /** Format: int32 */
+            width?: number | null;
+            /** Format: int32 */
+            minHeight?: number | null;
+            /** Format: int32 */
+            height?: number | null;
+            /** Format: double */
+            minAspectRatio?: number | null;
+            /** Format: double */
+            maxAspectRatio?: number | null;
+            preference?: string | null;
+            availability?: string | null;
+            sort?: string | null;
+            order?: string | null;
+            seed?: string | null;
+            groupBy?: string | null;
         };
         MediaSummary: {
             /** Format: int64 */
@@ -390,6 +581,32 @@ export interface components {
             thumbnail: components["schemas"]["CacheRepresentation"];
             preview: components["schemas"]["CacheRepresentation"];
             tags: components["schemas"]["TagSummary"][];
+            groupKey?: string | null;
+            groupLabel?: string | null;
+        };
+        MetadataJobRequest: {
+            mediaIds?: number[] | null;
+            query?: components["schemas"]["MediaQuery"] | null;
+            /** @default false */
+            includeSidecars: boolean;
+        };
+        MetadataJobStatus: {
+            /** Format: int64 */
+            id: number;
+            kind: string;
+            state: string;
+            createdAt: string;
+            snapshotAt: string | null;
+            finishedAt: string | null;
+            /** Format: int32 */
+            processed: number;
+            /** Format: int32 */
+            failed: number;
+            failureCode: string | null;
+            items: components["schemas"]["JobItem"][];
+            /** Format: int64 */
+            nextMediaId: number | null;
+            contentUrl: string | null;
         };
         PreferenceRequest: {
             preference: string;
@@ -723,6 +940,196 @@ export interface operations {
             };
         };
     };
+    ImportTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetadataJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAccepted"];
+                };
+            };
+        };
+    };
+    ExportXmp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetadataJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAccepted"];
+                };
+            };
+        };
+    };
+    ExportDislikes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetadataJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAccepted"];
+                };
+            };
+        };
+    };
+    GetMetadataJob: {
+        parameters: {
+            query?: {
+                afterMediaId?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataJobStatus"];
+                };
+            };
+        };
+    };
+    DownloadMetadataJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetRandomImage: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                libraryId?: number;
+                folderId?: number;
+                recursive?: boolean;
+                q?: string;
+                path?: string;
+                startsWith?: string;
+                endsWith?: string;
+                tag?: string[];
+                tagMode?: string;
+                tagged?: boolean;
+                mediaType?: string;
+                extension?: string[];
+                dateFrom?: string;
+                dateTo?: string;
+                minSizeBytes?: number;
+                maxSizeBytes?: number;
+                orientation?: string;
+                minWidth?: number;
+                width?: number;
+                minHeight?: number;
+                height?: number;
+                minAspectRatio?: number;
+                maxAspectRatio?: number;
+                preference?: string;
+                availability?: string;
+                sort?: string;
+                order?: string;
+                seed?: string;
+                groupBy?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SetFolderCover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetLibraries: {
         parameters: {
             query?: never;
@@ -800,6 +1207,7 @@ export interface operations {
                 availability?: string;
                 sort?: string;
                 order?: string;
+                seed?: string;
                 groupBy?: string;
             };
             header?: never;
@@ -873,6 +1281,7 @@ export interface operations {
                 availability?: string;
                 sort?: string;
                 order?: string;
+                seed?: string;
                 groupBy?: string;
             };
             header?: never;
@@ -952,6 +1361,28 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ApiProblem"];
+                };
+            };
+        };
+    };
+    GetCollectionTags: {
+        parameters: {
+            query?: {
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionTagPage"];
                 };
             };
         };

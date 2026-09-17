@@ -2,7 +2,7 @@
 
 A lightweight, self-hosted photo and video browser for large media collections and low-end hardware.
 
-Stages 1–5 provide a usable, responsive gallery, cached previews, search and filters, tags, preferences, and a resumable media indexing/cache pipeline.
+Gate 7 staging adds complete sort/group/shuffle browsing, photo/video Reels, custom covers, cached random images, metadata import, XMP archives and explicit disliked-path export. Target-hardware release validation remains pending: see [Gate 7 verification](docs/STAGE-7-VERIFICATION.md).
 
 ## Quick start with Docker
 
@@ -15,6 +15,8 @@ docker compose up --build
 ```
 
 On Windows, copy the file with `Copy-Item .env.example .env`. Set `LUMA_CASE_SENSITIVE=false` for a normal NTFS media directory. Then open http://127.0.0.1:5080. Media is mounted read-only at `/media`; the database and generated cache persist in the `luma-data` volume.
+
+Concrete volume installation, upgrade, cold backup/restore, cache regeneration and recovery: [deployment guide](docs/DEPLOYMENT.md).
 
 ## Local development
 
@@ -137,3 +139,15 @@ This copies the generated frontend to the host's `wwwroot` and publishes to `.lo
 - [Architecture](ARCHITECTURE.md)
 - [Target hardware and performance requirements](docs/PERFORMANCE.md)
 - [Contributor instructions](AGENTS.md)
+
+## Gate 7 staging workflows
+
+See the [staging handoff](docs/STAGE-7-HANDOFF.md), [verification results](docs/STAGE-7-VERIFICATION.md), and [Docker deployment/recovery guide](docs/DEPLOYMENT.md).
+
+Filters expose library-scoped keyword/tag search, all/any tag matching, availability, six sorts and folder/date/type grouping. Sort direction is visible on mobile. Reels defaults to video when entered; its filter sheet supports Photos and mixed media. Viewers navigate their active query. Collections opens library folders/albums, paginated tags and favourites.
+
+Media details select/reset folder/library covers and explicitly import embedded/optional-sidecar tags or download XMP. Bulk tag details support metadata exchange for up to 500 selected items. Settings exposes whole-library XMP and disliked-path exports. Jobs report per-item findings, share a 1 GiB export quota and expire downloads after 24 hours. Originals stay read-only; archives include merge instructions and relative-path manifests.
+
+`GET /api/random` returns filtered cached JPEG content for embedding; for example `/api/random?tag=wallpaper&orientation=landscape`. It uses no-store and reports 404 for empty results or 503 for unavailable previews.
+
+Build the staging image with `docker build -t luma:gate7-staging .`. Actual Pi deployment, real-library and long-session measurements are separate release requirements.

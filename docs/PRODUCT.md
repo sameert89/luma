@@ -80,7 +80,7 @@ Initial modes:
 - Gallery
 - Reels
 
-Switching modes should preserve the current query/filter state.
+Gallery and Reels use the same filter definitions and server query semantics, but their selected filters and sorting are mode-specific state. Switching modes is not required to preserve or synchronize the current query. Reels may clear the gallery library/folder location and default to videos; this is intentional. Each mode's viewer navigation must follow that mode's active query.
 
 ## Gallery mode
 
@@ -110,15 +110,17 @@ Requirements:
 
 - vertical navigation between media
 - active videos may autoplay according to browser/platform restrictions.
-- configurable auto scrol
+- auto-scroll as a simple on/off toggle; enabled videos advance when playback ends, with no configurable timing requirement
 - only the current and nearby media should be mounted/preloaded
 - images and videos are both supported with option to choose them
-- query/filter state is shared with gallery mode along with sorting
+- the same applicable filter and sort capabilities as gallery, with independent mode state rather than a synchronized query
 - tags must remain accessible and nicely rendered like reels captions if user wishes to see it
 - dedicated mute button and auto scroll button
 - loading a large result set must not create thousands of DOM elements
 
 The first implementation should prioritize smooth navigation over elaborate animations.
+
+Reels does not require the normal video player's full control set or browser-native control chrome. Its required controls are navigation, mute, auto-scroll, filters, and accessible tags. Any seek or other optional playback control that is provided must remain keyboard-accessible. The full playback control requirements below apply to the normal video viewer.
 
 ## Likes/Dislikes and existence of dislike export
 - The user should be able to like/favourite a piece of media and then filter based on the likes if they wish to do so.
@@ -149,7 +151,7 @@ Rotation performed in the viewer is initially visual-only unless an explicit per
 
 The video viewer should use the browser's native media playback capabilities.
 
-Required controls:
+Required controls in the normal video viewer (not Reels):
 
 - play/pause
 - seek
@@ -164,6 +166,8 @@ Required controls:
 - basic metadata display
 
 Luma must not implement its own decoding engine.
+
+The normal video viewer must expose the complete playback control set above using the browser's native playback capabilities. Controls may use Luma's themed interface; displaying browser-default control chrome is not required.
 
 ## Search
 

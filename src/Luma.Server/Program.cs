@@ -7,6 +7,12 @@ using Luma.Server.Features.Media;
 using Luma.Server.Features.Tags;
 using Luma.Server.Features.Libraries;
 
+if (args.FirstOrDefault() == "--read-tags")
+{
+    try { await Console.Out.WriteAsync(System.Text.Json.JsonSerializer.Serialize(await MetadataKeywords.ReadImageAsync(args[1],CancellationToken.None))); }
+    catch { Environment.ExitCode=1; }
+    return;
+}
 if (args.FirstOrDefault() == "--image-worker")
 {
     await ImageProcessCommand.RunWorkerAsync(CancellationToken.None);
@@ -26,11 +32,13 @@ builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<MigrationRunner>();
 builder.Services.AddSingleton<CursorSigner>();
 builder.Services.AddSingleton<MediaBrowser>();
+builder.Services.AddSingleton<RandomImage>();
 builder.Services.AddSingleton<LibraryBrowser>();
 builder.Services.AddSingleton<CacheContent>();
 builder.Services.AddSingleton<OriginalContent>();
 builder.Services.AddSingleton<CacheAccessLog>();
 builder.Services.AddSingleton<TagService>();
+builder.Services.AddSingleton<MetadataJobs>();
 builder.Services.AddSingleton(services =>
 {
     var options = new IndexingOptions();
@@ -46,6 +54,7 @@ if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
     builder.Services.AddHostedService(services => services.GetRequiredService<ScanWorker>());
     builder.Services.AddHostedService<ProcessingWorker>();
+    builder.Services.AddHostedService(services => services.GetRequiredService<MetadataJobs>());
     builder.Services.AddHostedService<SourcePresenceWorker>();
     builder.Services.AddHostedService(services => services.GetRequiredService<CacheAccessLog>());
     builder.Services.AddHostedService(services => services.GetRequiredService<CacheContent>());

@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { MediaStage } from './MediaStage'
 import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
+import { MetadataExchange } from '../tags/MetadataExchange'
 import { TagEditor } from '../tags/TagEditor'
-import { errorMessage, queryString, request, type Filters, type Media, type Neighbors } from './api'
+import { errorMessage, queryString, request, type Filters, type Media, type Neighbors, type Library } from './api'
 
 export function Viewer({ active, filters, onChange, onClose, restoreFocus }: { active: Media; filters: Filters; onChange: (item: Media) => void; onClose: () => void; restoreFocus: () => void }) {
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -18,6 +19,10 @@ export function Viewer({ active, filters, onChange, onClose, restoreFocus }: { a
   const neighbors = useQuery({ queryKey: ['neighbors', filters, active.id], queryFn: ({ signal }) => request<Neighbors>(`/api/media/${active.id}/neighbors?${queryString(filters)}`, signal), gcTime: 0 })
   const previous = neighbors.data?.previous
   const next = neighbors.data?.next
+  const libraries = useQuery({ queryKey: ['libraries'], queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal) })
+  const rootFolder = libraries.data?.find(library => library.id === item.libraryId)?.rootFolderId
+  const coverFolder = filters.folderId ?? item.folderId
+  const cover = useMutation({ mutationFn: ({ folder, mediaId }: { folder: number; mediaId: number | null }) => request(`/api/folders/${folder}/cover`, undefined, 'PUT', { mediaId }), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['libraries'] }), client.invalidateQueries({ queryKey: ['folders'] })]) } })
   const preference = useMutation({ mutationFn: (value: string) => request(`/api/media/${active.id}/preference`, undefined, 'PUT', { preference: value }), onSuccess: async () => {
     await Promise.all([client.invalidateQueries({ queryKey: ['detail', active.id] }), client.invalidateQueries({ queryKey: ['media'] }), client.invalidateQueries({ queryKey: ['neighbors'] })])
   } })
@@ -52,6 +57,8 @@ export function Viewer({ active, filters, onChange, onClose, restoreFocus }: { a
     <Modal open={detailsOpen} onOpenChange={setDetailsOpen} title="Media details" description="Tags and file information." sheet>
       <div className="space-y-6 overflow-auto p-5"><div className="flex gap-2"><QuietButton aria-pressed={item.preference === 'liked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'liked' ? 'neutral' : 'liked')}><Heart className={`size-4 ${item.preference === 'liked' ? 'fill-accent text-accent' : ''}`} />Like</QuietButton><QuietButton aria-pressed={item.preference === 'disliked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'disliked' ? 'neutral' : 'disliked')}><ThumbsDown className={`size-4 ${item.preference === 'disliked' ? 'fill-danger text-danger' : ''}`} />Dislike</QuietButton></div>
         <div><h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Tag className="size-4 text-accent" />Tags</h2><TagEditor key={item.id} mediaIds={[item.id]} tags={item.tags} /></div>
+        <section aria-label="Gallery covers" className="space-y-3"><h2 className="text-sm font-semibold">Gallery covers</h2><div className="flex flex-wrap gap-2"><QuietButton disabled={cover.isPending || item.availability === 'missing'} onClick={() => cover.mutate({ folder: coverFolder, mediaId: item.id })}>Use as folder cover</QuietButton><QuietButton disabled={cover.isPending} onClick={() => cover.mutate({ folder: coverFolder, mediaId: null })}>Automatic folder cover</QuietButton>{rootFolder && <><QuietButton disabled={cover.isPending || item.availability === 'missing'} onClick={() => cover.mutate({ folder: rootFolder, mediaId: item.id })}>Use as library cover</QuietButton><QuietButton disabled={cover.isPending} onClick={() => cover.mutate({ folder: rootFolder, mediaId: null })}>Automatic library cover</QuietButton></>}</div>{cover.isSuccess && <p role="status" className="text-sm text-muted">Cover saved.</p>}{cover.isError && <p role="alert" className="text-sm text-danger">{errorMessage(cover.error)}</p>}</section>
+        <MetadataExchange key={item.id} mediaIds={[item.id]} />
         <dl className="grid grid-cols-2 gap-4 text-sm"><div><dt className="text-muted">Modified</dt><dd>{new Date(item.modifiedAt).toLocaleString()}</dd></div><div><dt className="text-muted">File size</dt><dd>{(item.sizeBytes / 1024 / 1024).toFixed(2)} MB</dd></div>{item.width && item.height && <div><dt className="text-muted">Dimensions</dt><dd>{item.width} × {item.height}</dd></div>}{item.mediaType === 'video' && <div><dt className="text-muted">Video</dt><dd>{item.durationMs ? `${(item.durationMs / 1000).toFixed(1)} seconds` : 'Duration unknown'}</dd></div>}</dl>
         {preference.isError && <p role="alert" className="text-sm text-danger">{errorMessage(preference.error)}</p>}{detail.isError && <p role="alert" className="text-sm text-danger">{errorMessage(detail.error)}</p>}</div>
     </Modal>

@@ -116,6 +116,74 @@ if(mode=="seed")
     Console.WriteLine($"Fixture ready: {directory}");return;
 }
 var signer=new CursorSigner(database);await signer.InitializeAsync(default);var browser=new MediaBrowser(database,signer);
+if(mode is "gate7-benchmark" or "gate7-traversal" or "gate7-queries")
+{
+    var schemaVersion=await db.ExecuteScalarAsync<int>("SELECT MAX(Version) FROM SchemaMigrations");
+    var sqliteVersion=await db.ExecuteScalarAsync<string>("SELECT sqlite_version()");
+    var sampleCount=args.Length>3?int.Parse(args[3],CultureInfo.InvariantCulture):200;
+    if(sampleCount is <20 or >1000) throw new ArgumentOutOfRangeException(nameof(sampleCount));
+    var warmup=Math.Min(20,Math.Max(5,sampleCount/10));
+    var reports=new List<object>();
+    if(mode!="gate7-traversal")
+    foreach(var sort in new[]{"modified","captured","name","type","size","shuffle"})
+    foreach(var group in new[]{"none","folder","date","type"})
+    foreach(var selective in new[]{false,true})
+    {
+        Console.WriteLine($"Measuring {sort}/{group}/selective={selective}");
+        var query=new MediaQuery{Limit=60,Sort=sort,GroupBy=group,Seed="gate7-fixed",Tag=selective?["Family"]:null}.Normalize();
+        var (predicate,p)=query.Predicate();p.Add("limit",60);
+        var ordering=new MediaOrdering(query);
+        var sortSql=sort=="shuffle" ? "m.RandomKey,m.Id" : group=="none"?ordering.Order(false):ordering.KeyExpression+" DESC,m.Id DESC";
+        var where=sort=="shuffle" ? $"{predicate} AND m.RandomKey>={ordering.Pivot}" : predicate;
+        if(group!="none") where+=$" AND {ordering.GroupExpression}=(SELECT MIN({ordering.GroupExpression}) FROM Media m WHERE {predicate})";
+        if(sort=="type") {
+            var firstType=await db.QuerySingleOrDefaultAsync<string>("SELECT m.MediaType FROM Media m WHERE "+where+" ORDER BY m.MediaType DESC LIMIT 1",p);
+            p.Add("typeOrder",firstType);
+            where+=" AND m.MediaType=@typeOrder";
+            sortSql="m.Id DESC";
+        }
+        var plan=(await db.QueryAsync("EXPLAIN QUERY PLAN SELECT m.Id FROM Media m WHERE "+where+" ORDER BY "+sortSql+" LIMIT @limit",p)).Select(x=>(string)x.detail).ToArray();
+        Console.WriteLine(string.Join("; ",plan));
+        for(var i=0;i<warmup;i++)await browser.ListAsync(query,default);
+        var samples=new List<double>();
+        for(var i=0;i<sampleCount;i++){var timer=Stopwatch.StartNew();await browser.ListAsync(query,default);samples.Add(timer.Elapsed.TotalMilliseconds);}
+        samples.Sort();
+        reports.Add(new{sort,group,selective,p50=samples[sampleCount/2],p95=samples[(int)Math.Ceiling(sampleCount*.95)-1],p99=samples[(int)Math.Ceiling(sampleCount*.99)-1],sampleCount,warmup,latenciesMs=samples,plan});
+        await File.WriteAllTextAsync(Path.Combine(directory,"gate7-query-results.json"),JsonSerializer.Serialize(new{rows=count,synthetic=true,schemaVersion,sqliteVersion,reports},new JsonSerializerOptions{WriteIndented=true}));
+    }
+    var traversals=new List<object>();
+    var traversalFailed=false;
+    if(mode!="gate7-queries")
+    foreach(var sort in new[]{"modified","captured","name","type","size","shuffle"})
+    {
+        var seen=new HashSet<long>();string? after=null;var query=new MediaQuery{Limit=200,Sort=sort,Seed="gate7-fixed"}.Normalize();
+        var timer=Stopwatch.StartNew();
+        Console.WriteLine("Traversing "+sort);
+        try {
+            do{var page=await browser.ListAsync(query with{Cursor=after},default);foreach(var item in page.Items)if(!seen.Add(item.Id))throw new Exception("Duplicate cursor traversal");after=page.NextCursor;if(seen.Count%100000==0)Console.WriteLine($"{sort}: {seen.Count} rows");}while(after is not null);
+        } catch(Luma.Server.Http.ApiRequestException error) {
+            traversalFailed=true;
+            traversals.Add(new{sort,rows=seen.Count,seconds=timer.Elapsed.TotalSeconds,error=error.Message});
+            Console.WriteLine($"{sort} failed after {seen.Count} rows: {error.Message}");
+            continue;
+        }
+        if(seen.Count!=count)throw new Exception("Missing cursor traversal rows");
+        traversals.Add(new{sort,rows=seen.Count,seconds=timer.Elapsed.TotalSeconds});
+    }
+    var randomReports=new List<object>();
+    if(mode=="gate7-benchmark")
+    foreach(var selective in new[]{false,true}) {
+        var query=new MediaQuery{MediaType="image",Tag=selective?["Family"]:null}.Normalize();
+        var (predicate,p)=query.Predicate();p.Add("pivot",new MediaOrdering(new MediaQuery{Seed="random-benchmark"}).Pivot);
+        var sql=$"SELECT m.Id FROM Media m WHERE {predicate} AND m.RandomKey>=@pivot ORDER BY m.RandomKey,m.Id LIMIT 1";
+        var plan=(await db.QueryAsync("EXPLAIN QUERY PLAN "+sql,p)).Select(x=>(string)x.detail).ToArray();
+        var samples=new List<double>();for(var i=0;i<1000;i++){var timer=Stopwatch.StartNew();await db.QuerySingleOrDefaultAsync<long?>(sql,p);samples.Add(timer.Elapsed.TotalMilliseconds);}samples.Sort();
+        randomReports.Add(new{selective,p50=samples[500],p95=samples[949],p99=samples[989],plan});
+    }
+    var report=JsonSerializer.Serialize(new{rows=count,synthetic=true,schemaVersion,sqliteVersion,framework=System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,environment=System.Runtime.InteropServices.RuntimeInformation.OSDescription,reports,traversals,randomReports,peakWorkingSetBytes=Process.GetCurrentProcess().PeakWorkingSet64},new JsonSerializerOptions{WriteIndented=true});
+    var reportName=mode switch {"gate7-benchmark"=>"gate7-results.json","gate7-traversal"=>"gate7-traversals.json",_=>"gate7-query-results.json"};
+    await File.WriteAllTextAsync(Path.Combine(directory,reportName),report);Console.WriteLine("Gate 7 query evidence written to "+directory);if(traversalFailed)Environment.ExitCode=1;return;
+}
 var measurements=new List<object>();
 var queries=new Dictionary<string,MediaQuery>{{"gallery",new()},{"folder",new(){FolderId=2}},{"video",new(){MediaType="video"}},
     {"date",new(){DateFrom="2026-01-14",DateTo="2026-01-15"}},{"tag",new(){Tag=["Vacation"]}},{"twoTags",new(){Tag=["Vacation","Family"]}},

@@ -154,7 +154,7 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
             ? date.ToUniversalTime().ToString("O") : null;
 
     // Do not auto-detect playlists disguised as supported videos: demuxers must not traverse source references.
-    private static string VideoDemuxer(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    internal static string VideoDemuxer(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {
         ".mp4" or ".m4v" or ".mov" => "mov",
         ".mkv" or ".webm" => "matroska",

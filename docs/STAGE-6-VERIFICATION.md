@@ -34,4 +34,6 @@ Intermediate checks found an outdated image-only browser assertion, a captions l
 
 ## Outstanding acceptance gates
 
-Local desktop and mobile Chromium emulation does not establish Raspberry Pi throughput, real Android/iOS codec support, 30-minute client frame/memory budgets, or concurrent indexing performance. These target-hardware/device measurements from PERFORMANCE.md remain required before declaring all Stage 6 exit criteria satisfied. No target-hardware performance result is claimed.
+Update 2026-09-17: the user confirmed Gate 6 was implemented and user-tested. Gallery/Reels use the same applicable filter semantics without requiring shared state; clearing browse scope is intentional. Auto-scroll is a simple on/off toggle. The full playback control set applies to the normal video viewer, not Reels. Remaining findings and target-environment measurements are tracked under [Gate 7](GATE-7.md).
+
+Local desktop and mobile Chromium emulation does not establish Raspberry Pi throughput, real Android/iOS codec support, 30-minute client frame/memory budgets, or concurrent indexing performance. These target-hardware/device measurements from PERFORMANCE.md remain required for the Gate 7 release validation. No target-hardware performance result is claimed by this local verification record.

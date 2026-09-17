@@ -37,6 +37,7 @@ public sealed record MediaQuery
     [FromQuery(Name = "availability")] public string? Availability { get; init; }
     [FromQuery(Name = "sort")] public string? Sort { get; init; }
     [FromQuery(Name = "order")] public string? Order { get; init; }
+    [FromQuery(Name = "seed")] public string? Seed { get; init; }
     [FromQuery(Name = "groupBy")] public string? GroupBy { get; init; }
 
     public MediaQuery Normalize(IQueryCollection? parameters = null)
@@ -68,6 +69,7 @@ public sealed record MediaQuery
             if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)) throw ApiRequestException.Invalid("Invalid date.");
             return date.ToUniversalTime().ToString("O");
         }
+        if (Seed is { Length: > 100 } || Seed?.Any(char.IsControl) == true) throw ApiRequestException.Invalid("Invalid shuffle seed.");
         var from = Date(DateFrom); var to = Date(DateTo);
         if (from is not null && to is not null && SearchText.Ticks(from) >= SearchText.Ticks(to)) throw ApiRequestException.Invalid("End date must follow start date.");
         if (Tag?.Length > 50 || Extension?.Length > 20) throw ApiRequestException.Invalid("Too many tags or extensions.");
@@ -77,7 +79,8 @@ public sealed record MediaQuery
             Tag = Tag?.Select(Tags.TagText.Normalize).Select(x => x.Key).Distinct().Order().ToArray() ?? [], Extension = extensions,
             MediaType = Choice(MediaType,"image","video"), Orientation = Choice(Orientation,"landscape","portrait","square"),
             Preference = Choice(Preference,"neutral","liked","disliked"), Availability = Choice(Availability,"present","missing","all") ?? "present",
-            Sort = Choice(Sort,"modified") ?? "modified", Order = Choice(Order,"asc","desc") ?? "desc", GroupBy = Choice(GroupBy,"none") ?? "none",
+            Seed = Seed ?? (Sort == "shuffle" ? Guid.NewGuid().ToString("N") : null),
+            Sort = Choice(Sort,"modified","captured","name","type","size","shuffle") ?? "modified", Order = Choice(Order,"asc","desc") ?? "desc", GroupBy = Choice(GroupBy,"none","folder","date","type") ?? "none",
             TagMode = Choice(TagMode,"all","any") ?? "all", Recursive = Recursive ?? false, DateFrom = from, DateTo = to };
     }
 
@@ -115,7 +118,7 @@ public sealed record MediaQuery
         if (Tag?.Length > 0)
         {
             p.Add("tags",JsonSerializer.Serialize(Tag));
-            conditions.Add(TagMode == "any"
+            conditions.Add(TagMode == "any" || Tag.Length == 1
                 ? "m.Id IN (SELECT mt.MediaId FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE t.NormalizedKey IN (SELECT value FROM json_each(@tags)))"
                 : "m.Id IN (SELECT mt.MediaId FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE t.NormalizedKey IN (SELECT value FROM json_each(@tags)) GROUP BY mt.MediaId HAVING COUNT(*)=json_array_length(@tags))");
         }

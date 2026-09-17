@@ -8,6 +8,10 @@ export function Checkbox({ className = '', ...props }: Omit<ComponentProps<'inpu
   </span>
 }
 
+export function Range({ className = '', ...props }: Omit<ComponentProps<'input'>, 'type'>) {
+  return <input {...props} type="range" className={`h-11 min-w-0 accent-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${className}`} />
+}
+
 export function Input({ className = '', shape = 'field', ...props }: ComponentProps<'input'> & { shape?: 'field' | 'pill' }) {
   return <input className={`min-h-11 w-full ${shape === 'pill' ? 'rounded-full' : 'rounded-xl'} border border-line bg-canvas px-3 text-sm text-ink placeholder:text-muted focus-visible:border-accent ${className}`} {...props} />
 }

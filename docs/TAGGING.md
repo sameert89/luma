@@ -1,6 +1,6 @@
 # Tag and preference contract
 
-SQLite is authoritative. Routine editing never writes originals. Implementation begins in stage 5; metadata exchange in stage 7.
+SQLite is authoritative. Routine editing never writes originals. Tag editing and Gate 7 metadata exchange are implemented. Concrete request limits, recognized metadata fields, jobs, snapshot timing and downloads are described in [API.md](API.md).
 
 Normalize input by trimming Unicode whitespace and applying Unicode NFC. Reject empty values, control characters, or values over 100 Unicode scalar values. Store the display spelling from first creation. The unique key is NFC of .NET `ToUpperInvariant()` on the normalized value, compared with SQLite BINARY collation; do not use SQLite NOCASE for Unicode. This is invariant casing, not linguistic/full Unicode case folding: accents remain distinct and `ß` is not promised equal to `ss`. Record normalization version 1; runtime upgrades that change keys require a collision-audited migration. Test ASCII variants, composed/decomposed accents, Turkish I and sharp S when implemented.
 

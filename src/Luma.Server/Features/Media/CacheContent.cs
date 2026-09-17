@@ -27,7 +27,7 @@ public sealed class CacheContent(Database database,IndexingOptions options,Cache
         }
     }
 
-    public async Task<IResult> ServeAsync(long id,long revision,string variant,int? v,HttpContext context,CancellationToken ct)
+    public async Task<IResult> ServeAsync(long id,long revision,string variant,int? v,HttpContext context,CancellationToken ct,bool noStore=false)
     {
         if(variant is not ("thumbnail" or "preview" or "poster") || (v??IndexingOptions.EncoderVersion)!=IndexingOptions.EncoderVersion) throw ApiRequestException.Missing();
         await using var db=await database.OpenAsync(ct);
@@ -49,7 +49,7 @@ public sealed class CacheContent(Database database,IndexingOptions options,Cache
                 {
                     stream.Position=0;
                     access.Record(id);
-                    context.Response.Headers.CacheControl="public,max-age=31536000,immutable";
+                    context.Response.Headers.CacheControl=noStore?"no-store":"public,max-age=31536000,immutable";
                     return Results.File(stream,variant=="thumbnail"?"image/webp":"image/jpeg",entityTag:new EntityTagHeaderValue('"'+entry.ContentHash+'"'));
                 }
             }
