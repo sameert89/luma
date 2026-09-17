@@ -9,6 +9,14 @@ namespace Luma.Server.Features.Indexing;
 public sealed class ScanWorker(Database database, IndexingOptions options, ILogger<ScanWorker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<long, CancellationTokenSource> active = new();
+    private readonly Dictionary<long, Channel<long>> folderPriority = options.Libraries.ToDictionary(x => x.Id,
+        _ => Channel.CreateBounded<long>(new BoundedChannelOptions(options.QueueCapacity)
+        { SingleReader = true, FullMode = BoundedChannelFullMode.Wait }));
+
+    public void PrioritizeFolder(long libraryId, long folderId)
+    {
+        if (folderPriority.TryGetValue(libraryId, out var queue)) queue.Writer.TryWrite(folderId);
+    }
     public void Cancel(long id) { if (active.TryGetValue(id, out var source)) source.Cancel(); }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
@@ -115,6 +123,9 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             await using var db = await database.OpenAsync(ct);
             while (await channel.Reader.WaitToReadAsync(ct))
             {
+                if (scan.FolderId is null && folderPriority.TryGetValue(root.Id, out var priority)
+                    && priority.Reader.TryRead(out var requestedFolder))
+                    await DiscoverPriorityFolderAsync(db, scan, root, requestedFolder, ct);
                 using (var batch = db.BeginTransaction())
                 {
                     var folders = new Dictionary<string, long>();
@@ -154,7 +165,51 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         }
     }
 
-    private static async Task PersistEntryAsync(SqliteConnection db, SqliteTransaction tx, Dictionary<string, long> folders, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct)
+    private static async Task DiscoverPriorityFolderAsync(SqliteConnection db, ScanRow scan, LibraryOptions root, long folderId, CancellationToken ct)
+    {
+        var relative = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
+            "SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId AND DirectIndexedAt IS NULL",
+            new { folderId, scan.LibraryId }, cancellationToken: ct));
+        if (relative is null) return;
+        try
+        {
+            var path = relative.Length == 0 ? root.Path : SourcePaths.Resolve(root, relative);
+            using var entries = SourceTraversal.Enumerate(path, recursive: false).GetEnumerator();
+            var more = true;
+            while (more)
+            {
+                ct.ThrowIfCancellationRequested();
+                var discovered = new List<DiscoveredEntry>(32);
+                for (var count = 0; count < 32; count++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (!entries.MoveNext()) { more = false; break; }
+                    var entry = entries.Current;
+                    var directory = entry.Attributes.HasFlag(FileAttributes.Directory);
+                    discovered.Add(new DiscoveredEntry(
+                        Path.GetRelativePath(root.Path, entry.FullName).Replace(Path.DirectorySeparatorChar, '/'), directory,
+                        directory ? 0 : ((FileInfo)entry).Length, entry.LastWriteTimeUtc.ToString("O")));
+                }
+                using (var tx = db.BeginTransaction())
+                {
+                    var folders = new Dictionary<string, long>();
+                    foreach (var entry in discovered)
+                        await PersistEntryAsync(db, tx, folders, scan, root, entry, ct, priority: true);
+                    tx.Commit();
+                }
+                await Task.Delay(1, ct);
+            }
+            SourcePaths.Check(root, path);
+            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE Id=@folderId",
+                new { folderId }, cancellationToken: ct));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // Advisory discovery does not reconcile missing media; the owning full traversal handles source failures.
+        }
+    }
+
+    private static async Task PersistEntryAsync(SqliteConnection db, SqliteTransaction tx, Dictionary<string, long> folders, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct, bool priority = false)
     {
         if (entry.Directory)
             await EnsureFolderAsync(db, tx, root, entry.RelativePath, scan.Id, ct, folders);
@@ -166,35 +221,41 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             var folderId = await EnsureFolderAsync(db, tx, root, folderPath, scan.Id, ct, folders);
             var key = root.Key(entry.RelativePath);
             var now = DateTimeOffset.UtcNow.ToString("O");
-            var mediaId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
+            var mediaId = await db.ExecuteScalarAsync<long?>(new CommandDefinition("""
                 INSERT INTO Media(LibraryId,FolderId,RelativePath,PathKey,FileName,MediaType,MimeType,Extension,SizeBytes,ModifiedAt,IndexedAt,EffectiveDate,LastSeenScanId)
                 VALUES(@rootId,@folderId,@RelativePath,@key,@name,@type,@mime,@extension,@Size,@ModifiedAt,@now,@ModifiedAt,@scanId)
                 ON CONFLICT(LibraryId,PathKey) DO UPDATE SET
-                  SourceRevision=Media.SourceRevision + CASE WHEN @force OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN 1 ELSE 0 END,
-                  Width=CASE WHEN @force OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN NULL ELSE Media.Width END,
-                  Height=CASE WHEN @force OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN NULL ELSE Media.Height END,
-                  CapturedAt=CASE WHEN @force OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN NULL ELSE Media.CapturedAt END,
-                  DurationMs=CASE WHEN @force OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN NULL ELSE Media.DurationMs END,
-                  EffectiveDate=CASE WHEN @force OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN excluded.ModifiedAt ELSE Media.EffectiveDate END,
-                  ProcessingStatus=CASE WHEN @force OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN 'pending' ELSE Media.ProcessingStatus END,
+                  SourceRevision=Media.SourceRevision + CASE WHEN (@force AND Media.LastSeenScanId<>@scanId) OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN 1 ELSE 0 END,
+                  Width=CASE WHEN (@force AND Media.LastSeenScanId<>@scanId) OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN NULL ELSE Media.Width END,
+                  Height=CASE WHEN (@force AND Media.LastSeenScanId<>@scanId) OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN NULL ELSE Media.Height END,
+                  CapturedAt=CASE WHEN (@force AND Media.LastSeenScanId<>@scanId) OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN NULL ELSE Media.CapturedAt END,
+                  DurationMs=CASE WHEN (@force AND Media.LastSeenScanId<>@scanId) OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN NULL ELSE Media.DurationMs END,
+                  EffectiveDate=CASE WHEN (@force AND Media.LastSeenScanId<>@scanId) OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN excluded.ModifiedAt ELSE Media.EffectiveDate END,
+                  ProcessingStatus=CASE WHEN (@force AND Media.LastSeenScanId<>@scanId) OR Media.SizeBytes<>excluded.SizeBytes OR Media.ModifiedAt<>excluded.ModifiedAt THEN 'pending' ELSE Media.ProcessingStatus END,
                   SizeBytes=excluded.SizeBytes,ModifiedAt=excluded.ModifiedAt,RelativePath=excluded.RelativePath,FileName=excluded.FileName,
                   FolderId=excluded.FolderId,Availability='present',LastSeenScanId=excluded.LastSeenScanId
+                WHERE Media.LastSeenScanId<>@scanId OR Media.SizeBytes<>excluded.SizeBytes
+                  OR Media.ModifiedAt<>excluded.ModifiedAt OR Media.Availability<>'present'
                 RETURNING Id;
                 """, new { rootId = root.Id, folderId, entry.RelativePath, key, name = Path.GetFileName(entry.RelativePath),
                     type = format.Type, mime = format.Mime, extension = Path.GetExtension(entry.RelativePath).ToLowerInvariant(),
                     entry.Size, entry.ModifiedAt, now, scanId = scan.Id, force = scan.Force }, tx, cancellationToken: ct));
+            if (mediaId is null) return;
             await db.ExecuteAsync(new CommandDefinition("""
                 UPDATE ProcessingJobs SET State='obsolete',Claim=NULL WHERE MediaId=@mediaId
                   AND (SourceRevision<>(SELECT SourceRevision FROM Media WHERE Id=@mediaId) OR EncoderVersion<>@version);
                 INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,NextAttemptAt)
-                  SELECT Id,SourceRevision,@version,@scanId,MediaType,@now FROM Media WHERE Id=@mediaId
+                  SELECT Id,SourceRevision,@version,@scanId,MediaType,@next FROM Media WHERE Id=@mediaId
                 ON CONFLICT(MediaId,SourceRevision,EncoderVersion) DO UPDATE SET
                   ScanId=excluded.ScanId,
                   State=CASE WHEN ProcessingJobs.State='waiting' OR (@retry AND ProcessingJobs.State='failed') THEN 'pending' ELSE ProcessingJobs.State END,
                   Attempts=CASE WHEN @retry THEN 0 ELSE ProcessingJobs.Attempts END,
-                  NextAttemptAt=CASE WHEN @retry OR ProcessingJobs.State='waiting' THEN @now ELSE ProcessingJobs.NextAttemptAt END;
+                  NextAttemptAt=CASE WHEN @retry OR ProcessingJobs.State='waiting' THEN @next
+                    WHEN @priority AND ProcessingJobs.State='pending' AND ProcessingJobs.NextAttemptAt>@next THEN @next
+                    ELSE ProcessingJobs.NextAttemptAt END;
                 UPDATE Scans SET Discovered=Discovered+1 WHERE Id=@scanId;
-                """, new { mediaId, version = IndexingOptions.EncoderVersion, scanId = scan.Id, now, retry = scan.RetryFailures }, tx, cancellationToken: ct));
+                """, new { mediaId, version = IndexingOptions.EncoderVersion, scanId = scan.Id,
+                    next = priority ? DateTimeOffset.UtcNow.AddYears(-1).ToString("O") : now, priority, retry = scan.RetryFailures }, tx, cancellationToken: ct));
         }
     }
 

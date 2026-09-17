@@ -21,7 +21,7 @@ public static class IndexingEndpoints
     public static void MapIndexing(this WebApplication app)
     {
         app.MapPost("/api/folders/{id:long}/index", async Task<Results<Accepted<ScanAccepted>, NoContent, ProblemHttpResult>>
-            (long id, Database database, HttpContext context, CancellationToken ct) =>
+            (long id, Database database, ScanWorker worker, HttpContext context, CancellationToken ct) =>
         {
             await using var db = await database.OpenAsync(ct);
             using var tx = db.BeginTransaction();
@@ -36,6 +36,11 @@ public static class IndexingEndpoints
                     WHERE j.MediaId=m.Id AND j.SourceRevision=m.SourceRevision AND j.EncoderVersion=@version
                       AND j.State IN ('pending','running') AND s.State IN ('running','completed')))
                 """, new { id, version = IndexingOptions.EncoderVersion }, tx, cancellationToken: ct))) return TypedResults.NoContent();
+            if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND FolderId IS NULL AND State IN ('queued','running'))", folder, tx, cancellationToken: ct)))
+            {
+                worker.PrioritizeFolder(folder.LibraryId, id);
+                return Problem(409, context);
+            }
             if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))", folder, tx, cancellationToken: ct))) return Problem(409, context);
             var scanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
                 INSERT INTO Scans(LibraryId,FolderId,State,StartedAt) VALUES(@LibraryId,@id,'queued',@now) RETURNING Id

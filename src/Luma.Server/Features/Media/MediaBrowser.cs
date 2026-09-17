@@ -18,8 +18,9 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
         await using var db=await database.OpenAsync(ct);
         // The queue orders by NextAttemptAt: stamping each request position separately makes
         // preparation follow the order the caller listed, instead of falling back to media ID.
-        var head=DateTimeOffset.UtcNow.AddYears(-1);
-        var json=JsonSerializer.Serialize(ids.Select((id,position)=>new{id,at=head.AddMilliseconds(position).ToString("O")}));
+        // Newer visible requests precede older requests, so opening a viewer can jump ahead of gallery work.
+        var head=DateTimeOffset.FromUnixTimeMilliseconds(-DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var json=JsonSerializer.Serialize(ids.Select((id,position)=>new{id,at=head.AddTicks(position).ToString("O")}));
         using var tx=db.BeginTransaction();
         // Media discovered by a cancelled or interrupted scan has no runnable owner, so it would
         // stay unprepared until that folder is revisited. Adopt it into a scan that can run it.

@@ -73,10 +73,8 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
   }, [query.data, gridRows, leadingHeight, scrollerRef])
   const visible = virtual.getVirtualItems()
   const last = visible.at(-1)?.index ?? -1
-  // Prepare previews from the top of the viewport downwards, then wrap to the rows
-  // above it, so they fill in the order this grid shows them.
-  const first = visible[0]?.index ?? 0
-  usePreviewPriority([...gridRows.slice(first), ...gridRows.slice(0, first)].flatMap(row => row.items))
+  // Keep priority bounded to the rendered viewport and overscan, rather than all loaded pages.
+  usePreviewPriority(visible.flatMap(row => gridRows[row.index].items))
   useEffect(() => {
     if (items.length && last >= rows - 3 && query.hasNextPage && !query.isFetching) void load(false)
   }, [last, rows, query.hasNextPage, query.isFetching, items.length, load])

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Metadata.Profiles.Exif;
@@ -18,6 +19,34 @@ namespace Luma.Server.Tests;
 
 public sealed class IndexingTests
 {
+    [Fact]
+    public async Task Active_library_scan_discovers_requested_folder_before_ordinary_media_without_double_forcing_revisions()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "requested", "nested"));
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var folderId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='requested'");
+        await db.ExecuteAsync("UPDATE Folders SET DirectIndexedAt=NULL WHERE Id=@folderId", new { folderId });
+        await f.CreateImageAsync("ordinary.png");
+        await f.CreateImageAsync("requested/opened.png");
+        await f.CreateImageAsync("requested/nested/later.png");
+        var scan = await f.NewScanAsync(force: true);
+        f.Scanner.PrioritizeFolder(f.Root.Id, folderId);
+        f.Scanner.PrioritizeFolder(f.Root.Id, folderId);
+        await f.Scanner.ScanAsync(scan, f.Root, default);
+
+        Assert.Equal("requested/opened.png", await db.ExecuteScalarAsync<string>("SELECT RelativePath FROM Media ORDER BY Id LIMIT 1"));
+        Assert.Equal(3, await db.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM Media"));
+        Assert.Equal(3, await db.ExecuteScalarAsync<long>("SELECT Discovered FROM Scans WHERE Id=@Id", scan));
+        Assert.Equal(1, await db.ExecuteScalarAsync<long>("SELECT MAX(SourceRevision) FROM Media"));
+        Assert.NotNull(await db.ExecuteScalarAsync<string>("SELECT DirectIndexedAt FROM Folders WHERE Id=@folderId", new { folderId }));
+        var requestedTime = await db.ExecuteScalarAsync<string>("SELECT j.NextAttemptAt FROM ProcessingJobs j JOIN Media m ON m.Id=j.MediaId WHERE m.RelativePath='requested/opened.png'");
+        var ordinaryTime = await db.ExecuteScalarAsync<string>("SELECT j.NextAttemptAt FROM ProcessingJobs j JOIN Media m ON m.Id=j.MediaId WHERE m.RelativePath='ordinary.png'");
+        Assert.True(DateTimeOffset.Parse(requestedTime!) < DateTimeOffset.Parse(ordinaryTime!));
+        Assert.Equal("completed", await db.ExecuteScalarAsync<string>("SELECT State FROM Scans WHERE Id=@Id", scan));
+    }
+
     [Fact]
     public async Task Interrupted_folder_discovery_recovers_without_expanding_to_a_library_scan()
     {
@@ -86,8 +115,15 @@ public sealed class IndexingTests
         Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync("/api/folders/9999/index", null)).StatusCode);
         var count = await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans");
         await db.ExecuteAsync("UPDATE Folders SET DirectIndexedAt=NULL WHERE Id=@folderId; INSERT INTO Scans(LibraryId,State,StartedAt) VALUES(1,'running','now')", new { folderId });
+        await f.CreateImageAsync("album/prioritized.png");
+        await f.CreateImageAsync("ordinary.png");
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync($"/api/folders/{folderId}/index", null)).StatusCode);
         Assert.Equal(count + 1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans"));
+        var active = await db.QuerySingleAsync<ScanRow>("SELECT * FROM Scans WHERE State='running'");
+        await host.Services.GetRequiredService<ScanWorker>().ScanAsync(active, f.Root, default);
+        var prioritizedId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='album/prioritized.png'");
+        var ordinaryId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='ordinary.png'");
+        Assert.True(prioritizedId < ordinaryId, "The folder POST must hand its priority to the existing library scan.");
     }
 
     [Fact]

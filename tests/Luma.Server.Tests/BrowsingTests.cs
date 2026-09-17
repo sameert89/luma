@@ -193,6 +193,24 @@ public sealed class BrowsingTests
     }
 
     [Fact]
+    public async Task Opening_media_moves_it_ahead_of_an_older_gallery_priority_batch()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await SeedAsync(f, 3);
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("""
+            INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt)
+            SELECT Id,SourceRevision,@version,1,MediaType,'pending',@now FROM Media;
+            """, new { version = IndexingOptions.EncoderVersion, now = DateTimeOffset.UtcNow.ToString("O") });
+        var browser = await BrowserAsync(f);
+        await browser.PrioritizeAsync(new MediaPriorityRequest([1, 2, 3]), default);
+        await Task.Delay(5);
+        await browser.PrioritizeAsync(new MediaPriorityRequest([3]), default);
+        Assert.Equal(new long[] { 3, 1, 2 }, (await db.QueryAsync<long>(
+            "SELECT MediaId FROM ProcessingJobs ORDER BY NextAttemptAt,MediaId")).ToArray());
+    }
+
+    [Fact]
     public async Task Visible_media_priority_adopts_media_left_by_a_cancelled_scan()
     {
         await using var f=await PipelineFixture.CreateAsync();await SeedAsync(f,3);
