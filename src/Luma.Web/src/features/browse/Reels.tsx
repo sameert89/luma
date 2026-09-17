@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, ArrowDown, Clapperboard, EllipsisVertical, Heart, Settings2, SlidersHorizontal, Tag, Timer, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowUp, ArrowDown, Clapperboard, EllipsisVertical, Heart, Info, Settings2, SlidersHorizontal, Tag, Timer, Volume2, VolumeX, X } from 'lucide-react'
 import { IconButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { MediaStage } from './MediaStage'
+import { MediaInformation } from './MediaInformation'
 import { TagEditor } from '../tags/TagEditor'
 import { usePreviewPriority } from './usePreviewPriority'
 import { ApiError } from '../../lib/api/client'
@@ -36,7 +37,8 @@ export function Reels({ filters, viewerOpen = false, onFilters, onOpenViewer }: 
   const [tags, setTags] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
-  const suspended = viewerOpen || tags || optionsOpen
+  const [infoOpen, setInfoOpen] = useState(false)
+  const suspended = viewerOpen || tags || optionsOpen || infoOpen
   const client = useQueryClient()
   const first = useQuery({ queryKey: ['reels-first', queryFilters], queryFn: ({ signal }) => request<MediaPage>(`/api/media?${queryString({ ...queryFilters, limit: 1 })}`, signal), enabled: !restoredId, gcTime: 0 })
   const base = active ?? first.data?.items[0]
@@ -91,6 +93,7 @@ export function Reels({ filters, viewerOpen = false, onFilters, onOpenViewer }: 
             <IconButton label="Auto-scroll" className="border-transparent bg-canvas/85" aria-pressed={autoScroll} onClick={() => setAutoScroll(value => !value)}><Timer className={`size-4 ${autoScroll ? 'text-accent' : ''}`} /></IconButton>
             <IconButton label="Tags" className="border-transparent bg-canvas/85" aria-pressed={tags} onClick={() => setTags(!tags)}><Tag className="size-4" /></IconButton>
             <IconButton label="View options" className="border-transparent bg-canvas/85" onClick={() => setOptionsOpen(true)}><Settings2 className="size-4" /></IconButton>
+            <IconButton label="Media information" className="border-transparent bg-canvas/85" onClick={() => setInfoOpen(true)}><Info className="size-4" /></IconButton>
             <IconButton label="Previous" className="border-transparent bg-canvas/85" disabled={!neighbors.data?.previous} onClick={() => navigate('previous')}><ArrowUp className="size-4" /></IconButton>
             <IconButton label="Next" className="border-transparent bg-canvas/85" disabled={!next} onClick={() => navigate('next')}><ArrowDown className="size-4" /></IconButton>
           </div>
@@ -98,6 +101,7 @@ export function Reels({ filters, viewerOpen = false, onFilters, onOpenViewer }: 
       </div>
     </div>
     <Modal open={tags} onOpenChange={setTags} title="Tags" description="Add or remove tags for this item." sheet><div className="overflow-auto p-5"><TagEditor key={item.id} mediaIds={[item.id]} tags={item.tags} /></div></Modal>
+    <Modal open={infoOpen} onOpenChange={setInfoOpen} title="Media information" description="File information for this reel." sheet><div className="overflow-auto p-5"><MediaInformation item={item} /></div></Modal>
     {preference.isError && <p role="alert" className="absolute bottom-28 z-10 rounded-full bg-canvas px-4 py-2 text-sm text-danger">{errorMessage(preference.error)}</p>}
     {neighbors.isError && <p role="alert" className="absolute bottom-20 z-10 rounded-full bg-canvas px-4 py-2 text-sm text-danger">{errorMessage(neighbors.error)}</p>}
   </section>

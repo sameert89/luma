@@ -26,6 +26,7 @@ it('offers only the two explicit cover actions only inside media details', async
   expect(screen.queryByRole('button', { name: /Use as .* cover/ })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Media details' }))
   expect(screen.getByRole('dialog', { name: 'Media details' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Dislike' }).querySelector('svg')).toHaveClass('lucide-heart-crack')
 
   const folder = screen.getByRole('button', { name: 'Use as folder cover' })
   const library = await screen.findByRole('button', { name: 'Use as library cover' })

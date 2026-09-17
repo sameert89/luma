@@ -24,6 +24,68 @@ function browsingApi() {
 }
 
 describe('browsing shell', () => {
+  it('sorts a library in place and keeps selection and folder actions in its compact header', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+    localStorage.clear()
+    browsingApi()
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    await screen.findByRole('heading', { name: 'Trips' })
+    expect(screen.queryByRole('combobox', { name: 'Sort media' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Import folder metadata' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Select media' }))
+    expect(screen.getByRole('button', { name: 'Done selecting' }).querySelector('svg')).toHaveClass('lucide-x')
+    await userEvent.click(screen.getByRole('button', { name: 'Done selecting' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    expect(screen.queryByRole('textbox', { name: 'Keyword' })).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'name')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+    expect(window.location.search).toContain('sort=name')
+    expect(window.location.search).toContain('folderId=2')
+    expect(screen.getAllByRole('button', { name: 'Library' })[0]).toHaveAttribute('aria-current', 'page')
+    expect(screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))).not.toHaveAttribute('aria-current', 'page')
+    await userEvent.click(screen.getByRole('button', { name: 'Folder actions for Trips' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Folder information' }))
+    expect(screen.getByRole('dialog', { name: 'Folder information' })).toHaveTextContent('Trips')
+    expect(screen.getByRole('dialog', { name: 'Folder information' })).toHaveTextContent('Photos')
+  })
+
+  it('shows all matching media when sorting an empty search and preserves the keyword when resetting filters', async () => {
+    browsingApi()
+    renderApp()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))!)
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'name')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+    expect(screen.queryByRole('heading', { name: 'Search your media' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('gallery-scroll')).toBeVisible()
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith('/api/media?') && String(url).includes('sort=name') && !String(url).includes('q='))).toBe(true))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'Beach{Enter}')
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
+    expect(window.location.search).toBe('?q=Beach')
+    expect(screen.getByRole('textbox', { name: 'Search media' })).toHaveValue('Beach')
+  })
+
+  it('opens a child folder menu without navigating and imports that folder rather than the parent', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+    localStorage.clear()
+    const name = 'A very long child folder name that remains available in folder information'
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      const data = url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+        : url.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [{ id: 3, libraryId: 1, name }] }
+          : url === '/api/imports/tags' ? { id: 9 }
+            : url === '/api/jobs/9' ? { id: 9, state: 'completed', processed: 1, failed: 0, items: [] }
+              : url === '/api/indexing' ? { libraries: [] } : { items: [] }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    }))
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    await userEvent.click(await screen.findByRole('button', { name: `Folder actions for ${name}` }))
+    expect(window.location.search).toBe('?libraryId=1&folderId=2')
+    await userEvent.click(screen.getByRole('button', { name: 'Import folder metadata' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import folder metadata tags' }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/imports/tags', expect.objectContaining({ method: 'POST', body: JSON.stringify({ query: { libraryId: 1, folderId: 3 }, includeSidecars: false }) })))
+  })
+
   it('opens favourites on mobile without activating the search field, while explicitly opening Search focuses it', async () => {
     vi.stubGlobal('matchMedia', vi.fn().mockImplementation(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     browsingApi()
@@ -82,7 +144,9 @@ describe('browsing shell', () => {
     })
     vi.stubGlobal('fetch', fetch)
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Import folder metadata' }))
+    expect(screen.queryByRole('button', { name: 'Import folder metadata' })).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Folder actions for Trips' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import folder metadata' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Include adjacent XMP sidecars' }))
     await userEvent.click(screen.getByRole('button', { name: 'Import folder metadata tags' }))
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/imports/tags', expect.objectContaining({
@@ -109,7 +173,7 @@ describe('browsing shell', () => {
     emptyApi(); renderApp()
     const trigger = screen.getByRole('button', { name: 'Filters' })
     trigger.focus(); await userEvent.keyboard('{Enter}')
-    expect(screen.getByRole('dialog', { name: 'Search and filters' })).toBeVisible()
+    expect(screen.getByRole('dialog', { name: 'Filters and sorting' })).toBeVisible()
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(trigger).toHaveFocus()

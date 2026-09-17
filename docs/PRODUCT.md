@@ -34,7 +34,7 @@ The grid rendering will be done based on subfolders, the usual sorting by date m
 
 The user can choose to search for a keyword, tag or date or library, and they should have same browsing/sorting controls available in the search results. Main search accepts partial words across filenames, root-relative paths and assigned tags, in any order; every word must match somewhere. Explicit tag filters still provide exact normalized tag matching.
 
-The user can use search to add filters, like date ranges, media type, media extension, starts with/ ends with, size.
+Search supplies the keyword; the independent Filters and sorting sheet supplies date ranges, media type, extensions, name/path constraints, size, grouping and ordering. Applying filters preserves the current Library, Search or Reels destination and scope. With no keyword, filters operate on all media in the selected scope; resetting filters preserves the keyword.
 
 The user should not have to wait for original files to be scanned or metadata to be read during normal browsing. Clearing the search field clears the active query, returning to the last library location for a search begun in Library, or the default Search page for a search begun in Search.
 
@@ -94,7 +94,7 @@ Requirements:
 - custom gallery cover configurable: automatic selection is the default; the media viewer info dialog exposes only Use as folder cover and Use as library cover
 - smooth scrolling
 - mixed photos and videos
-- filter and sort (much like the afore mentioned sorting), filters should be video only, date range, keywords etc. Filters and search are synonymously used, filter is just an advanced search here with option to customize the search.
+- filter and sort (much like the afore mentioned sorting), filters should be video only, date range, keywords etc. Filters refine the current view independently of keyword search.
 - visible indication of video items
 - current filters remain visible or easily accessible
 - desktop and mobile layouts
@@ -111,7 +111,7 @@ Requirements:
 - vertical navigation between media
 - active videos may autoplay according to browser/platform restrictions.
 - auto-scroll as a simple on/off toggle; enabled videos advance when playback ends and photos advance after a fixed dwell time (3 seconds), with no configurable timing requirement. The active reel is restored after navigating away and back to the same filters/sort; mute and auto-scroll preferences are retained. Changing the feed resets its position. Playback and auto-scroll pause while sheets or the media viewer cover Reels; opening the viewer pauses the underlying stream first, and only previously playing reels resume when it closes
-- secondary controls (filters, like, mute, auto-scroll, tags, view options, previous/next) collapse behind one toggle so the viewport stays clear until they are wanted; the toggle becomes an X when open. View options uses a settings icon within that menu, with no separate bottom options button. Tags and view options use accessible sheets with explicit close buttons, outside-click dismissal and Escape support. Navigation and playback still work without opening the menu
+- secondary controls (filters, like, mute, auto-scroll, tags, view options, media information, previous/next) collapse behind one toggle so the viewport stays clear until they are wanted; the toggle becomes an X when open. View options uses a settings icon within that menu, with no separate bottom options button. Tags, media information and view options use accessible sheets with explicit close buttons, outside-click dismissal and Escape support. Navigation and playback still work without opening the menu
 - only the current and nearby media should be mounted/preloaded
 - images and videos are both supported with option to choose them
 - the same applicable filter and sort capabilities as gallery, with independent mode state rather than a synchronized query
@@ -292,7 +292,7 @@ Mobile is a first-class client.
 
 The interface must not simply shrink the desktop layout.
 
-The primary mobile destinations are Library, Reels, Search, Collections and Settings. They use a fixed bottom navigation bar. Search, sort and filters stay compact; filters open as a one-column bottom sheet, and scan status stays collapsed until requested. Controls must never consume the gallery's primary viewport or overflow it horizontally.
+The primary mobile destinations are Library, Reels, Search, Collections and Settings. They use a fixed bottom navigation bar. Search, sort and filters stay compact; filters open as a one-column bottom sheet, and scan status stays collapsed until requested. The folder heading truncates within a single row alongside icon-only preparation and selection controls, plus a folder actions toggle. Preparation spins while busy; selection becomes an X while active. There is no separate sort pill. Each folder card also exposes its own three-dot actions toggle beside its truncated name; folder information and whole-folder metadata import live in that menu. Full names and location remain available in folder information. Controls must never consume the gallery's primary viewport or overflow it horizontally.
 
 Important mobile workflows:
 

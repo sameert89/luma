@@ -12,9 +12,12 @@ it('refreshes scan status immediately when opening instead of waiting for a poll
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   const { unmount } = render(<QueryClientProvider client={client}><RescanButton libraryId={1} name="Photos" /></QueryClientProvider>)
   const trigger = await screen.findByRole('button', { name: 'Rescan Photos' })
+  expect(trigger.textContent).toBe('')
+  expect(trigger.querySelector('svg')).not.toHaveClass('motion-safe:animate-spin')
   preparing = true
   await userEvent.click(trigger)
   expect(await screen.findByRole('button', { name: 'Cancel scan' })).toBeVisible()
+  expect(trigger.querySelector('svg')).toHaveClass('motion-safe:animate-spin')
   expect(screen.queryByRole('button', { name: 'Start rescan' })).not.toBeInTheDocument()
   unmount()
   client.clear()

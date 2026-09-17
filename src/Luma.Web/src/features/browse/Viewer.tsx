@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Heart, Info, Tag, ThumbsDown, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Heart, Info, Tag, HeartCrack, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { MediaInformation } from './MediaInformation'
 import { MediaStage } from './MediaStage'
 import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
@@ -58,11 +59,11 @@ export function Viewer({ active, filters, onChange, onClose, restoreFocus }: { a
       </section>
     </Modal>
     <Modal open={detailsOpen} onOpenChange={setDetailsOpen} title="Media details" description="Tags and file information." sheet>
-      <div className="space-y-6 overflow-auto p-5"><div className="flex gap-2"><QuietButton aria-pressed={item.preference === 'liked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'liked' ? 'neutral' : 'liked')}><Heart className={`size-4 ${item.preference === 'liked' ? 'fill-accent text-accent' : ''}`} />Like</QuietButton><QuietButton aria-pressed={item.preference === 'disliked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'disliked' ? 'neutral' : 'disliked')}><ThumbsDown className={`size-4 ${item.preference === 'disliked' ? 'fill-danger text-danger' : ''}`} />Dislike</QuietButton></div>
+      <div className="space-y-6 overflow-auto p-5"><div className="flex gap-2"><QuietButton aria-pressed={item.preference === 'liked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'liked' ? 'neutral' : 'liked')}><Heart className={`size-4 ${item.preference === 'liked' ? 'fill-accent text-accent' : ''}`} />Like</QuietButton><QuietButton aria-pressed={item.preference === 'disliked'} disabled={preference.isPending} onClick={() => preference.mutate(item.preference === 'disliked' ? 'neutral' : 'disliked')}><HeartCrack className={`size-4 ${item.preference === 'disliked' ? 'fill-danger text-danger' : ''}`} />Dislike</QuietButton></div>
         <div><h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Tag className="size-4 text-accent" />Tags</h2><TagEditor key={item.id} mediaIds={[item.id]} tags={item.tags} /></div>
         <section aria-label="Gallery covers" className="flex flex-wrap items-center gap-2"><QuietButton disabled={cover.isPending || item.availability === 'missing'} onClick={() => cover.mutate({ folder: coverFolder, mediaId: item.id })}>Use as folder cover</QuietButton>{rootFolder && <QuietButton disabled={cover.isPending || item.availability === 'missing'} onClick={() => cover.mutate({ folder: rootFolder, mediaId: item.id })}>Use as library cover</QuietButton>}{cover.isSuccess && <p role="status" className="text-sm text-ink">Cover saved.</p>}{cover.isError && <p role="alert" className="text-sm text-danger">{errorMessage(cover.error)}</p>}</section>
         <MetadataExchange key={item.id} mediaIds={[item.id]} imports={false} />
-        <dl className="grid grid-cols-2 gap-4 text-sm"><div><dt className="text-muted">Modified</dt><dd>{new Date(item.modifiedAt).toLocaleString()}</dd></div><div><dt className="text-muted">File size</dt><dd>{(item.sizeBytes / 1024 / 1024).toFixed(2)} MB</dd></div>{item.width && item.height && <div><dt className="text-muted">Dimensions</dt><dd>{item.width} × {item.height}</dd></div>}{item.mediaType === 'video' && <div><dt className="text-muted">Video</dt><dd>{item.durationMs ? `${(item.durationMs / 1000).toFixed(1)} seconds` : 'Duration unknown'}</dd></div>}</dl>
+        <MediaInformation item={item} />
         {preference.isError && <p role="alert" className="text-sm text-danger">{errorMessage(preference.error)}</p>}{detail.isError && <p role="alert" className="text-sm text-danger">{errorMessage(detail.error)}</p>}</div>
     </Modal>
   </>

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '../../components/ui/Button'
-import { QuietButton } from '../../components/ui/Controls'
+import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { errorMessage, request, type IndexingStatus, type Scan } from './api'
 
@@ -22,8 +22,15 @@ export function RescanButton({ libraryId, name = 'library' }: { libraryId: numbe
     setOpen(false)
   } })
   const busy = running || preparing || action.isPending
+  useEffect(() => {
+    if (scan) {
+      void client.invalidateQueries({ queryKey: ['media'] })
+      void client.invalidateQueries({ queryKey: ['folders'] })
+      void client.invalidateQueries({ queryKey: ['libraries'] })
+    }
+  }, [client, scan?.id, scan?.state, scan?.ready, scan?.discovered])
   return <>
-    <QuietButton aria-label={busy ? `View scan progress for ${name}` : `Rescan ${name}`} onClick={() => { setOpen(true); void status.refetch() }}><RefreshCw className={`size-4 ${busy ? 'motion-safe:animate-spin' : ''}`} /><span className={busy ? 'text-xs' : 'sr-only'}>{action.isPending ? action.variables ? 'Cancelling…' : 'Starting…' : running ? 'Scanning' : preparing ? 'Preparing' : 'Rescan'}</span></QuietButton>
+    <IconButton label={busy ? `View scan progress for ${name}` : `Rescan ${name}`} onClick={() => { setOpen(true); void status.refetch() }}><RefreshCw className={`size-4 ${busy ? 'motion-safe:animate-spin' : ''}`} /></IconButton>
     <Modal open={open} onOpenChange={setOpen} title={busy ? 'Library scan progress' : `Rescan ${name}?`} description="Review the scan before starting it." sheet>
       <div className="space-y-4 overflow-auto p-5">
         {busy ? <div role="status"><p className="font-medium">{running ? 'Checking folders for changes' : 'Preparing media previews'}</p><p className="mt-2 text-sm text-muted">{scan?.discovered.toLocaleString() ?? 0} files found · {scan?.ready.toLocaleString() ?? 0} previews prepared</p><p className="mt-2 text-sm text-muted">You can keep browsing while this runs.</p></div> : <p className="text-sm leading-relaxed text-muted">Rescanning checks every folder in this library for new, changed or removed media. On a large library this can take a long time and use significant disk and CPU resources. Start a rescan now?</p>}
