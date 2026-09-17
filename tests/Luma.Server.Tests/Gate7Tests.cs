@@ -182,6 +182,32 @@ public sealed class Gate7Tests
     }
 
     [Fact]
+    public async Task Folder_import_reads_all_direct_media_and_sidecars_without_importing_other_folders()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "nested"));
+        foreach (var path in new[] { "album/one.png", "album/two.png", "album/nested/other.png", "outside.png" })
+        {
+            await f.CreateImageAsync(path);
+            await File.WriteAllBytesAsync(Path.Combine(f.Root.Path, path + ".xmp"), MetadataKeywords.WriteXmp(["Imported"]));
+        }
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var folderId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='album'");
+        await using var host = Host(f);
+        using var client = host.CreateClient();
+        var accepted = await client.PostAsJsonAsync("/api/imports/tags", new MetadataJobRequest(
+            Query: new MediaQuery { LibraryId = 1, FolderId = folderId }, IncludeSidecars: true));
+        Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
+        var job = await AwaitJobAsync(client, (await accepted.Content.ReadFromJsonAsync<JobAccepted>())!.Id);
+        Assert.Equal("completed", job.State);
+        Assert.Equal(2, job.Processed);
+        Assert.Equal(0, job.Failed);
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags mt JOIN Media m ON m.Id=mt.MediaId WHERE m.FolderId=@folderId", new { folderId }));
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags mt JOIN Media m ON m.Id=mt.MediaId WHERE m.FolderId<>@folderId", new { folderId }));
+    }
+
+    [Fact]
     public async Task Import_without_a_selection_walks_every_matching_item_and_reads_embedded_video_xmp()
     {
         await using var f=await PipelineFixture.CreateAsync();

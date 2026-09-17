@@ -14,6 +14,31 @@ namespace Luma.Server.Tests;
 public sealed class BrowsingTests
 {
     [Fact]
+    public async Task Keyword_search_matches_partial_words_across_paths_filenames_and_tags_without_accessing_sources()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await SeedAsync(f, 3);
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Media SET FileName='IMG_01.jpg',RelativePath='Holidays/Beach/IMG_01.jpg' WHERE Id=1");
+        var tags = new TagService(f.Database);
+        var tag = (await tags.CreateAsync("Family vacation", default)).Tag;
+        await tags.BulkAsync(new([1], [tag.Id], []), default);
+        Directory.Move(f.Root.Path, f.Root.Path + "-offline");
+        var browser = await BrowserAsync(f);
+        foreach (var keyword in new[] { "holid", "Beach", "vacat", "IMG_01 holid famil", "FAMIL beach", "01 be", "Holidays/Beach" })
+            Assert.Equal(1, Assert.Single((await browser.ListAsync(new MediaQuery { Q = keyword }.Normalize(), default)).Items).Id);
+        Assert.Empty((await browser.ListAsync(new MediaQuery { Q = "holid unrelated" }.Normalize(), default)).Items);
+        Assert.Empty((await browser.ListAsync(new MediaQuery { Q = "vacat", MediaType = "video" }.Normalize(), default)).Items);
+        Assert.Empty((await browser.ListAsync(new MediaQuery { Path = "vacat" }.Normalize(), default)).Items);
+
+        var (predicate, parameters) = new MediaQuery { Q = "holid famil" }.Normalize().Predicate();
+        var plan = await db.QueryAsync("EXPLAIN QUERY PLAN SELECT m.Id FROM Media m WHERE " + predicate, parameters);
+        var details = string.Join('\n', plan.Select(row => (string)row.detail));
+        Assert.Contains("MediaSearch VIRTUAL TABLE INDEX", details);
+        Assert.Contains("IX_MediaTags_Tag", details);
+    }
+
+    [Fact]
     public async Task Album_covers_use_ready_current_descendants_without_accessing_sources()
     {
         await using var f = await PipelineFixture.CreateAsync();

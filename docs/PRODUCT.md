@@ -32,11 +32,11 @@ Initial indexing is an explicit, per-library choice. A configured library is idl
 
 The grid rendering will be done based on subfolders, the usual sorting by date modified, name, type etc. along with shuffle and group by should be available for the user
 
-The user can choose to search for a keyword, tag or date or library, and they should have same browsing/sorting controls available in the search results.
+The user can choose to search for a keyword, tag or date or library, and they should have same browsing/sorting controls available in the search results. Main search accepts partial words across filenames, root-relative paths and assigned tags, in any order; every word must match somewhere. Explicit tag filters still provide exact normalized tag matching.
 
 The user can use search to add filters, like date ranges, media type, media extension, starts with/ ends with, size.
 
-The user should not have to wait for original files to be scanned or metadata to be read during normal browsing.
+The user should not have to wait for original files to be scanned or metadata to be read during normal browsing. Clearing the search field clears the active query, returning to the last library location for a search begun in Library, or the default Search page for a search begun in Search.
 
 Scrolling must remain responsive for extremely large result sets.
 
@@ -91,7 +91,7 @@ Requirements:
 - responsive grid
 - virtualized rendering
 - lazy thumbnail loading
-- custom gallery cover configurable
+- custom gallery cover configurable: automatic selection is the default; the media viewer directly exposes only Use as folder cover and Use as library cover, outside the info dialog
 - smooth scrolling
 - mixed photos and videos
 - filter and sort (much like the afore mentioned sorting), filters should be video only, date range, keywords etc. Filters and search are synonymously used, filter is just an advanced search here with option to customize the search.

@@ -13,7 +13,69 @@ function renderApp() {
 function emptyApi() {
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url.startsWith('/api/libraries') ? [] : { items: [], nextCursor: null, previousCursor: null }), { headers: { 'Content-Type': 'application/json' } }))))
 }
+function browsingApi() {
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    if (url.endsWith('/index') && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
+    const data = url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+      : url.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
+        : url.startsWith('/api/indexing') ? { libraries: [] } : { items: [], nextCursor: null, previousCursor: null }
+    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+  }))
+}
+
 describe('browsing shell', () => {
+  it('clears search back to the last library folder even after returning to Library with the query active', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2&order=asc')
+    localStorage.clear()
+    browsingApi()
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    const input = screen.getByRole('textbox', { name: 'Search media' })
+    await userEvent.type(input, 'Beach{Enter}')
+    expect(window.location.search).toContain('q=Beach')
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
+    expect(window.location.search).toContain('q=Beach')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(input).toHaveValue('')
+    expect(window.location.search).toBe('?libraryId=1&folderId=2&order=asc')
+    expect(await screen.findByRole('heading', { name: 'Trips' })).toBeVisible()
+  })
+
+  it('clears a search started from Search back to its default page', async () => {
+    browsingApi()
+    renderApp()
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Search' })).find(button => button.textContent?.includes('Search'))!)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'Beach{Enter}')
+    expect(window.location.search).toContain('q=Beach')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(window.location.search).toBe('')
+    expect(screen.getByRole('textbox', { name: 'Search media' })).toHaveValue('')
+    expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
+  })
+
+  it('imports the whole current folder without inheriting gallery filters or selecting media IDs', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2&mediaType=video&preference=liked')
+    localStorage.clear()
+    const fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/folders/2/index' && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
+      const data = url === '/api/imports/tags' ? { id: 9 }
+        : url === '/api/jobs/9' ? { id: 9, kind: 'import', state: 'completed', processed: 700, failed: 0, items: [] }
+          : url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+            : url.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
+              : url.startsWith('/api/indexing') ? { libraries: [] }
+                : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Import folder metadata' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Include adjacent XMP sidecars' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import folder metadata tags' }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/imports/tags', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ query: { libraryId: 1, folderId: 2 }, includeSidecars: true }),
+    })))
+    expect(await screen.findByRole('status')).toHaveTextContent('700 processed')
+  })
+
   it('shows libraries on home without fetching the combined media feed', async () => {
     const fetch = vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/libraries'
       ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]

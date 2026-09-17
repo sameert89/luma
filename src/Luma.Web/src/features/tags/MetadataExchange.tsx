@@ -4,7 +4,7 @@ import { Checkbox, QuietButton, QuietLink } from '../../components/ui/Controls'
 import { errorMessage, request, type Filters } from '../browse/api'
 import type { components } from '../../lib/api/generated'
 
-export function MetadataExchange({ mediaIds, filters, dislikes = false }: { mediaIds?: number[]; filters?: Filters; dislikes?: boolean }) {
+export function MetadataExchange({ mediaIds, filters, dislikes = false, imports = true, exports = true }: { mediaIds?: number[]; filters?: Filters; dislikes?: boolean; imports?: boolean; exports?: boolean }) {
   const [jobId, setJobId] = useState<number>()
   const [afterMediaId, setAfterMediaId] = useState<number>()
   const [sidecars, setSidecars] = useState(false)
@@ -14,11 +14,12 @@ export function MetadataExchange({ mediaIds, filters, dislikes = false }: { medi
   const job = useQuery({ queryKey: ['metadata-job', jobId, afterMediaId], queryFn: ({ signal }) => request<components['schemas']['MetadataJobStatus']>(`/api/jobs/${jobId}${afterMediaId ? `?afterMediaId=${afterMediaId}` : ''}`, signal), enabled: !!jobId, gcTime: 0, placeholderData: previous => previous?.id === jobId ? previous : undefined, refetchInterval: query => ['queued', 'running'].includes(query.state.data?.state ?? 'queued') ? 1000 : false })
   const busy = start.isPending || ['queued', 'running'].includes(job.data?.state ?? '')
   const complete = job.data?.state === 'completed'
+  const canImport = imports && (!!mediaIds || !!filters?.folderId)
   useEffect(() => { if (complete && job.data?.kind === 'import') { for (const queryKey of [['detail'], ['media'], ['tags'], ['collection-tags']]) void client.invalidateQueries({ queryKey }) } }, [complete, job.data?.kind, client])
   return <section aria-label="Metadata exchange" className="space-y-3">
-    <h2 className="text-sm font-semibold">Metadata exchange</h2><p className="text-sm text-muted">Imports merge tags into Luma. Exports are downloads; originals stay unchanged.</p>
-    {mediaIds && <label htmlFor={sidecarsId} className="flex min-h-11 items-center gap-3 text-sm"><Checkbox id={sidecarsId} checked={sidecars} onChange={event => setSidecars(event.target.checked)} />Include adjacent XMP sidecars</label>}
-    <div className="flex flex-wrap gap-2">{mediaIds && <QuietButton disabled={busy} onClick={() => start.mutate('tags')}>Import metadata tags</QuietButton>}<QuietButton disabled={busy} onClick={() => start.mutate('xmp')}>Export XMP</QuietButton>{dislikes && <QuietButton disabled={busy} onClick={() => start.mutate('dislikes')}>Export disliked paths</QuietButton>}</div>
+    <h2 className="text-sm font-semibold">Metadata exchange</h2><p className="text-sm text-muted">{canImport ? 'Imports merge EXIF/XMP tags into Luma. ' : ''}{exports ? 'Exports are downloads; originals stay unchanged.' : 'Originals stay unchanged.'}</p>
+    {canImport && <label htmlFor={sidecarsId} className="flex min-h-11 items-center gap-3 text-sm"><Checkbox id={sidecarsId} checked={sidecars} disabled={busy} onChange={event => setSidecars(event.target.checked)} />Include adjacent XMP sidecars</label>}
+    <div className="flex flex-wrap gap-2">{canImport && <QuietButton disabled={busy} onClick={() => start.mutate('tags')}>{mediaIds ? 'Import metadata tags' : 'Import folder metadata tags'}</QuietButton>}{exports && <QuietButton disabled={busy} onClick={() => start.mutate('xmp')}>Export XMP</QuietButton>}{dislikes && <QuietButton disabled={busy} onClick={() => start.mutate('dislikes')}>Export disliked paths</QuietButton>}</div>
     {job.data && <p role="status" className="text-sm">{job.data.state}: {job.data.processed} processed, {job.data.failed} with findings.{job.data.failureCode && ` ${job.data.failureCode}`}</p>}
     {job.data?.items.filter(item => item.code !== 'imported').map(item => <p key={item.mediaId} className="text-sm text-muted">Item {item.mediaId}: {item.code}</p>)}
     {(afterMediaId || job.data?.nextMediaId) && <div className="flex flex-wrap gap-2">{afterMediaId && <QuietButton disabled={job.isFetching} onClick={() => setAfterMediaId(undefined)}>First item results</QuietButton>}{job.data?.nextMediaId && <QuietButton disabled={job.isFetching} onClick={() => setAfterMediaId(job.data!.nextMediaId!)}>Next item results</QuietButton>}</div>}

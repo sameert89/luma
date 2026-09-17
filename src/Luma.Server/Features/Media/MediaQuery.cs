@@ -104,13 +104,29 @@ public sealed record MediaQuery
         Add("m.EffectiveTicks>=@from", "from", DateFrom is null ? null : SearchText.Ticks(DateFrom));
         Add("m.EffectiveTicks<@to", "to", DateTo is null ? null : SearchText.Ticks(DateTo));
         if (Extension?.Length > 0) Add("m.Extension IN (SELECT '.'||value FROM json_each(@extensions))", "extensions", JsonSerializer.Serialize(Extension));
-        foreach (var (text,name,column) in new[] { (Q,"q",""), (Path,"path","SearchPath") })
+        var terms = Q?.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Distinct().ToArray() ?? [];
+        for (var index = 0; index < terms.Length; index++)
         {
-            if (text is null) continue;
-            Add(column == "" ? "(instr(m.NameKey,@q)>0 OR instr(m.SearchPath,@q)>0)" : "instr(m.SearchPath,@path)>0", name,text);
+            var text = terms[index];
+            var name = $"q{index}";
+            var tagged = $"SELECT MediaId FROM MediaTags INDEXED BY IX_MediaTags_Tag WHERE TagId IN (SELECT Id FROM Tags WHERE instr(NormalizedKey,@{name})>0)";
             if (text.EnumerateRunes().Count() >= 3)
-                Add($"m.Id IN (SELECT rowid FROM MediaSearch WHERE MediaSearch MATCH @{name}Fts)", name+"Fts",
-                    (column == "" ? "" : column+":") + "\"" + text.Replace("\"","\"\"") + "\"");
+            {
+                Add($"""
+                    m.Id IN (SELECT rowid FROM MediaSearch WHERE MediaSearch MATCH @{name}Fts
+                      AND (instr(NameKey,@{name})>0 OR instr(SearchPath,@{name})>0)
+                      UNION {tagged})
+                    """, name, text);
+                p.Add(name+"Fts", "\"" + text.Replace("\"","\"\"") + "\"");
+            }
+            else Add($"(instr(m.NameKey,@{name})>0 OR instr(m.SearchPath,@{name})>0 OR m.Id IN ({tagged}))", name, text);
+        }
+        if (Path is not null)
+        {
+            Add("instr(m.SearchPath,@path)>0", "path", Path);
+            if (Path.EnumerateRunes().Count() >= 3)
+                Add("m.Id IN (SELECT rowid FROM MediaSearch WHERE MediaSearch MATCH @pathFts)", "pathFts",
+                    "SearchPath:\"" + Path.Replace("\"","\"\"") + "\"");
         }
         if (StartsWith is not null) { Add("m.NameKey>=@prefix AND m.NameKey<@prefixEnd AND instr(m.NameKey,@prefix)=1", "prefix", StartsWith); p.Add("prefixEnd", StartsWith+"\U0010FFFF"); }
         if (EndsWith is not null) { var reverse=SearchText.Reverse(EndsWith); Add("m.ReversedName>=@suffix AND m.ReversedName<@suffixEnd AND instr(m.ReversedName,@suffix)=1", "suffix", reverse); p.Add("suffixEnd",reverse+"\U0010FFFF"); }

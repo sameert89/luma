@@ -18,7 +18,7 @@ All predicates combine with AND, except alternatives within a repeated field. Un
 | --- | --- |
 | libraryId, folderId | Optional root/folder ID; folder must belong to specified root |
 | recursive | False by default for a folder; without folder, query all selected roots |
-| q | Literal substring in normalized filename or root-relative path, maximum 200 characters |
+| q | Whitespace-separated partial words, maximum 200 characters. Every word must occur in the normalized filename, root-relative path or assigned tags, in any order; punctuation remains literal. No typo correction |
 | path | Literal substring of stored root-relative path, never a source read |
 | startsWith, endsWith | Literal filename prefix/suffix, maximum 200 characters |
 | tag | Repeated normalized tag names, at most 50; unknown tag means empty result |
@@ -118,7 +118,7 @@ Shuffle seeks ascending random key from a seed-derived pivot and wraps once, inc
 
 `GET /api/random` returns generated JPEG preview content with `Cache-Control: no-store`. Shared predicates apply; images are forced. Video-only or cursor requests are 400, no matching indexed image is 404, and matches with no ready preview are 503 `cache_unavailable`. Physical cache loss returns 503 and queues recovery. It returns content directly, never original data, JSON descriptors or redirects. Random-key gap bias is acceptable for decoration.
 
-Metadata POST bodies are `{ "mediaIds": [123], "query": { "libraryId": 1 }, "includeSidecars": true }`. All fields are optional except IDs for imports. IDs are deduplicated and capped at 500; unknown references are 404 and invalid selections/cursors 400. Imports act on the explicit selection. Exports without IDs stream all matching records in 100-row ID batches; sort/group/page limit do not restrict the export set. Dislike exports force disliked preference and all availability states, including missing records.
+Metadata POST bodies are `{ "mediaIds": [123], "query": { "libraryId": 1 }, "includeSidecars": true }`. All fields are optional. IDs are deduplicated and capped at 500; unknown references are 404 and invalid selections/cursors 400. Imports act on the explicit selection or every matching present item when IDs are omitted. The folder import UI sends only library/folder scope, without gallery filters or IDs, to import all direct indexed photos and videos. Exports without IDs stream all matching records in 100-row ID batches; sort/group/page limit do not restrict the export set. Dislike exports force disliked preference and all availability states, including missing records.
 
 `POST /api/imports/tags`, `/api/exports/xmp`, `/api/exports/dislikes` return 202 `{ "id": jobId }` and `Location: /api/jobs/{id}`. A single in-process worker drains a durable SQLite queue of at most 16 active jobs; a full queue is 429. `GET /api/jobs/{id}?afterMediaId=...` returns kind/state/timestamps, processed/failed counts, failure code/content URL and at most 100 per-item import results; continue with `nextMediaId`. States: queued/running/completed/failed/expired. Completed imports may have findings; inspect counts and item codes. Resubmit the selected IDs to retry idempotently.
 
