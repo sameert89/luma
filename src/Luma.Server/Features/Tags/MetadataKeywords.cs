@@ -53,6 +53,47 @@ public static class MetadataKeywords
         return document.Descendants(Dc+"subject").SelectMany(x=>x.Descendants(Rdf+"li")).Select(x=>x.Value).ToArray();
     }
 
+    // A bounded head/tail scan for an embedded XMP packet: XMP is self-delimiting by
+    // convention (the <?xpacket begin=?>...<?xpacket end=?> wrapper), which is how
+    // readers locate one in an arbitrary container without parsing its internal boxes.
+    // Cameras and editors usually place it near the front or back of the file, so two
+    // bounded windows cover it without reading the whole (possibly very large) video.
+    private const int XmpScanWindowBytes = 8 * 1024 * 1024;
+    private static readonly byte[] XpacketBegin = Encoding.ASCII.GetBytes("<?xpacket begin=");
+    private static readonly byte[] XpacketEnd = Encoding.ASCII.GetBytes("<?xpacket end=");
+
+    public static async Task<IReadOnlyList<string>> ReadEmbeddedXmpPacketAsync(string path,CancellationToken ct)
+    {
+        await using var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read,65536,FileOptions.Asynchronous|FileOptions.SequentialScan);
+        var length=stream.Length;
+        var packet=ExtractXmpPacket(await ReadWindowAsync(stream,0,Math.Min(length,XmpScanWindowBytes),ct));
+        if(packet is null && length>XmpScanWindowBytes)
+            packet=ExtractXmpPacket(await ReadWindowAsync(stream,length-XmpScanWindowBytes,XmpScanWindowBytes,ct));
+        return packet is null?[]:ReadXmp(packet);
+    }
+
+    private static async Task<byte[]> ReadWindowAsync(FileStream stream,long offset,long length,CancellationToken ct)
+    {
+        stream.Seek(offset,SeekOrigin.Begin);
+        var buffer=new byte[length];
+        await stream.ReadExactlyAsync(buffer,ct);
+        return buffer;
+    }
+
+    private static byte[]? ExtractXmpPacket(byte[] window)
+    {
+        var span=window.AsSpan();
+        var start=span.IndexOf(XpacketBegin);
+        if(start<0) return null;
+        var endMarker=span[start..].IndexOf(XpacketEnd);
+        if(endMarker<0) return null;
+        endMarker+=start;
+        var closing=span[endMarker..].IndexOf("?>"u8);
+        if(closing<0) return null;
+        var end=endMarker+closing+2;
+        return end-start>MaximumMetadataBytes?null:window[start..end];
+    }
+
     public static byte[] WriteXmp(IEnumerable<string> tags)
     {
         XNamespace x="adobe:ns:meta/";

@@ -16,17 +16,35 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
         if(request.Ids.Count>200 || ids.Length!=request.Ids.Count) throw ApiRequestException.Invalid("Visible media priority accepts 1 to 200 positive media IDs.");
         if(ids.Length==0) throw ApiRequestException.Invalid("Visible media priority accepts 1 to 200 positive media IDs.");
         await using var db=await database.OpenAsync(ct);
-        var now=DateTimeOffset.UtcNow.AddYears(-1).ToString("O");
-        var json=JsonSerializer.Serialize(ids);
+        // The queue orders by NextAttemptAt: stamping each request position separately makes
+        // preparation follow the order the caller listed, instead of falling back to media ID.
+        var head=DateTimeOffset.UtcNow.AddYears(-1);
+        var json=JsonSerializer.Serialize(ids.Select((id,position)=>new{id,at=head.AddMilliseconds(position).ToString("O")}));
+        using var tx=db.BeginTransaction();
+        // Media discovered by a cancelled or interrupted scan has no runnable owner, so it would
+        // stay unprepared until that folder is revisited. Adopt it into a scan that can run it.
         await db.ExecuteAsync(new CommandDefinition("""
-            UPDATE ProcessingJobs SET State='pending',NextAttemptAt=@now,FailureCode=NULL,Claim=NULL,LeaseUntil=NULL
-            WHERE MediaId IN (SELECT value FROM json_each(@json))
+            UPDATE ProcessingJobs SET ScanId=(SELECT MAX(s.Id) FROM Scans s JOIN Media m ON m.Id=ProcessingJobs.MediaId
+              WHERE s.LibraryId=m.LibraryId AND s.State IN ('running','completed'))
+            WHERE MediaId IN (SELECT json_extract(value,'$.id') FROM json_each(@json))
+              AND EncoderVersion=@version
+              AND State IN ('pending','waiting')
+              AND NOT EXISTS (SELECT 1 FROM Scans s WHERE s.Id=ProcessingJobs.ScanId AND s.State IN ('running','completed'))
+              AND EXISTS (SELECT 1 FROM Scans s JOIN Media m ON m.Id=ProcessingJobs.MediaId
+                WHERE s.LibraryId=m.LibraryId AND s.State IN ('running','completed'));
+            """,new{json,version=IndexingOptions.EncoderVersion},tx,cancellationToken:ct));
+        await db.ExecuteAsync(new CommandDefinition("""
+            UPDATE ProcessingJobs SET State='pending',FailureCode=NULL,Claim=NULL,LeaseUntil=NULL,
+              NextAttemptAt=(SELECT json_extract(value,'$.at') FROM json_each(@json)
+                WHERE json_extract(value,'$.id')=ProcessingJobs.MediaId)
+            WHERE MediaId IN (SELECT json_extract(value,'$.id') FROM json_each(@json))
               AND EncoderVersion=@version
               AND State IN ('pending','waiting')
               AND EXISTS (SELECT 1 FROM Media m JOIN Libraries l ON l.Id=m.LibraryId JOIN Scans s ON s.Id=ProcessingJobs.ScanId
                 WHERE m.Id=ProcessingJobs.MediaId AND m.SourceRevision=ProcessingJobs.SourceRevision
                   AND m.Availability='present' AND l.Enabled=1 AND s.State IN ('running','completed'));
-            """,new{json,now,version=IndexingOptions.EncoderVersion},cancellationToken:ct));
+            """,new{json,version=IndexingOptions.EncoderVersion},tx,cancellationToken:ct));
+        tx.Commit();
     }
 
     public async Task<MediaPage> ListAsync(MediaQuery query,CancellationToken ct)

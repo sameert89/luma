@@ -32,6 +32,10 @@
 .motion-overlay[data-state='closed'] { pointer-events: none; }
 .search-reveal { display: grid; grid-template-columns: 0fr; width: 0; opacity: 0; visibility: hidden; }
 .search-reveal[data-open='true'] { grid-template-columns: 1fr; width: 100%; opacity: 1; visibility: visible; transition-delay: 0s; }
+/* Same collapsing-track trick as .search-reveal, but vertical: Reels' secondary controls
+   drop open below their toggle instead of sitting on the stage all the time. */
+.motion-drop { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; }
+.motion-drop[data-open='true'] { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s; }
 /* Radix retains closing dialogs until their exit animation ends. Individual scale
    preserves the positioning transform on centered dialogs. */
 @keyframes luma-fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -43,6 +47,9 @@
 @keyframes luma-page-in { from { opacity: 0; transform: translateY(.5rem); } to { opacity: 1; transform: translateY(0); } }
 @keyframes luma-media-in { from { opacity: 0; transform: translateX(var(--media-entry, 1rem)); } to { opacity: 1; transform: translateX(0); } }
 @keyframes luma-media-y-in { from { opacity: 0; transform: translateY(var(--media-entry-y, 1rem)); } to { opacity: 1; transform: translateY(0); } }
+/* The fade-out leg gets its own (ease-in) timing function so opacity accelerates
+   smoothly to exactly 0 instead of lingering near-invisible and appearing to blink. */
+@keyframes luma-like { 0% { opacity: 0; transform: scale(.6); } 35% { opacity: 1; transform: scale(1.15); animation-timing-function: ease-in; } 100% { opacity: 0; transform: scale(1); } }
 .motion-media[data-direction='previous'] { --media-entry: -1rem; }
 .motion-media[data-axis='vertical'][data-direction='previous'] { --media-entry-y: -1rem; }
 @media (prefers-reduced-motion: no-preference) {
@@ -65,6 +72,15 @@
   }
   .search-reveal { transition: grid-template-columns 180ms ease, width 180ms ease, opacity 150ms ease, visibility 0s linear 180ms; }
   .search-reveal[data-open='true'] { transition-delay: 0s; }
+  .motion-drop { transition: grid-template-rows 180ms ease, opacity 150ms ease, visibility 0s linear 180ms; }
+  .motion-drop[data-open='true'] { transition-delay: 0s; }
+}
+
+/* Brief confirmation for the double-tap like; it removes itself when the animation ends,
+   so reduced motion gets a plain fade rather than no animation event at all. */
+.motion-like { animation: luma-like 400ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .motion-like { animation: luma-fade-out 400ms ease-out; }
 }
 
 [data-theme='obsidian'] {

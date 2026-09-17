@@ -20,7 +20,7 @@ Status: staging implementation delivered; release acceptance open. See [verifica
 - [x] Add volume adjustment and mute/unmute to the normal video viewer.
 - [x] Make the existing Reels seek control usable with keyboard interaction and an accessible seek value.
 - [x] Enable photo, video, and mixed-media selection in Reels. Keep the video default and intentional mode-specific scope behavior; selecting Photos must not be overridden by hard-coded video-only requests.
-- [x] Complete Collections as the requested entry point to folders/albums, tags, and favourites, using existing library folders as albums. Do not introduce speculative user-created album management.
+- [x] Complete Collections as the requested entry point to folders/albums, tags, and favourites, using existing library folders as albums. Do not introduce speculative user-created album management. (The library-listing section was removed in [Gate 7 feedback, round 2](GATE-7-FEEDBACK-2.md) as redundant with the Library tab it duplicated; Collections now holds favourites and tags.)
 - [x] Repair stale library-card selectors in browser setup and any further regressions exposed by the full desktop/mobile suite.
 
 ### Remaining product features

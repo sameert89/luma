@@ -2,6 +2,10 @@
 
 2026-09-17. The requested product implementation is delivered for staging. Gate 7 release acceptance remains open for the target hardware and real-library measurements listed in [verification](STAGE-7-VERIFICATION.md). Historical Stage 1–6 records remain historical evidence.
 
+The 2026-09-18 follow-up round is recorded in [Gate 7 feedback verification](GATE-7-FEEDBACK.md): preview preparation now follows the order shown and reaches media left by a cancelled scan, and Reels keeps its own query, hides its progress control until used, and supports tap-to-pause and double-tap-to-like. The outstanding million-row query benchmark is complete.
+
+A second same-day round, [Gate 7 feedback verification, round 2](GATE-7-FEEDBACK-2.md), restores circular icon buttons, lets a single library card fill its row, extends metadata import to video XMP and unbounded query scope, collapses Reels' secondary controls behind one toggle, fixes the like-animation flicker and color, tightens Reels' photo auto-scroll and unavailable-media messaging, stops Reels from changing the folder Library returns to, adds tag rename/delete, and drops Collections' redundant library-listing section. Release blockers below are unchanged.
+
 Build `luma:gate7-staging` with `docker build -t luma:gate7-staging .` and follow [deployment and recovery](DEPLOYMENT.md). The image contains the production frontend, .NET 10 server and ffmpeg/ffprobe. Keep original media read-only and `/data` persistent. No existing user container or volume was upgraded during implementation; deployment checks used disposable volumes.
 
 The database migrates from schema 7 to 11. Back up the stopped data volume before upgrading; an older application requires its matching database backup. Migration 8 adds persisted random keys, custom covers, grouping keys and indexes. Migration 9 adds metadata job records. Migration 10 refreshes Media query statistics after the new indexes are introduced. Migration 11 adds captured/name/type ordering indexes within date groups and refreshes statistics again.

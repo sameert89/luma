@@ -4,8 +4,9 @@ import { Check, Film, Heart, Images, LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Checkbox, QuietButton } from '../../components/ui/Controls'
-import { errorMessage, mediaPage, request, type Filters, type Media } from './api'
+import { errorMessage, mediaPage, type Filters, type Media } from './api'
 import { useFolderIndexing } from './useFolderIndexing'
+import { usePreviewPriority } from './usePreviewPriority'
 
 export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent }: {
   filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode
@@ -56,7 +57,6 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
   useLayoutEffect(() => { virtual.measure() }, [columns, rowHeight, layoutKey, virtual])
   const anchor = useRef<{ id: number; offset: number; data: typeof query.data } | null>(null)
   const loading = useRef(false)
-  const prioritized = useRef(new Set<number>())
   const load = useCallback(async (backward: boolean) => {
     if (loading.current || query.isFetching) return
     const top = scrollerRef.current?.scrollTop ?? 0
@@ -73,17 +73,10 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
   }, [query.data, gridRows, leadingHeight, scrollerRef])
   const visible = virtual.getVirtualItems()
   const last = visible.at(-1)?.index ?? -1
-  useEffect(() => {
-    const retained = new Set(items.map(item => item.id))
-    prioritized.current.forEach(id => { if (!retained.has(id)) prioritized.current.delete(id) })
-    const pending = visible.flatMap(row => gridRows[row.index]?.items ?? []).filter(item =>
-      (item.thumbnail.status === 'pending' || item.preview.status === 'pending') && !prioritized.current.has(item.id)).map(item => item.id)
-    if (!pending.length) return
-    pending.forEach(id => prioritized.current.add(id))
-    void request('/api/media/priority', undefined, 'POST', { ids: pending }).then(() => {
-      void query.refetch()
-    }).catch(() => undefined)
-  }, [visible, items, gridRows, query.refetch])
+  // Prepare previews from the top of the viewport downwards, then wrap to the rows
+  // above it, so they fill in the order this grid shows them.
+  const first = visible[0]?.index ?? 0
+  usePreviewPriority([...gridRows.slice(first), ...gridRows.slice(0, first)].flatMap(row => row.items))
   useEffect(() => {
     if (items.length && last >= rows - 3 && query.hasNextPage && !query.isFetching) void load(false)
   }, [last, rows, query.hasNextPage, query.isFetching, items.length, load])

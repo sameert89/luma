@@ -7,6 +7,7 @@ using Luma.Server.Data;
 using Luma.Server.Features.Indexing;
 using Luma.Server.Features.Media;
 using Luma.Server.Http;
+using Microsoft.Data.Sqlite;
 
 namespace Luma.Server.Features.Tags;
 
@@ -27,7 +28,8 @@ public sealed class MetadataJobs(Database database,IndexingOptions options) : Ba
     public async Task<JobAccepted> EnqueueAsync(string kind,MetadataJobRequest request,CancellationToken ct)
     {
         if(request.MediaIds is { } ids && (ids.Length is <1 or >500 || ids.Any(x=>x<=0))) throw ApiRequestException.Invalid("Select 1 to 500 positive media IDs.");
-        if(kind=="import" && request.MediaIds is null) throw ApiRequestException.Invalid("Select up to 500 media items for explicit import.");
+        // Import without an explicit selection walks every media item matching the query
+        // instead, one at a time like a scan; there is no 500 cap for that path.
         var query=(request.Query ?? new MediaQuery()).Normalize();
         if(query.Cursor is not null) throw ApiRequestException.Invalid("Jobs do not accept page cursors.");
         request=request with { Query=query,MediaIds=request.MediaIds?.Distinct().ToArray() };
@@ -166,39 +168,61 @@ public sealed class MetadataJobs(Database database,IndexingOptions options) : Ba
     private async Task ImportAsync(Job job,MetadataJobRequest request,CancellationToken ct)
     {
         await using var db=await database.OpenAsync(ct);
-        foreach(var id in request.MediaIds!) {
-            var code="imported";
-            try {
-                var source=await db.QuerySingleOrDefaultAsync<ImportRow>(new CommandDefinition("SELECT LibraryId,RelativePath,MediaType FROM Media WHERE Id=@id",new{id},cancellationToken:ct)) ?? throw new IOException();
-                var root=options.Libraries.SingleOrDefault(x=>x.Id==source.LibraryId) ?? throw new IOException();
-                var path=SourcePaths.Resolve(root,source.RelativePath);
-                using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeout.CancelAfter(TimeSpan.FromSeconds(30));
-                var keywords=new List<string>(source.MediaType=="image"?await MetadataKeywords.ReadImageProcessAsync(path,timeout.Token):await ReadVideoAsync(path,timeout.Token));
-                if(request.IncludeSidecars) foreach(var candidate in new[]{path+".xmp",Path.ChangeExtension(path,".xmp")}.Distinct()) {
-                    if(!File.Exists(candidate)) continue;
-                    SourcePaths.Check(root,candidate);
-                    await using var stream=new FileStream(candidate,FileMode.Open,FileAccess.Read,FileShare.Read,65536,FileOptions.Asynchronous);
-                    if(stream.Length>MetadataKeywords.MaximumMetadataBytes) throw new InvalidDataException();
-                    var bytes=new byte[(int)stream.Length]; await stream.ReadExactlyAsync(bytes,timeout.Token);
-                    keywords.AddRange(MetadataKeywords.ReadXmp(bytes));
-                }
-                var normalized=new Dictionary<string,string>();
-                foreach(var keyword in keywords) {
-                    try {var tag=TagText.Normalize(keyword); normalized.TryAdd(tag.Key,tag.Name);}
-                    catch(ApiRequestException) {code="invalid_tags";}
-                    if(normalized.Count>100) throw new InvalidDataException();
-                }
-                // One short transaction per media: failures cannot leave a partial union.
-                using var tx=db.BeginTransaction();
-                foreach(var tag in normalized) await db.ExecuteAsync(new CommandDefinition("INSERT INTO Tags(Name,NormalizedKey) VALUES(@name,@key) ON CONFLICT(NormalizedKey) DO NOTHING; INSERT INTO MediaTags(MediaId,TagId) SELECT @id,Id FROM Tags WHERE NormalizedKey=@key ON CONFLICT DO NOTHING",new{id,key=tag.Key,name=tag.Value},tx,cancellationToken:ct));
-                if(await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@id",new{id},tx,cancellationToken:ct))>100) throw new InvalidDataException();
-                tx.Commit();
-            } catch(OperationCanceledException) when(ct.IsCancellationRequested) {throw;}
-            catch(Exception error) {code=error is IOException or UnauthorizedAccessException?"source_unavailable":error is OperationCanceledException?"metadata_timeout":"invalid_metadata";}
-            await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobItems(JobId,MediaId,Code) VALUES(@jobId,@id,@code) ON CONFLICT DO UPDATE SET Code=excluded.Code",new{jobId=job.Id,id,code},cancellationToken:ct));
-            await ProgressAsync(job.Id,1,code=="imported"?0:1,ct);
+        if(request.MediaIds is not null) {
+            foreach(var id in request.MediaIds) await ImportOneAsync(db,job,request,id,ct);
+            return;
         }
+        // No explicit selection: walk every present item matching the query, the same
+        // bounded cursor pattern exports use, so a whole library can be imported without
+        // holding the result set in memory.
+        var (predicate,p)=request.Query!.Predicate();
+        var after=0L;
+        while(true) {
+            p.Add("after",after);
+            var ids=(await db.QueryAsync<long>(new CommandDefinition($"SELECT m.Id FROM Media m WHERE {predicate} AND m.Id>@after ORDER BY m.Id LIMIT 200",p,cancellationToken:ct))).ToArray();
+            if(ids.Length==0) break;
+            foreach(var id in ids) await ImportOneAsync(db,job,request,id,ct);
+            after=ids[^1];
+        }
+    }
+
+    private async Task ImportOneAsync(SqliteConnection db,Job job,MetadataJobRequest request,long id,CancellationToken ct)
+    {
+        var code="imported";
+        try {
+            var source=await db.QuerySingleOrDefaultAsync<ImportRow>(new CommandDefinition("SELECT LibraryId,RelativePath,MediaType FROM Media WHERE Id=@id",new{id},cancellationToken:ct)) ?? throw new IOException();
+            var root=options.Libraries.SingleOrDefault(x=>x.Id==source.LibraryId) ?? throw new IOException();
+            var path=SourcePaths.Resolve(root,source.RelativePath);
+            using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            var keywords=new List<string>(source.MediaType=="image"?await MetadataKeywords.ReadImageProcessAsync(path,timeout.Token):await ReadVideoAsync(path,timeout.Token));
+            // Videos rarely expose dc:subject through simple container tags; an XMP packet
+            // embedded by a camera or editor is found the same container-agnostic way any
+            // XMP reader locates one, by its self-delimiting <?xpacket?> wrapper.
+            if(source.MediaType!="image") keywords.AddRange(await MetadataKeywords.ReadEmbeddedXmpPacketAsync(path,timeout.Token));
+            if(request.IncludeSidecars) foreach(var candidate in new[]{path+".xmp",Path.ChangeExtension(path,".xmp")}.Distinct()) {
+                if(!File.Exists(candidate)) continue;
+                SourcePaths.Check(root,candidate);
+                await using var stream=new FileStream(candidate,FileMode.Open,FileAccess.Read,FileShare.Read,65536,FileOptions.Asynchronous);
+                if(stream.Length>MetadataKeywords.MaximumMetadataBytes) throw new InvalidDataException();
+                var bytes=new byte[(int)stream.Length]; await stream.ReadExactlyAsync(bytes,timeout.Token);
+                keywords.AddRange(MetadataKeywords.ReadXmp(bytes));
+            }
+            var normalized=new Dictionary<string,string>();
+            foreach(var keyword in keywords) {
+                try {var tag=TagText.Normalize(keyword); normalized.TryAdd(tag.Key,tag.Name);}
+                catch(ApiRequestException) {code="invalid_tags";}
+                if(normalized.Count>100) throw new InvalidDataException();
+            }
+            // One short transaction per media: failures cannot leave a partial union.
+            using var tx=db.BeginTransaction();
+            foreach(var tag in normalized) await db.ExecuteAsync(new CommandDefinition("INSERT INTO Tags(Name,NormalizedKey) VALUES(@name,@key) ON CONFLICT(NormalizedKey) DO NOTHING; INSERT INTO MediaTags(MediaId,TagId) SELECT @id,Id FROM Tags WHERE NormalizedKey=@key ON CONFLICT DO NOTHING",new{id,key=tag.Key,name=tag.Value},tx,cancellationToken:ct));
+            if(await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@id",new{id},tx,cancellationToken:ct))>100) throw new InvalidDataException();
+            tx.Commit();
+        } catch(OperationCanceledException) when(ct.IsCancellationRequested) {throw;}
+        catch(Exception error) {code=error is IOException or UnauthorizedAccessException?"source_unavailable":error is OperationCanceledException?"metadata_timeout":"invalid_metadata";}
+        await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobItems(JobId,MediaId,Code) VALUES(@jobId,@id,@code) ON CONFLICT DO UPDATE SET Code=excluded.Code",new{jobId=job.Id,id,code},cancellationToken:ct));
+        await ProgressAsync(job.Id,1,code=="imported"?0:1,ct);
     }
 
     private async Task<IReadOnlyList<string>> ReadVideoAsync(string path,CancellationToken ct)

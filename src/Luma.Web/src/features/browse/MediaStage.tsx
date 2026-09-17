@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Download, EllipsisVertical, Maximize, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { Download, EllipsisVertical, Heart, Maximize, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { IconButton, QuietButton, QuietLink, Range, Select } from '../../components/ui/Controls'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Modal } from '../../components/ui/Modal'
@@ -14,8 +14,12 @@ function formatTime(value: number) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-export function MediaStage({ item, reels = false, muted = false, onEnded, onNavigate, fullscreenRoot, onOpenViewer }: {
-  item: Media; reels?: boolean; muted?: boolean; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>; onOpenViewer?: (item: Media) => void
+// Reels gestures: the strip that holds the seek control, and how long a second tap may take.
+const seekStripHeight = 140
+const doubleTapMs = 280
+
+export function MediaStage({ item, reels = false, muted = false, onEnded, onNavigate, fullscreenRoot, onOpenViewer, onLike }: {
+  item: Media; reels?: boolean; muted?: boolean; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>; onOpenViewer?: (item: Media) => void; onLike?: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -23,6 +27,9 @@ export function MediaStage({ item, reels = false, muted = false, onEnded, onNavi
   const touchStart = useRef({ x: 0, y: 0, multiple: false })
   const lastWheel = useRef(0)
   const gesture = useRef({ x: 0, y: 0, distance: 0 })
+  const seekTimer = useRef(0)
+  const tapTimer = useRef(0)
+  const lastTap = useRef(0)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -39,6 +46,8 @@ export function MediaStage({ item, reels = false, muted = false, onEnded, onNavi
   const [volume, setVolume] = useState(1)
   const [viewerMuted, setViewerMuted] = useState(false)
   const [rate, setRate] = useState(1)
+  const [seekVisible, setSeekVisible] = useState(false)
+  const [burst, setBurst] = useState(0)
   const originalUrl = `/api/media/${item.id}/original`
   const displayFill = fill
   function scale(value: number) { setZoom(Math.max(0.1, Math.min(8, value))); if (value <= 1) setPan({ x: 0, y: 0 }) }
@@ -70,6 +79,38 @@ export function MediaStage({ item, reels = false, muted = false, onEnded, onNavi
     video.current.currentTime = value
     setTime(value)
   }
+  function revealSeek() {
+    setSeekVisible(true)
+    window.clearTimeout(seekTimer.current)
+    seekTimer.current = window.setTimeout(() => setSeekVisible(false), 3000)
+  }
+  function tap(event: React.PointerEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    // A tap on the strip holding the seek control reveals it rather than pausing.
+    if (item.mediaType === 'video' && event.clientY - bounds.top > bounds.height - seekStripHeight) { revealSeek(); return }
+    if (Date.now() - lastTap.current < doubleTapMs) {
+      window.clearTimeout(tapTimer.current)
+      lastTap.current = 0
+      setBurst(value => value + 1)
+      onLike?.()
+      return
+    }
+    lastTap.current = Date.now()
+    // Hold the single-tap action until a second tap can no longer arrive, so liking
+    // never pauses playback on its way through.
+    if (item.mediaType === 'video') tapTimer.current = window.setTimeout(togglePlay, doubleTapMs)
+  }
+  function pointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (!pointers.current.has(event.pointerId)) return
+    pointers.current.delete(event.pointerId)
+    const dx = event.clientX - gesture.current.x
+    const dy = event.clientY - gesture.current.y
+    const along = reels ? dy : dx
+    const across = reels ? dx : dy
+    if (zoom === 1 && !gesture.current.distance && Math.abs(along) > 60 && Math.abs(along) > Math.abs(across)) onNavigate(along < 0 ? 'next' : 'previous')
+    else if (reels && !gesture.current.distance && Math.hypot(dx, dy) < 10) tap(event)
+  }
+  useEffect(() => () => { window.clearTimeout(seekTimer.current); window.clearTimeout(tapTimer.current) }, [])
   useEffect(() => {
     const player = video.current
     let disposed = false
@@ -99,7 +140,7 @@ export function MediaStage({ item, reels = false, muted = false, onEnded, onNavi
       onTouchEnd={event => { if (item.mediaType !== 'video' || touchStart.current.multiple) return; const touch = event.changedTouches[0]; const dx = touch.clientX - touchStart.current.x; const dy = touch.clientY - touchStart.current.y; if (Math.abs(reels ? dy : dx) > 60 && Math.abs(reels ? dy : dx) > Math.abs(reels ? dx : dy)) onNavigate((reels ? dy : dx) < 0 ? 'next' : 'previous') }}
       onPointerDown={event => { if ((event.target as HTMLElement).closest('button,a,input,select,video')) return; event.currentTarget.setPointerCapture(event.pointerId); pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); gesture.current = { x: event.clientX, y: event.clientY, distance: 0 } }}
       onPointerMove={event => { const old = pointers.current.get(event.pointerId); if (!old) return; pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); const points = [...pointers.current.values()]; if (points.length === 2) { const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); if (gesture.current.distance) scale(zoom * distance / gesture.current.distance); gesture.current.distance = distance } else if (zoom > 1) setPan(value => ({ x: value.x + event.clientX - old.x, y: value.y + event.clientY - old.y })) }}
-      onPointerUp={event => { if (!pointers.current.has(event.pointerId)) return; pointers.current.delete(event.pointerId); const dx = event.clientX - gesture.current.x; const dy = event.clientY - gesture.current.y; if (zoom === 1 && !gesture.current.distance && Math.abs(reels ? dy : dx) > 60 && Math.abs(reels ? dy : dx) > Math.abs(reels ? dx : dy)) onNavigate((reels ? dy : dx) < 0 ? 'next' : 'previous') }}
+      onPointerUp={pointerUp}
       onPointerCancel={() => pointers.current.clear()}>
       {/* Personal source videos have no generated caption tracks; preserve native playback capabilities. */}
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -113,12 +154,20 @@ export function MediaStage({ item, reels = false, muted = false, onEnded, onNavi
         <span className="tabular-nums text-xs text-ink">{formatTime(time)} / {formatTime(duration)}</span>
         <QuietButton className="min-h-10 px-3" aria-label="Playback speed" onClick={() => { const rates = [1, 1.5, 2, 0.5]; const current = video.current?.playbackRate ?? 1; const next = rates[(rates.indexOf(current) + 1) % rates.length]; if (video.current) video.current.playbackRate = next; setRate(next) }}>{rate}×</QuietButton>
       </div>}
-      {item.mediaType === 'video' && reels && <div className="absolute inset-x-0 bottom-16 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 md:bottom-0">
-        <Range aria-label="Seek video" aria-valuetext={`${formatTime(time)} of ${formatTime(duration)}`} min={0} max={Number.isFinite(duration) ? duration : 0} step={0.1} value={time} disabled={!Number.isFinite(duration) || duration <= 0} className="w-full" onChange={event => seek(Number(event.target.value))} />
+      {/* Reels stay uncluttered: the seek control fades in when its strip is tapped or focused. */}
+      {item.mediaType === 'video' && reels && <div data-testid="reels-seek" data-visible={seekVisible}
+        className={`absolute inset-x-0 bottom-16 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 transition-opacity duration-200 focus-within:pointer-events-auto focus-within:opacity-100 md:bottom-0 ${seekVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+        <Range aria-label="Seek video" aria-valuetext={`${formatTime(time)} of ${formatTime(duration)}`} min={0} max={Number.isFinite(duration) ? duration : 0} step={0.1} value={time} disabled={!Number.isFinite(duration) || duration <= 0} className="w-full" onFocus={revealSeek} onChange={event => { revealSeek(); seek(Number(event.target.value)) }} />
       </div>}
+      {/* Liking is a universal, brand-independent gesture: it stays red in every theme,
+          like the persistent Liked heart elsewhere would if it needed the same emphasis. */}
+      {burst > 0 && <Heart key={burst} aria-hidden="true" onAnimationEnd={() => setBurst(0)} className="motion-like pointer-events-none absolute size-24 fill-red-500 text-red-500" />}
       <IconButton label="More options" className={`absolute right-3 border-transparent bg-canvas/85 sm:right-5 ${reels ? 'bottom-32 md:bottom-16' : 'top-28'}`} onClick={() => setOptionsOpen(true)}><EllipsisVertical className="size-5" /></IconButton>
+      {/* Reels has no chrome to carry a small status strip: a failed item must stay
+          legible against the full-bleed black stage, not read as an unresponsive one. */}
+      {failure && reels && <p role="status" className="pointer-events-none absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-2xl bg-canvas/90 p-4 text-center text-sm text-ink">{failure}</p>}
     </div>
-    {failure && <p role="status" className="bg-canvas px-3 py-2 text-sm text-ink">{failure}</p>}
+    {failure && !reels && <p role="status" className="bg-canvas px-3 py-2 text-sm text-ink">{failure}</p>}
     <Modal open={optionsOpen} onOpenChange={setOptionsOpen} title="View options" description="Fit, playback and download actions for this item." sheet>
       <div className="flex flex-wrap gap-2 p-5">
         <QuietButton onClick={() => { toggleFill() }}>{fill ? 'Fit' : 'Fill'}</QuietButton>

@@ -43,6 +43,11 @@ public static class MediaEndpoints
             var result=await tags.CreateAsync(request.Name,ct);
             return Results.Json(result.Tag,statusCode:result.Created?201:200);
         }).WithName("CreateTag").Produces<TagSummary>(200).Produces<TagSummary>(201);
+        app.MapPut("/api/tags/{id:long}",async(long id,CreateTagRequest request,TagService tags,CancellationToken ct)=>
+            TypedResults.Ok(await tags.RenameAsync(id,request.Name,ct))).WithName("RenameTag")
+            .Produces<ApiProblem>(400,"application/problem+json").Produces<ApiProblem>(404,"application/problem+json");
+        app.MapDelete("/api/tags/{id:long}",async(long id,TagService tags,CancellationToken ct)=>
+        {await tags.DeleteAsync(id,ct);return TypedResults.NoContent();}).WithName("DeleteTag").Produces<ApiProblem>(404,"application/problem+json");
         app.MapPost("/api/media/tags",async(BulkTagsRequest request,TagService tags,CancellationToken ct)=>
         {await tags.BulkAsync(request,ct);return TypedResults.NoContent();}).WithName("EditMediaTags");
         app.MapPut("/api/media/{id:long}/preference",async(long id,PreferenceRequest request,TagService tags,CancellationToken ct)=>

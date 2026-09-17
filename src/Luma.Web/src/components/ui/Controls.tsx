@@ -27,6 +27,9 @@ export function QuietButton({ className = '', type = 'button', ...props }: Compo
 export function QuietLink({ className = '', children, ...props }: ComponentProps<'a'>) {
   return <a className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-surface ${className}`} {...props}>{children}</a>
 }
-export function IconButton({ label, children, ...props }: ComponentProps<'button'> & { label: string }) {
-  return <QuietButton aria-label={label} title={label} {...props}>{children}</QuietButton>
+export function IconButton({ label, className = '', type = 'button', ...props }: ComponentProps<'button'> & { label: string }) {
+  // A fixed square (not QuietButton's text padding) keeps every icon-only control a true circle.
+  return <button type={type} aria-label={label} title={label}
+    className={`inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-line text-ink hover:bg-surface disabled:cursor-default disabled:opacity-40 ${className}`}
+    {...props} />
 }

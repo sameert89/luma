@@ -92,6 +92,7 @@ test('reels preserve query, bound media, auto-scroll, stop inactive playback and
   await expect(page).toHaveURL(/mediaType=video/)
   await expect(page).toHaveURL(/q=stage6/)
   await expect(reels.getByText('luma')).toBeVisible()
+  await reels.getByRole('button', { name: 'Reels menu' }).click()
   await reels.getByRole('button', { name: 'Auto-scroll' }).click()
   await expect(reels.getByRole('button', { name: 'Auto-scroll' })).toHaveAttribute('aria-pressed', 'true')
   const old = await reels.locator('video').elementHandle()

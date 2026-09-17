@@ -6,6 +6,7 @@ import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { MetadataExchange } from '../tags/MetadataExchange'
 import { TagEditor } from '../tags/TagEditor'
+import { usePreviewPriority } from './usePreviewPriority'
 import { errorMessage, queryString, request, type Filters, type Media, type Neighbors, type Library } from './api'
 
 export function Viewer({ active, filters, onChange, onClose, restoreFocus }: { active: Media; filters: Filters; onChange: (item: Media) => void; onClose: () => void; restoreFocus: () => void }) {
@@ -19,6 +20,7 @@ export function Viewer({ active, filters, onChange, onClose, restoreFocus }: { a
   const neighbors = useQuery({ queryKey: ['neighbors', filters, active.id], queryFn: ({ signal }) => request<Neighbors>(`/api/media/${active.id}/neighbors?${queryString(filters)}`, signal), gcTime: 0 })
   const previous = neighbors.data?.previous
   const next = neighbors.data?.next
+  usePreviewPriority([item, next, previous])
   const libraries = useQuery({ queryKey: ['libraries'], queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal) })
   const rootFolder = libraries.data?.find(library => library.id === item.libraryId)?.rootFolderId
   const coverFolder = filters.folderId ?? item.folderId

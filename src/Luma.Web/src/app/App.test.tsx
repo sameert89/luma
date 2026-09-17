@@ -6,6 +6,7 @@ import { App } from './App'
 
 function renderApp() {
   window.history.replaceState(null, '', '/')
+  localStorage.clear()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   return render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
 }
@@ -59,6 +60,7 @@ describe('browsing shell', () => {
       return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
+    localStorage.clear()
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -71,7 +73,6 @@ describe('browsing shell', () => {
     expect(window.location.search).not.toContain('folderId=2')
   })
   it('clears the reels video filter when opening search', async () => {
-    window.history.replaceState(null, '', '/?mediaType=video')
     const fetch = vi.fn().mockImplementation((url: string) => {
       const text = String(url)
       const data = text.startsWith('/api/libraries')
@@ -89,6 +90,65 @@ describe('browsing shell', () => {
     await userEvent.click((await screen.findAllByRole('button', { name: 'Search' })).find(button => button.textContent?.includes('Search'))!)
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
     expect(window.location.search).not.toContain('mediaType=video')
+  })
+  it('never lets reels change the folder library returns to', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+    const clip = { id: 10, libraryId: 1, folderId: 2, fileName: 'clip.mp4', mediaType: 'video', extension: '.mp4', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preview: { status: 'pending' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
+    const fetch = vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const data = text.startsWith('/api/libraries') ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+        : text.startsWith('/api/indexing') ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
+        : text.startsWith('/api/folders') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
+        : text.includes('/neighbors?') ? { previous: null, next: null }
+            : /\/api\/media\/\d+$/.test(text) ? clip
+              : { items: [clip], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    localStorage.clear()
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await waitFor(() => expect(window.location.search).toContain('mediaType=video'))
+    // Sanity: entering Reels really did drop the folder scope, so restoring it below proves the fix.
+    expect(window.location.search).not.toContain('folderId=2')
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
+    expect(window.location.search).toContain('libraryId=1')
+    expect(window.location.search).toContain('folderId=2')
+    expect(window.location.search).not.toContain('mediaType=video')
+  })
+  it('restores the filters last used in reels when returning to it', async () => {
+    const photo = { id: 7, libraryId: 1, folderId: 1, fileName: 'beach.jpg', mediaType: 'image', extension: '.jpg', sizeBytes: 10, modifiedAt: '2026-01-01T00:00:00Z', preference: 'neutral', thumbnail: { status: 'ready', url: '/thumb.jpg' }, preview: { status: 'ready', url: '/preview.jpg' }, tags: [] }
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const data = text.startsWith('/api/libraries') ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+        : text.startsWith('/api/indexing') ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
+          : text.includes('/neighbors?') ? { previous: null, next: null }
+            : /\/api\/media\/\d+$/.test(text) ? photo
+              : { items: [photo], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    }))
+    renderApp()
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Filters' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Media type' }), 'image')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Favourite state' }), 'liked')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+    expect(window.location.search).toContain('mediaType=image')
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'beach{Enter}')
+    expect(window.location.search).toContain('q=beach')
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    expect(window.location.search).toContain('mediaType=image')
+    expect(window.location.search).toContain('preference=liked')
+    expect(window.location.search).not.toContain('q=beach')
   })
   it('does not show a random feed on the empty search destination', async () => {
     const fetch = vi.fn().mockImplementation((url: string) => {

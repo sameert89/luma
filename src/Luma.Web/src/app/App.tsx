@@ -21,16 +21,32 @@ import { errorMessage, queryString, request, type Filters, type FolderPage, type
 
 type Section = 'library' | 'reels' | 'search' | 'collections' | 'settings'
 
+const reelsFilterKey = 'luma-reels-filters'
+
 function reelsFilters(value: Filters): Filters {
   return { ...value, libraryId: undefined, folderId: undefined, mediaType: 'video' }
 }
 
-function libraryFilters(value: Filters, from: Section): Filters {
-  return from === 'reels' && value.mediaType === 'video' ? { ...value, mediaType: undefined } : value
+// Reels keeps its own query: returning to it restores the filters last used there
+// rather than adopting whatever the gallery or search is showing.
+function storedReelsFilters(): Filters | null {
+  try {
+    const stored = localStorage.getItem(reelsFilterKey)
+    const parsed: unknown = stored ? JSON.parse(stored) : null
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Filters : null
+  } catch { return null }
 }
 
-function searchFilters(value: Filters, from: Section): Filters {
-  return from === 'reels' && value.mediaType === 'video' ? { ...value, mediaType: undefined } : value
+// Reels can freely rewrite `filters` (forced video type, its own library/folder scope,
+// its own sort) while the person browses there. Returning to Library or Search must
+// never inherit that: restore the last filters actually used in those modes instead of
+// patching the Reels-tainted value, so browsing Reels never moves the Library's place.
+function libraryFilters(value: Filters, from: Section, browseMemory: Filters): Filters {
+  return from === 'reels' ? browseMemory : value
+}
+
+function searchFilters(value: Filters, from: Section, browseMemory: Filters): Filters {
+  return from === 'reels' ? browseMemory : value
 }
 
 function CoverArt({ url, height, fallback }: { url?: string | null; height: string; fallback: ReactNode }) {
@@ -69,6 +85,8 @@ export function App() {
   const [refresh, setRefresh] = useState(0)
   const [theme, setTheme] = useState<Theme>(() => themes.find(theme => theme.id === localStorage.getItem('luma-theme'))?.id ?? 'obsidian')
   const scroll = useRef<HTMLDivElement>(null)
+  const reelsMemory = useRef<Filters | null>(storedReelsFilters())
+  const browseMemory = useRef<Filters>(filters)
   const triggerId = useRef<number | null>(null)
   const viewerScrollTop = useRef(0)
   const client = useQueryClient()
@@ -77,6 +95,10 @@ export function App() {
   const folders = useQuery({ queryKey: ['folders', filters.libraryId, filters.folderId, folderCursor], queryFn: ({ signal }) => request<FolderPage>(`/api/folders?${new URLSearchParams({ ...(filters.libraryId ? { libraryId: String(filters.libraryId) } : {}), ...(filters.folderId ? { parentId: String(filters.folderId) } : {}), ...(folderCursor ? { cursor: folderCursor } : {}), limit: '48' })}`, signal), enabled: !!(filters.folderId || library?.rootFolderId), gcTime: 0 })
   const startScan = useMutation({ mutationFn: (libraryId: number) => request(`/api/libraries/${libraryId}/scans`, undefined, 'POST', {}), onSuccess: () => client.invalidateQueries({ queryKey: ['indexing'] }) })
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('luma-theme', theme) }, [theme])
+  useEffect(() => {
+    if (section === 'reels') { reelsMemory.current = filters; try { localStorage.setItem(reelsFilterKey, JSON.stringify(filters)) } catch { /* private browsing keeps the in-memory copy */ } }
+    else if (section === 'library' || section === 'search') browseMemory.current = filters
+  }, [section, filters])
   useEffect(() => { window.history.replaceState(window.history.state, '', `${window.location.pathname}${queryString(filters) ? `?${queryString(filters)}` : ''}`) }, [filters])
   useEffect(() => {
     if (!window.history.state) window.history.replaceState({ filters: readFilters(), section: readFilters().q ? 'search' : 'library' }, '', window.location.href)
@@ -92,9 +114,9 @@ export function App() {
   function visitLibrary(item: Library) { apply({ libraryId: item.id, folderId: item.rootFolderId ?? undefined }); if (!item.rootFolderId) startScan.mutate(item.id) }
   function navigateSection(target: Section) {
     if (target === 'collections') apply({}, target)
-    else if (target === 'reels') apply(reelsFilters(filters), target)
-    else if (target === 'library') apply(libraryFilters(filters, section), target)
-    else if (target === 'search') apply(searchFilters(filters, section), target)
+    else if (target === 'reels') apply(reelsMemory.current ?? reelsFilters(filters), target)
+    else if (target === 'library') apply(libraryFilters(filters, section, browseMemory.current), target)
+    else if (target === 'search') apply(searchFilters(filters, section, browseMemory.current), target)
     else { window.history.pushState({ filters, section: target }, '', window.location.href); setSection(target) }
     setSelecting(false); setSelected(new Set())
   }
@@ -112,7 +134,10 @@ export function App() {
     { icon: Smartphone, title: 'Touch gestures', body: 'Swipe left or right in the viewer. Pinch images to zoom, then drag to pan. Reels use vertical swipes and Up or Down on a keyboard.' },
     { icon: MonitorPlay, title: 'Video handoff', body: 'If a video is unsupported, copy its stream URL and open it in VLC or another network-stream player that can reach this Luma server. Originals are streamed without transcoding.' }
   ]
-  const folderCards = section === 'library' && folders.data?.items.length ? <section aria-label="Folders" className="grid grid-cols-2 gap-3 pb-4 sm:grid-cols-3 xl:grid-cols-5">
+  // auto-fit/minmax has no equivalent in the fixed column-count scale: a single card
+  // (the common case for one connected library) fills the row instead of sitting in
+  // one corner, while more cards still wrap into a normal responsive grid.
+  const folderCards = section === 'library' && folders.data?.items.length ? <section aria-label="Folders" className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3 pb-4">
     {folders.data.items.map(folder => <button key={folder.id} type="button" className="group overflow-hidden rounded-lg border border-line bg-surface text-left hover:border-accent" onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}>
       <CoverArt url={folder.coverUrl} height="h-24 sm:h-28" fallback={<div className="flex h-full items-center justify-center text-muted"><FolderOpen className="size-8 sm:size-10" /></div>} />
       <div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-4"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-canvas text-accent sm:size-10"><FolderOpen className="size-4 sm:size-5" /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{folder.name}</h2><p className="text-xs text-muted">Open folder</p></div></div>
@@ -129,7 +154,7 @@ export function App() {
           {section === 'library' && folders.data && <>{folders.data.ancestors.length > 0 && <nav aria-label="Folder breadcrumb" className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm text-muted">{[...folders.data.ancestors, folders.data.current].map((folder, index) => <span key={folder.id} className="flex shrink-0 items-center gap-1"><button type="button" className="rounded-full px-2 py-1 hover:bg-surface hover:text-ink" onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}>{folder.name}</button>{index < folders.data.ancestors.length && <ChevronRight className="size-3" />}</span>)}</nav>}</>}
           {selected.size > 0 && <div className="flex items-center gap-3 rounded-2xl bg-surface p-3"><p className="text-sm">{selected.size} selected</p><Button className="min-h-10" onClick={() => setBulkOpen(true)}><Tag className="mr-2 size-4" />Edit tags</Button><IconButton label="Clear selection" onClick={() => setSelected(new Set())}><X className="size-4" /></IconButton></div>}{selectionError && <p role="alert" className="text-sm text-danger">{selectionError}</p>}
           </div>}
-          {section === 'collections' ? <Collections libraries={libraries.data ?? []} onChoose={(value, folders) => { const target = libraries.data?.find(item => item.id === value.libraryId); if (folders && target) visitLibrary(target); else apply(value, 'search') }} /> : libraries.data?.length === 0 ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><FolderOpen className="size-12 text-accent" /><h2 className="text-xl font-semibold">Connect your first library</h2><p className="leading-relaxed text-muted">Add a media folder in the server configuration, then restart Luma.</p></section> : idleSearch ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><Search className="size-12 text-muted" /><h2 className="text-xl font-semibold">Search your media</h2><p className="text-sm leading-relaxed text-muted">Type a search or open filters to choose exactly what to show.</p></section> : home ? <div className="overflow-auto p-4 sm:p-6"><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{libraries.data?.map(item => <section key={item.id} className="overflow-hidden rounded-2xl border border-line bg-surface"><button type="button" aria-label={`Open ${item.name}`} className="block w-full text-left" disabled={startScan.isPending} onClick={() => visitLibrary(item)}><CoverArt url={item.coverUrl} height="h-24 sm:h-32" fallback={<div className="flex h-full items-center justify-center gap-2 text-xs text-muted sm:text-sm"><Images className="size-5 sm:size-6" />{item.rootFolderId ? 'Preparing album cover' : 'No media indexed yet'}</div>} /><div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-5"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-canvas text-accent sm:size-11 sm:rounded-2xl"><FolderOpen className="size-4 sm:size-6" /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold sm:text-lg">{item.name}</h2><p className="text-xs text-muted sm:text-sm">{item.rootFolderId ? 'Browse library' : 'Start indexing'}</p></div></div></button><div className="border-t border-line p-4">{item.rootFolderId ? <RescanButton libraryId={item.id} name={item.name} /> : <p className="text-xs leading-relaxed text-muted">Indexing starts when you open this library. Other libraries stay idle.</p>}{item.rootFolderId && <details className="mt-3"><summary className="cursor-pointer text-xs text-muted">Indexing status</summary><ScanControls libraryId={item.id} /></details>}</div></section>)}</div></div> : <>{section === 'library' && filters.libraryId && <details className="hidden shrink-0 px-4 pb-2 sm:block sm:px-6"><summary className="cursor-pointer text-xs text-muted">Library status and scan controls</summary><ScanControls key={filters.libraryId} libraryId={filters.libraryId} /></details>}{section === 'reels' ? <Reels key={`${queryString(filters)}:${refresh}`} filters={filters} onFilters={() => setFilterOpen(true)} onOpenViewer={item => { triggerId.current = item.id; setActive(item) }} /> : <Gallery key={`${section}:${queryString(galleryFilters)}:${refresh}`} filters={galleryFilters} selected={selected} selecting={selecting} onSelect={select} onOpen={item => { triggerId.current = item.id; viewerScrollTop.current = scroll.current?.scrollTop ?? 0; setActive(item) }} scrollerRef={scroll} leadingContent={folderCards} />}</>}
+          {section === 'collections' ? <Collections onChoose={value => apply(value, 'search')} /> : libraries.data?.length === 0 ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><FolderOpen className="size-12 text-accent" /><h2 className="text-xl font-semibold">Connect your first library</h2><p className="leading-relaxed text-muted">Add a media folder in the server configuration, then restart Luma.</p></section> : idleSearch ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><Search className="size-12 text-muted" /><h2 className="text-xl font-semibold">Search your media</h2><p className="text-sm leading-relaxed text-muted">Type a search or open filters to choose exactly what to show.</p></section> : home ? <div className="overflow-auto p-4 sm:p-6"><div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3">{libraries.data?.map(item => <section key={item.id} className="overflow-hidden rounded-2xl border border-line bg-surface"><button type="button" aria-label={`Open ${item.name}`} className="block w-full text-left" disabled={startScan.isPending} onClick={() => visitLibrary(item)}><CoverArt url={item.coverUrl} height="h-24 sm:h-32" fallback={<div className="flex h-full items-center justify-center gap-2 text-xs text-muted sm:text-sm"><Images className="size-5 sm:size-6" />{item.rootFolderId ? 'Preparing album cover' : 'No media indexed yet'}</div>} /><div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-5"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-canvas text-accent sm:size-11 sm:rounded-2xl"><FolderOpen className="size-4 sm:size-6" /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold sm:text-lg">{item.name}</h2><p className="text-xs text-muted sm:text-sm">{item.rootFolderId ? 'Browse library' : 'Start indexing'}</p></div></div></button><div className="border-t border-line p-4">{item.rootFolderId ? <RescanButton libraryId={item.id} name={item.name} /> : <p className="text-xs leading-relaxed text-muted">Indexing starts when you open this library. Other libraries stay idle.</p>}{item.rootFolderId && <details className="mt-3"><summary className="cursor-pointer text-xs text-muted">Indexing status</summary><ScanControls libraryId={item.id} /></details>}</div></section>)}</div></div> : <>{section === 'library' && filters.libraryId && <details className="hidden shrink-0 px-4 pb-2 sm:block sm:px-6"><summary className="cursor-pointer text-xs text-muted">Library status and scan controls</summary><ScanControls key={filters.libraryId} libraryId={filters.libraryId} /></details>}{section === 'reels' ? <Reels key={`${queryString(filters)}:${refresh}`} filters={filters} onFilters={() => setFilterOpen(true)} onOpenViewer={item => { triggerId.current = item.id; setActive(item) }} /> : <Gallery key={`${section}:${queryString(galleryFilters)}:${refresh}`} filters={galleryFilters} selected={selected} selecting={selecting} onSelect={select} onOpen={item => { triggerId.current = item.id; viewerScrollTop.current = scroll.current?.scrollTop ?? 0; setActive(item) }} scrollerRef={scroll} leadingContent={folderCards} />}</>}
           {libraries.isError && <p role="alert" className="p-5 text-danger">{errorMessage(libraries.error)}</p>}{folders.isError && <p role="alert" className="px-4 text-sm text-danger">{errorMessage(folders.error)}</p>}
         </>}
       </main></div>

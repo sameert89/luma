@@ -174,6 +174,47 @@ public sealed class BrowsingTests
     }
 
     [Fact]
+    public async Task Visible_media_priority_prepares_in_the_requested_order()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await SeedAsync(f,20);
+        await using var db=await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("""
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<20)
+            INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt)
+            SELECT x,1,@version,1,'image','pending','2026-01-01T00:00:00.0000000Z' FROM n;
+            """,new{version=IndexingOptions.EncoderVersion});
+        var requested=new long[]{14,3,20,7,11};
+        await (await BrowserAsync(f)).PrioritizeAsync(new MediaPriorityRequest(requested),default);
+        // The worker claims the earliest NextAttemptAt, then the lowest media ID.
+        var queue=(await db.QueryAsync<long>("""
+            SELECT MediaId FROM ProcessingJobs WHERE State='pending' ORDER BY NextAttemptAt,MediaId LIMIT 5
+            """)).ToArray();
+        Assert.Equal(requested,queue);
+    }
+
+    [Fact]
+    public async Task Visible_media_priority_adopts_media_left_by_a_cancelled_scan()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await SeedAsync(f,3);
+        await using var db=await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("""
+            INSERT INTO Scans(Id,LibraryId,FolderId,State,StartedAt,FinishedAt) VALUES(9,1,1,'cancelled',@now,@now);
+            INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt)
+            VALUES(1,1,@version,9,'image','waiting','2100-01-01T00:00:00.0000000Z');
+            """,new{version=IndexingOptions.EncoderVersion,now=DateTimeOffset.UtcNow.ToString("O")});
+        var browser=await BrowserAsync(f);
+        await browser.PrioritizeAsync(new MediaPriorityRequest([1]),default);
+        Assert.Equal("pending",await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE MediaId=1"));
+        var claimed=await f.ClaimAsync();
+        Assert.Equal(1,claimed?.MediaId);
+        // Without a scan that can run the work there is nothing to adopt, and the job stays put.
+        await db.ExecuteAsync("UPDATE Scans SET State='cancelled'; UPDATE ProcessingJobs SET State='waiting',ScanId=9,Claim=NULL WHERE MediaId=1");
+        await browser.PrioritizeAsync(new MediaPriorityRequest([1]),default);
+        Assert.Equal("waiting",await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE MediaId=1"));
+        Assert.Equal(9,await db.ExecuteScalarAsync<long>("SELECT ScanId FROM ProcessingJobs WHERE MediaId=1"));
+    }
+
+    [Fact]
     public async Task Unicode_tag_identity_and_bulk_limits_are_atomic_and_idempotent()
     {
         await using var f=await PipelineFixture.CreateAsync();await SeedAsync(f,500);var service=new TagService(f.Database);
@@ -193,6 +234,40 @@ public sealed class BrowsingTests
         Assert.Equal(100,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags WHERE MediaId=1"));
         await Assert.ThrowsAsync<ApiRequestException>(()=>service.BulkAsync(new([1,2],[ids[^1]],[]),default));
         Assert.Equal(0,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags WHERE TagId=@id",new{id=ids[^1]}));
+    }
+
+    [Fact]
+    public async Task Renaming_a_tag_fixes_its_spelling_or_merges_into_an_existing_one()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await SeedAsync(f,3);var service=new TagService(f.Database);
+        var typo=(await service.CreateAsync("Vacaton",default)).Tag;
+        var renamed=await service.RenameAsync(typo.Id,"Vacation",default);
+        Assert.Equal(typo.Id,renamed.Id);Assert.Equal("Vacation",renamed.Name);
+        await Assert.ThrowsAsync<ApiRequestException>(()=>service.RenameAsync(typo.Id,"\n",default));
+        await Assert.ThrowsAsync<ApiRequestException>(()=>service.RenameAsync(99999,"Anything",default));
+
+        // Renaming into an existing tag's spelling merges the two instead of colliding.
+        var family=(await service.CreateAsync("Family",default)).Tag;
+        await service.BulkAsync(new([1,2],[renamed.Id],[]),default);
+        await service.BulkAsync(new([2,3],[family.Id],[]),default);
+        var merged=await service.RenameAsync(renamed.Id,"family",default);
+        Assert.Equal(family.Id,merged.Id);Assert.Equal("Family",merged.Name);
+        await using var db=await f.Database.OpenAsync(default);
+        Assert.Equal(0,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Tags WHERE Id=@id",new{id=renamed.Id}));
+        Assert.Equal([1L,2L,3L],await db.QueryAsync<long>("SELECT MediaId FROM MediaTags WHERE TagId=@id ORDER BY MediaId",new{id=family.Id}));
+    }
+
+    [Fact]
+    public async Task Deleting_a_tag_removes_it_and_every_assignment()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await SeedAsync(f,2);var service=new TagService(f.Database);
+        var tag=(await service.CreateAsync("Temporary",default)).Tag;
+        await service.BulkAsync(new([1,2],[tag.Id],[]),default);
+        await service.DeleteAsync(tag.Id,default);
+        await using var db=await f.Database.OpenAsync(default);
+        Assert.Equal(0,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Tags WHERE Id=@id",new{id=tag.Id}));
+        Assert.Equal(0,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags WHERE TagId=@id",new{id=tag.Id}));
+        await Assert.ThrowsAsync<ApiRequestException>(()=>service.DeleteAsync(tag.Id,default));
     }
 
     internal static async Task<MediaBrowser> BrowserAsync(PipelineFixture f)

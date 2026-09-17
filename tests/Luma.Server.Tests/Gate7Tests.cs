@@ -157,6 +157,53 @@ public sealed class Gate7Tests
     }
 
     [Fact]
+    public async Task Embedded_xmp_packet_is_found_near_either_end_of_a_container_regardless_of_format()
+    {
+        var directory=Path.Combine(Path.GetTempPath(),"luma-xmp-scan",Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var packet="<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>"+Encoding.UTF8.GetString(MetadataKeywords.WriteXmp(["Wildlife","Café"]))+"<?xpacket end=\"w\"?>";
+        var packetBytes=Encoding.UTF8.GetBytes(packet);
+        var junk=new byte[1024];Random.Shared.NextBytes(junk);
+
+        var front=Path.Combine(directory,"front.mp4");
+        await File.WriteAllBytesAsync(front,[..packetBytes,..junk]);
+        Assert.Equal(new[]{"Wildlife","Café"},await MetadataKeywords.ReadEmbeddedXmpPacketAsync(front,default));
+
+        // A packet only reachable in a bounded tail scan, past a head window full of junk.
+        var back=Path.Combine(directory,"back.mp4");
+        var padding=new byte[10*1024*1024];Random.Shared.NextBytes(padding);
+        await File.WriteAllBytesAsync(back,[..padding,..packetBytes]);
+        Assert.Equal(new[]{"Wildlife","Café"},await MetadataKeywords.ReadEmbeddedXmpPacketAsync(back,default));
+
+        var none=Path.Combine(directory,"none.mp4");
+        await File.WriteAllBytesAsync(none,junk);
+        Assert.Empty(await MetadataKeywords.ReadEmbeddedXmpPacketAsync(none,default));
+        Directory.Delete(directory,true);
+    }
+
+    [Fact]
+    public async Task Import_without_a_selection_walks_every_matching_item_and_reads_embedded_video_xmp()
+    {
+        await using var f=await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("one.png");
+        var clipPath=Path.Combine(f.Root.Path,"clip.mp4");
+        await Luma.Server.MediaProcessing.MediaProcessor.RunAsync("ffmpeg",["-v","error","-y","-f","lavfi","-i","color=c=blue:s=128x96:r=4","-t","1","-c:v","mpeg4","-threads","1",clipPath],default);
+        // ffprobe reads the structured atoms at the front and ignores trailing bytes it
+        // does not recognise, so appending a raw XMP packet does not disturb probing.
+        var videoPacket="<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>"+Encoding.UTF8.GetString(MetadataKeywords.WriteXmp(["Wildlife"]))+"<?xpacket end=\"w\"?>";
+        await File.AppendAllTextAsync(clipPath,videoPacket);
+        await f.ScanAsync();
+        await using var host=Host(f);using var client=host.CreateClient();
+        await using var db=await f.Database.OpenAsync(default);await db.ExecuteAsync("UPDATE Libraries SET Enabled=1");
+        var accepted=await client.PostAsJsonAsync("/api/imports/tags",new MetadataJobRequest());
+        Assert.Equal(HttpStatusCode.Accepted,accepted.StatusCode);
+        var job=await AwaitJobAsync(client,(await accepted.Content.ReadFromJsonAsync<JobAccepted>())!.Id);
+        Assert.Equal("completed",job.State);Assert.Equal(2,job.Processed);Assert.Equal(0,job.Failed);
+        var videoId=await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE MediaType='video'");
+        Assert.Equal(1,await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE mt.MediaId=@videoId AND t.Name='Wildlife'",new{videoId}));
+    }
+
+    [Fact]
     public async Task Import_reports_invalid_tags_and_unavailable_items_without_losing_valid_unions()
     {
         await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("one.png");await f.CreateImageAsync("two.png");await f.ScanAsync();

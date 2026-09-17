@@ -80,7 +80,7 @@ Initial modes:
 - Gallery
 - Reels
 
-Gallery and Reels use the same filter definitions and server query semantics, but their selected filters and sorting are mode-specific state. Switching modes is not required to preserve or synchronize the current query. Reels may clear the gallery library/folder location and default to videos; this is intentional. Each mode's viewer navigation must follow that mode's active query.
+Gallery and Reels use the same filter definitions and server query semantics, but their selected filters and sorting are mode-specific state. Modes are not synchronized in either direction: the gallery's query never becomes the Reels query, and nothing chosen while browsing Reels — its library/folder scope, sort, or any other filter — changes the folder or query that Library and Search return to. Reels keeps the filters and sort last chosen in Reels and restores them on return, including after a restart; its first ever visit clears the gallery library/folder location and defaults to videos. Each mode's viewer navigation must follow that mode's active query.
 
 ## Gallery mode
 
@@ -110,17 +110,20 @@ Requirements:
 
 - vertical navigation between media
 - active videos may autoplay according to browser/platform restrictions.
-- auto-scroll as a simple on/off toggle; enabled videos advance when playback ends, with no configurable timing requirement
+- auto-scroll as a simple on/off toggle; enabled videos advance when playback ends and photos advance after a fixed dwell time (3 seconds), with no configurable timing requirement
+- secondary controls (filters, like, mute, auto-scroll, tags, previous/next) collapse behind one toggle so the viewport stays clear until they are wanted; navigation and playback still work without opening it
 - only the current and nearby media should be mounted/preloaded
 - images and videos are both supported with option to choose them
 - the same applicable filter and sort capabilities as gallery, with independent mode state rather than a synchronized query
 - tags must remain accessible and nicely rendered like reels captions if user wishes to see it
 - dedicated mute button and auto scroll button
+- tapping the media pauses or resumes a video, and double tapping it likes the item
+- playback progress stays out of the way: it appears when its strip is tapped or focused and fades out again
 - loading a large result set must not create thousands of DOM elements
 
 The first implementation should prioritize smooth navigation over elaborate animations.
 
-Reels does not require the normal video player's full control set or browser-native control chrome. Its required controls are navigation, mute, auto-scroll, filters, and accessible tags. Any seek or other optional playback control that is provided must remain keyboard-accessible. The full playback control requirements below apply to the normal video viewer.
+Reels does not require the normal video player's full control set or browser-native control chrome. Its required controls are navigation, mute, auto-scroll, like, filters, and accessible tags. Any seek or other optional playback control that is provided must remain keyboard-accessible, and controls that hide themselves must reappear on keyboard focus. Touch gestures are shortcuts for controls that also exist as buttons, never the only way to reach a behaviour. The full playback control requirements below apply to the normal video viewer.
 
 ## Likes/Dislikes and existence of dislike export
 - The user should be able to like/favourite a piece of media and then filter based on the likes if they wish to do so.
@@ -214,6 +217,8 @@ Mobile goal:
 - tag editing remains accessible without navigating to a separate administration page
 
 Tags are case-insensitively unique.
+
+Existing tags can be renamed (fixing a typo) or deleted (removing it and every assignment). Renaming into another tag's spelling merges the two rather than failing. Collections exposes this from each tag: a long press is a touch shortcut, and a visible manage control reaches the same rename/delete action for keyboard and pointer users, since a gesture is never the only way to reach a control.
 
 Example:
 

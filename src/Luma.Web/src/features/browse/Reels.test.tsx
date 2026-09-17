@@ -9,7 +9,7 @@ it('retains only current query data and one nearby preview during sequential bro
   const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
-  const items = Array.from({ length: 12 }, (_, index) => ({ id: index + 1, fileName: `item-${index}.mp4`, mediaType: 'video', width: 640, height: 480, preview: { url: `/cache/${index}.jpg`, status: 'ready' }, tags: [] }) as unknown as Media)
+  const items = Array.from({ length: 12 }, (_, index) => ({ id: index + 1, fileName: `item-${index}.mp4`, mediaType: 'video', width: 640, height: 480, preference: 'neutral', thumbnail: { url: `/cache/${index}-thumb.webp`, status: 'ready' }, preview: { url: `/cache/${index}.jpg`, status: 'ready' }, tags: [] }) as unknown as Media)
   const preloads: HTMLImageElement[] = []
   vi.stubGlobal('Image', function () { const image = document.createElement('img'); preloads.push(image); return image })
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
@@ -20,6 +20,7 @@ it('retains only current query data and one nearby preview during sequential bro
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   try {
     const { unmount } = render(<QueryClientProvider client={client}><Reels filters={{ q: 'item', order: 'asc', mediaType: 'video', libraryId: 1, folderId: 2 }} onFilters={vi.fn()} onOpenViewer={vi.fn()} /></QueryClientProvider>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
     const next = await screen.findByRole('button', { name: /^Next$/ })
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('mediaType=video') && String(url).includes('folderId=2'))).toBe(true))
     for (let index = 0; index < 10; index++) {

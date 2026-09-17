@@ -48,6 +48,37 @@ public sealed class TagService(Database database)
         var tag=await db.QuerySingleAsync<TagSummary>(new CommandDefinition("SELECT Id,Name FROM Tags WHERE NormalizedKey=@Key",new{normalized.Key},tx,cancellationToken:ct));
         tx.Commit();return (tag,created);
     }
+    public async Task<TagSummary> RenameAsync(long id,string name,CancellationToken ct)
+    {
+        var normalized=TagText.Normalize(name);
+        await using var db=await database.OpenAsync(ct);
+        using var tx=db.BeginTransaction();
+        if(!await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Tags WHERE Id=@id)",new{id},tx,cancellationToken:ct))) throw ApiRequestException.Missing();
+        var target=await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition("SELECT Id FROM Tags WHERE NormalizedKey=@Key",new{normalized.Key},tx,cancellationToken:ct));
+        if(target is null || target==id) {
+            await db.ExecuteAsync(new CommandDefinition("UPDATE Tags SET Name=@Name,NormalizedKey=@Key WHERE Id=@id",new{normalized.Name,normalized.Key,id},tx,cancellationToken:ct));
+            tx.Commit();
+            return new(id,normalized.Name);
+        }
+        // The new spelling already names a different tag: merge this tag's media into it
+        // instead of failing on the unique key, so fixing a typo can also deduplicate.
+        await db.ExecuteAsync(new CommandDefinition("""
+            INSERT INTO MediaTags(MediaId,TagId) SELECT MediaId,@target FROM MediaTags WHERE TagId=@id ON CONFLICT DO NOTHING;
+            DELETE FROM MediaTags WHERE TagId=@id;
+            DELETE FROM Tags WHERE Id=@id;
+            """,new{id,target},tx,cancellationToken:ct));
+        var merged=await db.QuerySingleAsync<TagSummary>(new CommandDefinition("SELECT Id,Name FROM Tags WHERE Id=@target",new{target},tx,cancellationToken:ct));
+        tx.Commit();
+        return merged;
+    }
+    public async Task DeleteAsync(long id,CancellationToken ct)
+    {
+        await using var db=await database.OpenAsync(ct);
+        using var tx=db.BeginTransaction();
+        await db.ExecuteAsync(new CommandDefinition("DELETE FROM MediaTags WHERE TagId=@id",new{id},tx,cancellationToken:ct));
+        if(await db.ExecuteAsync(new CommandDefinition("DELETE FROM Tags WHERE Id=@id",new{id},tx,cancellationToken:ct))==0) throw ApiRequestException.Missing();
+        tx.Commit();
+    }
     public async Task<IReadOnlyList<TagSummary>> FindAsync(string? prefix,int? limit,CancellationToken ct)
     {
         if(limit is <1 or >50 || prefix?.Length>400) throw ApiRequestException.Invalid();

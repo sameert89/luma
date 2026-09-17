@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { StrictMode } from 'react'
@@ -75,4 +75,47 @@ describe('media viewing', () => {
       expect(play).toHaveBeenCalled()
     } finally { vi.restoreAllMocks() }
   })
+  it('pauses reels on a centre tap, likes on a double tap and reveals seeking from the bottom strip', async () => {
+    vi.useFakeTimers()
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false)
+    const onLike = vi.fn()
+    try {
+      const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} reels muted onNavigate={vi.fn()} onLike={onLike} />)
+      const stage = container.querySelector('[data-testid="reels-seek"]')!.parentElement!
+      vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ top: 0, left: 0, width: 400, height: 800 } as DOMRect)
+      const seek = () => container.querySelector('[data-testid="reels-seek"]')!
+
+      expect(seek()).toHaveAttribute('data-visible', 'false')
+      tap(stage, 200, 760)
+      await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+      expect(seek()).toHaveAttribute('data-visible', 'true')
+      expect(pause).not.toHaveBeenCalled()
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100) })
+      expect(seek()).toHaveAttribute('data-visible', 'false')
+
+      tap(stage, 200, 400)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(pause).toHaveBeenCalledTimes(1)
+
+      tap(stage, 200, 400)
+      tap(stage, 202, 402)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(onLike).toHaveBeenCalledTimes(1)
+      // The double tap must not also toggle playback on its way through.
+      expect(pause).toHaveBeenCalledTimes(1)
+      expect(play).toHaveBeenCalled()
+    } finally { vi.restoreAllMocks(); vi.useRealTimers() }
+  })
 })
+
+function tap(element: Element, clientX: number, clientY: number) {
+  const options = { pointerId: 1, clientX, clientY, bubbles: true }
+  element.setPointerCapture = () => {}
+  act(() => {
+    element.dispatchEvent(new PointerEvent('pointerdown', options))
+    element.dispatchEvent(new PointerEvent('pointerup', options))
+  })
+}

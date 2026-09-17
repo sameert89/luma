@@ -64,18 +64,23 @@ Rare broad substring/multifilter queries have a 2 s database execution deadline;
 
 | Endpoint | Behavior / stage |
 | --- | --- |
-| GET /api/libraries; GET /api/folders?parentId=â€¦ | ID/name/root availability and paginated direct folders, max 200, SQLite only; stage 4 |
+| GET /api/libraries; GET /api/folders?parentId=… | ID/name/root availability and paginated direct folders, max 200, SQLite only; stage 4 |
 | POST /api/libraries/{id}/scans; GET /api/scans/{id}; POST /api/scans/{id}/cancel | Start 202 with Location; inspect counters/failures; idempotent cancel 202, conflict if active scan exists; stage 3 |
 | GET /api/media/{id} | Metadata detail, 404 unknown; no filesystem access; stage 4 |
 | GET /api/media/{id}/cache/{revision}/{variant} | Generated content, ETag/304; see MEDIA-CACHE.md; stage 4 |
 | GET /api/media/{id}/original | Explicit original download/stream; single range 206, unsatisfiable 416, unavailable source 503 `source_unavailable`; stage 6 |
-| GET /api/tags?prefix=â€¦ | Bounded autocomplete; stage 5 |
+| GET /api/tags?prefix=… | Bounded autocomplete; stage 5 |
+| POST /api/media/priority | `{ids}`, 1–200 distinct positive IDs in display order, 204; see MEDIA-CACHE.md; stage 6 |
 | POST /api/tags | Create or return existing normalized tag, 201 new/200 existing; stage 5 |
+| PUT /api/tags/{id} | `{name}` renames, or merges into an existing same-key tag; 200 with the resulting tag, 404 unknown; Gate 7 feedback |
+| DELETE /api/tags/{id} | Removes the tag and every assignment; 204, 404 unknown; Gate 7 feedback |
 | POST /api/media/tags | Atomic bulk `{mediaIds, addTagIds, removeTagIds}`, 204; limits in TAGGING.md; stage 5 |
 | PUT /api/media/{id}/preference | `{preference}` neutral/liked/disliked; 204; stage 5 |
 | PUT /api/folders/{id}/cover | `{mediaId}` or null for default; must be present descendant in same root; 204; stage 7 |
 | GET /api/random | Same filters, forces images; conflicting video filter 400; returns cached preview content, no match 404, cache pressure 503; no-store; stage 7 |
 | POST /api/exports/dislikes; POST /api/exports/xmp; POST /api/imports/tags | Explicit bounded jobs, 202 with Location; inspect via GET /api/jobs/{id}, download finished exports via GET /api/jobs/{id}/content; stage 7 |
+
+`POST /api/imports/tags` accepts either an explicit `mediaIds` selection (1–500) or, with `mediaIds` omitted, a `query` scoping every present item to import — unbounded in count, walked one item at a time; see TAGGING.md.
 
 Default covers select the first cache-ready descendant using modified-descending order; stale custom covers fall back without reading originals. Covers refer to IDs and retain preference when a source is temporarily unavailable.
 

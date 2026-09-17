@@ -14,6 +14,7 @@ test('requested themes persist across cached gallery search viewer and photo ree
     await viewer.getByRole('button', { name: 'Close viewer' }).click()
     await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
     const reels = page.getByRole('region', { name: 'Reels', exact: true })
+    await reels.getByRole('button', { name: 'Reels menu' }).click()
     await reels.getByRole('button', { name: 'Filters', exact: true }).click()
     await page.getByRole('combobox', { name: 'Media type', exact: true }).selectOption('image')
     await page.getByRole('button', { name: 'Apply filters' }).click()
@@ -60,6 +61,7 @@ test('reels honour photos and mixed-media selections and navigate the active que
   await page.goto('/?q=photo')
   await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await reels.getByRole('button', { name: 'Reels menu' }).click()
   await reels.getByRole('button', { name: 'Filters', exact: true }).click()
   await page.getByRole('combobox', { name: 'Media type', exact: true }).selectOption('image')
   await page.getByRole('combobox', { name: 'Sort by' }).selectOption('shuffle')
@@ -68,6 +70,8 @@ test('reels honour photos and mixed-media selections and navigate the active que
   await expect(reels.locator('video')).toHaveCount(0)
   await expect(page).toHaveURL(/mediaType=image/)
   const original = await reels.getByRole('img').getAttribute('alt')
+  // Applying filters remounts Reels (a fresh query), so the menu collapses again.
+  await reels.getByRole('button', { name: 'Reels menu' }).click()
   await reels.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(reels.getByRole('img')).not.toHaveAttribute('alt', original!)
   await reels.getByRole('button', { name: 'Filters', exact: true }).click()
@@ -77,14 +81,44 @@ test('reels honour photos and mixed-media selections and navigate the active que
   await expect(reels.locator('img,video')).toHaveCount(1)
 })
 
-test('collections provide folders tags and favourites', async ({ page }) => {
-  await page.goto('/')
+test('collections provide tags and favourites, with tag rename and delete', async ({ page }, testInfo) => {
+  // A tag this test creates and only this test uses: the fixture is shared with other
+  // specs and projects, so renaming or deleting a seeded tag would corrupt their data.
+  const original = `Typo-${testInfo.project.name}-${Date.now()}`
+  await page.goto('/?libraryId=1&folderId=1')
+  await page.getByTestId('media-cell').first().click()
+  const viewer = page.getByRole('dialog')
+  await viewer.getByRole('button', { name: 'Media details' }).click()
+  const details = page.getByRole('dialog', { name: 'Media details' })
+  await details.getByRole('combobox', { name: 'Tag name' }).fill(original)
+  await details.getByRole('button', { name: 'Add tag' }).click()
+  await expect(details.getByRole('button', { name: `Remove tag ${original}`, exact: true })).toBeVisible()
+  await page.goBack()
+  await expect(page.locator('[role=dialog]')).toHaveCount(1)
+  await page.goBack()
+  await expect(page.locator('[role=dialog]')).toHaveCount(0)
+
   await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Collections', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Folders and albums' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Favourites' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Tags', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Vacation', exact: true }).click()
   await expect(page).toHaveURL(/tag=Vacation/)
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
+
+  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Collections', exact: true }).click()
+  const fixed = `Fixed-${testInfo.project.name}-${Date.now()}`
+  await page.getByRole('button', { name: `Manage tag ${original}`, exact: true }).click()
+  const manage = page.getByRole('dialog', { name: `Manage "${original}"` })
+  await manage.getByLabel('Tag name').fill(fixed)
+  await manage.getByRole('button', { name: 'Save name' }).click()
+  await expect(manage).toBeHidden()
+  await expect(page.getByRole('button', { name: fixed, exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: original, exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: `Manage tag ${fixed}`, exact: true }).click()
+  await page.getByRole('dialog', { name: `Manage "${fixed}"` }).getByRole('button', { name: 'Delete tag' }).click()
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect(page.getByRole('button', { name: fixed, exact: true })).toHaveCount(0)
 })
 
 test('custom covers can be selected and reset from the viewer', async ({ page }) => {
