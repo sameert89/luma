@@ -130,6 +130,32 @@ public sealed class IndexingTests
     }
 
     [Fact]
+    public async Task Presence_checks_materialize_ineligible_rows_and_skip_active_scans_and_disabled_libraries()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        using var worker = new SourcePresenceWorker(f.Database, f.Options, NullLogger<SourcePresenceWorker>.Instance);
+        await worker.CheckBatchAsync(default);
+        await f.CreateImageAsync("deleted.png");
+        await f.ScanAsync();
+        File.Delete(Path.Combine(f.Root.Path, "deleted.png"));
+        await using var db = await f.Database.OpenAsync(default);
+
+        await db.ExecuteAsync("UPDATE Libraries SET Enabled=0");
+        await worker.CheckBatchAsync(default);
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media"));
+
+        await db.ExecuteAsync("UPDATE Libraries SET Enabled=1; UPDATE Scans SET State='running'");
+        await worker.CheckBatchAsync(default);
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media"));
+
+        await db.ExecuteAsync("UPDATE Scans SET State='completed'");
+        await worker.CheckBatchAsync(default);
+        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media"));
+        await worker.CheckBatchAsync(default);
+        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media"));
+    }
+
+    [Fact]
     public async Task Cache_write_failure_is_retryable_and_does_not_report_source_loss()
     {
         await using var f = await PipelineFixture.CreateAsync();

@@ -67,5 +67,14 @@ public sealed class SourcePresenceWorker(Database database, IndexingOptions opti
         cursor = rows.Count == 100 ? rows[^1].Id : 0;
     }
 
-    private sealed record PresenceRow(long Id, long LibraryId, string RelativePath, long SourceRevision, long LastSeenScanId, long Eligible);
+    // Empty SQLite results report computed columns as byte[]; property mapping avoids constructor type matching.
+    private sealed record PresenceRow
+    {
+        public long Id { get; init; }
+        public long LibraryId { get; init; }
+        public string RelativePath { get; init; } = "";
+        public long SourceRevision { get; init; }
+        public long LastSeenScanId { get; init; }
+        public long Eligible { get; init; }
+    }
 }
