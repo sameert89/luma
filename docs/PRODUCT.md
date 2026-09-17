@@ -91,7 +91,7 @@ Requirements:
 - responsive grid
 - virtualized rendering
 - lazy thumbnail loading
-- custom gallery cover configurable: automatic selection is the default; the media viewer directly exposes only Use as folder cover and Use as library cover, outside the info dialog
+- custom gallery cover configurable: automatic selection is the default; the media viewer info dialog exposes only Use as folder cover and Use as library cover
 - smooth scrolling
 - mixed photos and videos
 - filter and sort (much like the afore mentioned sorting), filters should be video only, date range, keywords etc. Filters and search are synonymously used, filter is just an advanced search here with option to customize the search.
