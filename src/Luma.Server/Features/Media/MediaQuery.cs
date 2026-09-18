@@ -18,6 +18,7 @@ public sealed record MediaQuery
     [FromQuery(Name = "startsWith")] public string? StartsWith { get; init; }
     [FromQuery(Name = "endsWith")] public string? EndsWith { get; init; }
     [FromQuery(Name = "tag")] public string[]? Tag { get; init; }
+    [FromQuery(Name = "collectionTag")] public string? CollectionTag { get; init; }
     [FromQuery(Name = "tagMode")] public string? TagMode { get; init; }
     [FromQuery(Name = "tagged")] public bool? Tagged { get; init; }
     [FromQuery(Name = "mediaType")] public string? MediaType { get; init; }
@@ -47,7 +48,7 @@ public sealed record MediaQuery
             throw ApiRequestException.Invalid("Unknown or repeated query parameter.");
         if (Limit is < 1 or > 200 || LibraryId <= 0 || FolderId <= 0 || MinSizeBytes < 0 || MaxSizeBytes < 0
             || MinSizeBytes > MaxSizeBytes || MinWidth <= 0 || MinHeight <= 0 || Width <= 0 || Height <= 0
-            || Width < MinWidth || Height < MinHeight || Tagged == false && Tag?.Length > 0)
+            || Width < MinWidth || Height < MinHeight || Tagged == false && (Tag?.Length > 0 || !string.IsNullOrWhiteSpace(CollectionTag)))
             throw ApiRequestException.Invalid("Check the filter ranges.");
         if (new[] { MinAspectRatio, MaxAspectRatio }.Any(x => x is { } n && (!double.IsFinite(n) || n <= 0)) || MinAspectRatio > MaxAspectRatio)
             throw ApiRequestException.Invalid("Aspect ratios must be finite positive numbers.");
@@ -76,11 +77,12 @@ public sealed record MediaQuery
         var extensions = Extension?.Select(x => x.Trim().TrimStart('.').ToLowerInvariant()).Where(x => x.Length > 0).Distinct().Order().ToArray() ?? [];
         if (extensions.Any(x => x.Length > 16 || !x.All(char.IsAsciiLetterOrDigit))) throw ApiRequestException.Invalid("Invalid extension.");
         return this with { Limit = Limit ?? 60, Q = Text(Q), Path = Text(Path), StartsWith = Text(StartsWith), EndsWith = Text(EndsWith),
+            CollectionTag = string.IsNullOrWhiteSpace(CollectionTag) ? null : Tags.TagText.Normalize(CollectionTag).Key,
             Tag = Tag?.Select(Tags.TagText.Normalize).Select(x => x.Key).Distinct().Order().ToArray() ?? [], Extension = extensions,
             MediaType = Choice(MediaType,"image","video","gif","motion"), Orientation = Choice(Orientation,"landscape","portrait","square"),
             Preference = Choice(Preference,"neutral","liked","disliked"), Availability = Choice(Availability,"present","missing","all") ?? "present",
             Seed = Seed ?? (Sort == "shuffle" ? Guid.NewGuid().ToString("N") : null),
-            Sort = Choice(Sort,"modified","captured","name","type","size","shuffle") ?? "modified", Order = Choice(Order,"asc","desc") ?? "desc", GroupBy = Choice(GroupBy,"none","folder","date","type") ?? "none",
+            Sort = Choice(Sort,"modified","captured","name","type","size","shuffle") ?? "modified", Order = Choice(Order,"asc","desc") ?? "desc", GroupBy = Choice(GroupBy,"none","folder","date","type","tag") ?? "none",
             TagMode = Choice(TagMode,"all","any") ?? "all", Recursive = Recursive ?? false, DateFrom = from, DateTo = to };
     }
 
@@ -100,6 +102,7 @@ public sealed record MediaQuery
         if (MediaType == "gif") conditions.Add("m.Extension='.gif'");
         else if (MediaType == "motion") conditions.Add("(m.MediaType='video' OR m.Extension='.gif')");
         else Add("m.MediaType=@mediaType", "mediaType", MediaType);
+        Add("m.Id IN (SELECT mt.MediaId FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE t.NormalizedKey=@collectionTag)","collectionTag",CollectionTag);
         Add("m.Preference=@preference", "preference", Preference);
         Add("m.Orientation=@orientation", "orientation", Orientation);
         Add("m.SizeBytes>=@minSize", "minSize", MinSizeBytes); Add("m.SizeBytes<=@maxSize", "maxSize", MaxSizeBytes);

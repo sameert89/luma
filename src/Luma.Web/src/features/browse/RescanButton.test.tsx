@@ -6,7 +6,7 @@ import { RescanButton } from './RescanButton'
 
 it('refreshes scan status immediately when opening instead of waiting for a poll', async () => {
   let preparing = false
-  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/indexing'
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? preparing ? [{ id: 'scan-2', kind: 'indexing', state: 'running', processed: 100, pending: 10, failed: 0 }] : [] : url === '/api/indexing'
     ? { libraries: [{ id: 1, latestScanId: preparing ? 2 : 1 }] }
     : { id: preparing ? 2 : 1, state: 'completed', discovered: 100, ready: 90, pending: preparing ? 10 : 0, processing: 0 }), { headers: { 'Content-Type': 'application/json' } }))))
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })

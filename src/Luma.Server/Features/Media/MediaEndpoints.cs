@@ -1,4 +1,6 @@
 using Luma.Server.Features.Libraries;
+using Luma.Server.Data;
+using Dapper;
 using Luma.Server.Features.Tags;
 using Luma.Server.Http;
 
@@ -19,6 +21,20 @@ public static class MediaEndpoints
         {var accepted=await jobs.EnqueueAsync("dislikes",request,ct);return TypedResults.Accepted($"/api/jobs/{accepted.Id}",accepted);}).WithName("ExportDislikes");
         app.MapGet("/api/jobs/{id:long}",async(long id,long? afterMediaId,MetadataJobs jobs,CancellationToken ct)=>TypedResults.Ok(await jobs.StatusAsync(id,afterMediaId,ct))).WithName("GetMetadataJob");
         app.MapGet("/api/jobs/{id:long}/content",async(long id,MetadataJobs jobs,CancellationToken ct)=>await jobs.ContentAsync(id,ct)).WithName("DownloadMetadataJob");
+        app.MapGet("/api/collections/tag-groups",async([AsParameters] MediaQuery query,long? afterId,Database database,CancellationToken ct)=> {
+            if(afterId<0) throw ApiRequestException.Invalid();
+            query=(query with {GroupBy="none"}).Normalize();
+            var (predicate,p)=query.Predicate(); p.Add("after",afterId??0);
+            await using var db=await database.OpenAsync(ct);
+            using var deadline=CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(2));
+            using var interrupt=deadline.Token.Register(()=>SQLitePCL.raw.sqlite3_interrupt(db.Handle));
+            try {
+                var tags=(await db.QueryAsync<TagSummary>(new CommandDefinition($"SELECT t.Id,t.Name FROM Tags t WHERE t.Id>@after AND EXISTS(SELECT 1 FROM MediaTags mt JOIN Media m ON m.Id=mt.MediaId WHERE mt.TagId=t.Id AND {predicate}) ORDER BY t.Id LIMIT 51",p,cancellationToken:deadline.Token))).ToArray();
+                return TypedResults.Ok(new TagGroupPage(tags.Take(50).ToArray(),tags.Length>50?tags[49].Id:null));
+            } catch(Exception error) when(deadline.IsCancellationRequested && !ct.IsCancellationRequested && error is Microsoft.Data.Sqlite.SqliteException or OperationCanceledException) {
+                throw new ApiRequestException(503,"query_timeout","Try narrowing the filters.");
+            }
+        }).WithName("GetTagGroups");
         app.MapGet("/api/random",async([AsParameters] MediaQuery query,HttpContext context,RandomImage random,CancellationToken ct)=>
             await random.ServeAsync(query.Normalize(context.Request.Query),context,ct)).WithName("GetRandomImage").Produces(200,contentType:"image/jpeg");
         app.MapPut("/api/folders/{id:long}/cover",async(long id,CoverRequest request,LibraryBrowser browser,CancellationToken ct)=>
@@ -28,8 +44,8 @@ public static class MediaEndpoints
             .Produces<ApiProblem>(400,"application/problem+json").Produces<ApiProblem>(404,"application/problem+json");
         app.MapGet("/api/folders/hidden",async(LibraryBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.HiddenAsync(ct))).WithName("GetHiddenFolders");
         app.MapGet("/api/libraries",async(LibraryBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.LibrariesAsync(ct))).WithName("GetLibraries");
-        app.MapGet("/api/folders",async(long? libraryId,long? parentId,int? limit,string? cursor,LibraryBrowser browser,CancellationToken ct)=>
-            TypedResults.Ok(await browser.FoldersAsync(libraryId,parentId,limit,cursor,ct))).WithName("GetFolders");
+        app.MapGet("/api/folders",async(long? libraryId,long? parentId,int? limit,string? cursor,string? sort,string? order,LibraryBrowser browser,CancellationToken ct)=>
+            TypedResults.Ok(await browser.FoldersAsync(libraryId,parentId,limit,cursor,ct,sort,order))).WithName("GetFolders");
         app.MapGet("/api/media",async([AsParameters] MediaQuery query,HttpContext context,MediaBrowser browser,CancellationToken ct)=>
             TypedResults.Ok(await browser.ListAsync(query.Normalize(context.Request.Query),ct))).WithName("GetMedia");
         app.MapGet("/api/media/{id:long}",async(long id,MediaBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.DetailAsync(id,ct))).WithName("GetMediaDetail");
@@ -58,3 +74,5 @@ public static class MediaEndpoints
         {await tags.PreferenceAsync(id,request.Preference,ct);return TypedResults.NoContent();}).WithName("SetPreference");
     }
 }
+
+public sealed record TagGroupPage(IReadOnlyList<TagSummary> Items,long? NextId);

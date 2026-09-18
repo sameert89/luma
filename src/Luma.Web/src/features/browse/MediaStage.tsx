@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { ChevronsLeft, ChevronsRight, Download, EllipsisVertical, FastForward, Heart, HeartCrack, LoaderCircle, Maximize, Minimize, Pause, PictureInPicture2, Play } from 'lucide-react'
-import { IconButton, QuietButton, QuietLink, Select } from '../../components/ui/Controls'
+import { Field, IconButton, QuietButton, QuietLink, Range, Select } from '../../components/ui/Controls'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Modal } from '../../components/ui/Modal'
 import { useFullscreen } from './useFullscreen'
 import { useIdle } from './useIdle'
-import { ReelsSeek, ViewerVideoControls } from './VideoControls'
+import { useWatchProgress } from './useWatchProgress'
+import { ReelsSeek, ViewerVideoControls, formatTime } from './VideoControls'
 import { isGif, type Media } from './api'
 
 const fillKeys = { viewer: 'luma-viewer-fill', reels: 'luma-reels-fill' }
@@ -23,12 +24,20 @@ type WebkitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void; webk
 const pictureInPictureAvailable = typeof document !== 'undefined' && (document.pictureInPictureEnabled === true
   || (typeof HTMLVideoElement !== 'undefined' && 'webkitSetPresentationMode' in HTMLVideoElement.prototype))
 
-export function MediaStage({ item, reels = false, muted = false, suspended = false, loop = false, autoPlay = false, direction = 'next', optionsOpen: controlledOptionsOpen, onOptionsOpenChange, onEnded, onNavigate, fullscreenRoot, onOpenViewer, onLike, onDislike }: {
-  item: Media; reels?: boolean; muted?: boolean; suspended?: boolean; loop?: boolean; autoPlay?: boolean; direction?: 'next' | 'previous'; optionsOpen?: boolean; onOptionsOpenChange?: (open: boolean) => void; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>; onOpenViewer?: (item: Media) => void; onLike?: () => void; onDislike?: () => void
+export function MediaStage({ item, reels = false, muted = false, suspended = false, loop = false, autoPlay = false, direction = 'next', optionsOpen: controlledOptionsOpen, onOptionsOpenChange, onEnded, onNavigate, fullscreenRoot, onOpenViewer, onLike, onDislike, onMutedChange }: {
+  item: Media; reels?: boolean; muted?: boolean; suspended?: boolean; loop?: boolean; autoPlay?: boolean; direction?: 'next' | 'previous'; optionsOpen?: boolean; onOptionsOpenChange?: (open: boolean) => void; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>; onOpenViewer?: (item: Media) => void; onLike?: () => void; onDislike?: () => void; onMutedChange?: (value: boolean) => void
 }) {
   const isFullscreen = useFullscreen()
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
+  const watch = useWatchProgress(item, video, reels || autoPlay)
+  const volumeSwipe = useRef<{ y: number; volume: number; active: boolean } | null>(null)
+  const [volumeOverlay, setVolumeOverlay] = useState(false)
+  const volumeTimer = useRef(0)
+  const pinch = useRef<{ distance: number; zoom: number; x: number; y: number; pan: { x: number; y: number } } | null>(null)
+  const photoTap = useRef(0)
+  const zoomRef = useRef(1)
+  const panRef = useRef({ x: 0, y: 0 })
   const seekStrip = useRef<HTMLDivElement>(null)
   const resumePlayback = useRef(false)
   const playbackSuspended = useRef(suspended)
@@ -38,7 +47,6 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
   const navigateRef = useRef(onNavigate)
   navigateRef.current = onNavigate
   const pointers = useRef(new Map<number, { x: number; y: number }>())
-  const touchStart = useRef({ x: 0, y: 0, multiple: false })
   const lastWheel = useRef(0)
   const gesture = useRef({ x: 0, y: 0, distance: 0 })
   const seekTimer = useRef(0)
@@ -84,12 +92,20 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
   useLayoutEffect(() => {
     setZoom(1); setRotation(0); setPan({ x: 0, y: 0 }); setOriginalId(null); setFailure('')
     setPlaying(false); setSeekVisible(false); setBurst(null); setBuffering(false); setBoosted(false); setSkip(null); setFlash(null)
-    pointers.current.clear(); lastTap.current = 0; centreTaps.current = 0; lastWheel.current = 0; holding.current = false
+    pointers.current.clear(); pinch.current = null; volumeSwipe.current = null; photoTap.current = 0; zoomRef.current = 1; panRef.current = { x: 0, y: 0 }; lastTap.current = 0; centreTaps.current = 0; lastWheel.current = 0; holding.current = false
     flushLike()
     window.clearTimeout(seekTimer.current); window.clearTimeout(tapTimer.current); window.clearTimeout(holdTimer.current); window.clearTimeout(bufferTimer.current)
   }, [item.id])
   const displayFill = fill
-  function scale(value: number) { setZoom(Math.max(0.1, Math.min(8, value))); if (value <= 1) setPan({ x: 0, y: 0 }) }
+  zoomRef.current = zoom
+  panRef.current = pan
+  function boundedPan(value: { x: number; y: number }, level: number) {
+    const bounds = host.current?.getBoundingClientRect()
+    if (!bounds) return
+    const next = { x: Math.max(-bounds.width * (level - 1) / 2, Math.min(bounds.width * (level - 1) / 2, value.x)), y: Math.max(-bounds.height * (level - 1) / 2, Math.min(bounds.height * (level - 1) / 2, value.y)) }
+    panRef.current = next; setPan(next)
+  }
+  function scale(value: number) { setZoom(Math.max(1, Math.min(8, value))); if (value <= 1) setPan({ x: 0, y: 0 }) }
   function toggleFill() {
     setFill(value => {
       const next = !value
@@ -98,7 +114,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
     })
     scale(1)
   }
-  function actualSize() { setOriginalId(item.id); setFill(false); setPan({ x: 0, y: 0 }); const bounds = host.current?.getBoundingClientRect(); if (bounds && item.width && item.height) setZoom(Math.max(item.width / bounds.width, item.height / bounds.height)) }
+  function actualSize() { setOriginalId(item.id); setFill(false); setPan({ x: 0, y: 0 }); const bounds = host.current?.getBoundingClientRect(); if (bounds && item.width && item.height) scale(Math.max(item.width / bounds.width, item.height / bounds.height)) }
   async function fullscreen() {
     const target = fullscreenRoot?.current ?? host.current
     const player = video.current as WebkitVideo | null
@@ -135,7 +151,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
     player.currentTime = Math.max(0, Math.min(end, player.currentTime + seconds))
     setSkip({ forward: seconds > 0, key: Date.now() })
   }
-  function changeVolume(value: number) { setVolume(value); setViewerMuted(false); if (video.current) video.current.volume = value }
+  function changeVolume(value: number) { value = Math.max(0, Math.min(1, value)); setVolume(value); setViewerMuted(false); if (reels) onMutedChange?.(value === 0); if (video.current) video.current.volume = value }
   function toggleMute() { setViewerMuted(!(viewerMuted || volume === 0)); if (volume === 0) changeVolume(1) }
   function cycleRate() { const rates = [1, 1.5, 2, 0.5]; const next = rates[(rates.indexOf(rate) + 1) % rates.length]; if (video.current) video.current.playbackRate = next; setRate(next) }
   function revealSeek() {
@@ -203,6 +219,10 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
   function pointerUp(event: React.PointerEvent<HTMLDivElement>) {
     if (!pointers.current.has(event.pointerId)) return
     pointers.current.delete(event.pointerId)
+    const swiping = volumeSwipe.current?.active
+    volumeSwipe.current = null
+    if (swiping) { heldGesture.current = true; endHold(); return }
+    if (pinch.current) { if (!pointers.current.size) pinch.current = null; return }
     if (holding.current) { endHold(); return }
     endHold()
     const dx = event.clientX - gesture.current.x
@@ -210,9 +230,17 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
     const along = reels ? dy : dx
     const across = reels ? dx : dy
     if (zoom === 1 && !gesture.current.distance && Math.abs(along) > 60 && Math.abs(along) > Math.abs(across)) onNavigate(along < 0 ? 'next' : 'previous')
+    else if (!gesture.current.distance && !isVideo && Math.hypot(dx, dy) < 10) {
+      const now = Date.now()
+      if (now - photoTap.current < doubleTapMs) {
+        if (zoomRef.current > 1) { scale(1); zoomRef.current = 1; panRef.current = { x: 0, y: 0 } }
+        else { const bounds = event.currentTarget.getBoundingClientRect(); const value = 2.5; scale(value); zoomRef.current = value; const next = { x: -(event.clientX - bounds.left - bounds.width / 2) * (value - 1), y: -(event.clientY - bounds.top - bounds.height / 2) * (value - 1) }; setPan(next); panRef.current = next }
+        photoTap.current = 0
+      } else photoTap.current = now
+    }
     else if ((reels || isVideo) && !gesture.current.distance && Math.hypot(dx, dy) < 10) tap(event)
   }
-  useEffect(() => () => { flushLike(); window.clearTimeout(seekTimer.current); window.clearTimeout(tapTimer.current); window.clearTimeout(holdTimer.current); window.clearTimeout(bufferTimer.current) }, [])
+  useEffect(() => () => { flushLike(); window.clearTimeout(seekTimer.current); window.clearTimeout(tapTimer.current); window.clearTimeout(holdTimer.current); window.clearTimeout(bufferTimer.current); window.clearTimeout(volumeTimer.current) }, [])
   useEffect(() => {
     if (!skip && !flash) return
     const timer = window.setTimeout(() => { setSkip(null); setFlash(null) }, 600)
@@ -295,13 +323,18 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
   return <div className="relative flex h-full min-h-0 w-full flex-col">
     <div ref={host} className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden bg-black ${chromeHidden ? 'cursor-none' : ''}`}
       onWheel={event => { if (reels && Math.abs(event.deltaY) > 40 && Date.now() - lastWheel.current > 500) { lastWheel.current = Date.now(); onNavigate(event.deltaY > 0 ? 'next' : 'previous') } else if (!reels && item.mediaType === 'image') scale(zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1)) }}
-      onTouchStart={event => { if (!isVideo) return; heldGesture.current = false; const touch = event.touches[0]; touchStart.current = { x: touch.clientX, y: touch.clientY, multiple: event.touches.length > 1 } }}
-      onTouchEnd={event => { if (!isVideo || touchStart.current.multiple || heldGesture.current) return; const touch = event.changedTouches[0]; const dx = touch.clientX - touchStart.current.x; const dy = touch.clientY - touchStart.current.y; if (Math.abs(reels ? dy : dx) > 60 && Math.abs(reels ? dy : dx) > Math.abs(reels ? dx : dy)) onNavigate((reels ? dy : dx) < 0 ? 'next' : 'previous') }}
       onContextMenu={event => { if (holding.current || holdArmed.current) event.preventDefault() }}
       onPointerDown={event => {
         if ((event.target as HTMLElement).closest('button,a,input,select,video')) return
         chromeWasHidden.current = chromeHidden
         event.currentTarget.setPointerCapture(event.pointerId); pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); gesture.current = { x: event.clientX, y: event.clientY, distance: 0 }
+        const bounds = event.currentTarget.getBoundingClientRect()
+        if (isVideo && !reels && pointers.current.size === 1 && event.clientX > bounds.left + bounds.width * 0.75 && event.clientY < bounds.bottom - seekStripHeight) volumeSwipe.current = { y: event.clientY, volume, active: false }
+        if (!isVideo && pointers.current.size === 2) {
+          const points = [...pointers.current.values()]
+          pinch.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), zoom: zoomRef.current, x: (points[0].x + points[1].x) / 2 - bounds.left - bounds.width / 2, y: (points[0].y + points[1].y) / 2 - bounds.top - bounds.height / 2, pan: panRef.current }
+          gesture.current.distance = pinch.current.distance
+        }
         window.clearTimeout(holdTimer.current)
         if (isVideo && event.button === 0 && pointers.current.size === 1) {
           heldGesture.current = false; holdArmed.current = true
@@ -313,9 +346,34 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
           }, holdMs)
         }
       }}
-      onPointerMove={event => { const old = pointers.current.get(event.pointerId); if (!old) return; if (Math.hypot(event.clientX - gesture.current.x, event.clientY - gesture.current.y) > 10) window.clearTimeout(holdTimer.current); pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); const points = [...pointers.current.values()]; if (points.length === 2) { window.clearTimeout(holdTimer.current); const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); if (gesture.current.distance) scale(zoom * distance / gesture.current.distance); gesture.current.distance = distance } else if (zoom > 1) setPan(value => ({ x: value.x + event.clientX - old.x, y: value.y + event.clientY - old.y })) }}
+      onPointerMove={event => {
+        const old = pointers.current.get(event.pointerId); if (!old) return
+        const dx = event.clientX - gesture.current.x; const dy = event.clientY - gesture.current.y
+        if (Math.hypot(dx, dy) > 10) { window.clearTimeout(holdTimer.current); endHold() }
+        pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) && !volumeSwipe.current?.active) volumeSwipe.current = null
+        if (Math.hypot(dx, dy) > 10) photoTap.current = 0
+        const swipe = volumeSwipe.current
+        if (isVideo && swipe && (swipe.active || Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx))) {
+          swipe.active = true; heldGesture.current = true
+          changeVolume(swipe.volume + (swipe.y - event.clientY) / Math.max(160, event.currentTarget.clientHeight * 0.6))
+          if (video.current) video.current.muted = false
+          setVolumeOverlay(true); window.clearTimeout(volumeTimer.current); volumeTimer.current = window.setTimeout(() => setVolumeOverlay(false), 1000)
+          return
+        }
+        const points = [...pointers.current.values()]
+        const start = pinch.current
+        if (!isVideo && points.length === 2 && start) {
+          const bounds = event.currentTarget.getBoundingClientRect()
+          const nextZoom = Math.max(1, Math.min(8, start.zoom * Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) / Math.max(1, start.distance)))
+          const ratio = nextZoom / start.zoom
+          const next = { x: (points[0].x + points[1].x) / 2 - bounds.left - bounds.width / 2 - (start.x - start.pan.x) * ratio, y: (points[0].y + points[1].y) / 2 - bounds.top - bounds.height / 2 - (start.y - start.pan.y) * ratio }
+          setZoom(nextZoom); zoomRef.current = nextZoom
+          boundedPan(next, nextZoom)
+        } else if (!isVideo && zoomRef.current > 1) boundedPan({ x: panRef.current.x + event.clientX - old.x, y: panRef.current.y + event.clientY - old.y }, zoomRef.current)
+      }}
       onPointerUp={pointerUp}
-      onPointerCancel={() => { pointers.current.clear(); endHold() }}>
+      onPointerCancel={() => { pointers.current.clear(); pinch.current = null; volumeSwipe.current = null; endHold() }}>
       {/* Personal source videos have no generated caption tracks; preserve native playback capabilities. */}
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       {isVideo ? <video key={item.id} data-axis={reels ? 'vertical' : 'horizontal'} data-direction={direction} aria-label={item.fileName} ref={video} src={originalUrl} poster={item.preview.status === 'ready' ? item.preview.url : undefined} playsInline loop={loop} muted={reels ? muted : viewerMuted || volume === 0} controls={false} preload="auto"
@@ -323,6 +381,8 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         onWaiting={waiting} onSeeking={waiting} onSeeked={() => { ready(); syncSession() }} onCanPlay={ready} onDurationChange={syncSession} onRateChange={syncSession}
         onPlaying={() => { ready(); if (!video.current?.error) setFailure('') }} onError={() => { ready(); setFailure('This video could not play. Copy its stream URL and open it in an external player such as VLC.') }}
         className={`motion-media pointer-events-none h-full w-full ${displayFill ? 'object-cover' : 'object-contain'}`} /> : <div key={item.id} data-axis={reels ? 'vertical' : 'horizontal'} data-direction={direction} className="motion-media flex h-full w-full items-center justify-center"><div className="flex h-full w-full items-center justify-center" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)` }}><CachedImage url={original || animated ? originalUrl : item.preview.url} status={original || animated ? 'ready' : item.preview.status} alt={item.fileName} preview className={`h-full w-full select-none ${displayFill ? 'object-cover' : 'object-contain'}`} /></div></div>}
+      {isVideo && volumeOverlay && <span role="status" className="pointer-events-none absolute right-8 top-1/2 rounded-lg bg-canvas/85 px-4 py-3 text-ink">Volume {Math.round(volume * 100)}%</span>}
+      {isVideo && watch.resume !== null && <div data-chrome className="absolute top-16 flex flex-wrap gap-3 rounded-lg bg-canvas/90 p-3"><QuietButton onClick={() => watch.choose(false)}>Resume from {formatTime(watch.resume)}</QuietButton><QuietButton onClick={() => watch.choose(true)}>Start from beginning</QuietButton></div>}
       {isVideo && buffering && <div className="pointer-events-none absolute flex size-16 items-center justify-center rounded-full bg-canvas/60" data-testid="buffering"><LoaderCircle aria-hidden="true" className="size-8 text-ink motion-safe:animate-spin" /><span className="sr-only">Buffering</span></div>}
       {isVideo && reels && !playing && !buffering && <IconButton label="Play video" className="absolute border-transparent bg-canvas/85" onClick={togglePlay}><Play className="size-6" /></IconButton>}
       {flash && <span key={flash.key} aria-hidden="true" className="motion-flash pointer-events-none absolute flex size-16 items-center justify-center rounded-full bg-canvas/60 text-ink">{flash.playing ? <Play className="size-7" /> : <Pause className="size-7" />}</span>}
@@ -335,7 +395,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
           like the persistent Liked heart elsewhere would if it needed the same emphasis. */}
       {burst && !burst.dislike && <Heart key={burst.key} aria-hidden="true" onAnimationEnd={() => setBurst(null)} className="motion-like pointer-events-none absolute size-24 fill-red-500 text-red-500" />}
       {burst?.dislike && <HeartCrack key={burst.key} aria-hidden="true" onAnimationEnd={() => setBurst(null)} className="motion-like pointer-events-none absolute size-24 text-red-500" />}
-      {!isFullscreen && controlledOptionsOpen === undefined && <IconButton label="More options" className={`absolute right-3 border-transparent bg-canvas/85 sm:right-5 ${reels ? 'bottom-32 md:bottom-16' : 'top-28'}`} onClick={() => setOptionsOpen(true)}><EllipsisVertical className="size-5" /></IconButton>}
+      {!isFullscreen && controlledOptionsOpen === undefined && <IconButton label="More options" className={`absolute right-3 border-transparent bg-canvas/85 sm:right-5 ${reels ? 'bottom-16' : 'top-28'}`} onClick={() => setOptionsOpen(true)}><EllipsisVertical className="size-5" /></IconButton>}
       {/* Fullscreen hides the page chrome, including Back; a visible exit is always offered. */}
       {exitVisible && <IconButton data-chrome label="Exit fullscreen" className={`absolute right-3 top-3 z-10 border-transparent bg-canvas/85 transition-opacity duration-200 sm:right-5 sm:top-5 ${chromeHidden ? 'pointer-events-none opacity-0' : ''}`} onClick={() => void fullscreen()}><Minimize className="size-5" /></IconButton>}
       {/* Reels has no chrome to carry a small status strip: a failed item must stay
@@ -348,6 +408,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         <QuietButton onClick={() => { toggleFill() }}>{fill ? 'Fit' : 'Fill'}</QuietButton>
         {item.mediaType === 'image' && <><QuietButton aria-label="Zoom out" onClick={() => scale(zoom / 1.25)}>−</QuietButton><QuietButton aria-label="Reset zoom" onClick={() => scale(1)}>{Math.round(zoom * 100)}%</QuietButton><QuietButton aria-label="Zoom in" onClick={() => scale(zoom * 1.25)}>+</QuietButton><QuietButton onClick={actualSize}>Actual size</QuietButton><QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>Rotate</QuietButton></>}
         {reels && onOpenViewer && <QuietButton onClick={() => { const player = video.current; if (player) { resumePlayback.current ||= !player.paused; player.pause() }; onOpenViewer(item); setOptionsOpen(false) }}>Open in viewer</QuietButton>}
+        {isVideo && reels && <Field label="Volume"><Range min={0} max={1} step={0.05} value={volume} className="w-32" onChange={event => changeVolume(Number(event.target.value))} /></Field>}
         {isVideo && <div className="w-32 shrink-0"><Select aria-label="Playback speed" value={rate} onChange={event => { const value = Number(event.target.value); setRate(value); if (video.current) video.current.playbackRate = value }}><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></Select></div>}
         {isVideo && pictureInPictureAvailable && <QuietButton onClick={() => { void pictureInPicture(); setOptionsOpen(false) }}><PictureInPicture2 className="size-4" />Picture in picture</QuietButton>}
         <QuietButton onClick={() => { void fullscreen(); setOptionsOpen(false) }}><Maximize className="size-4" />Fullscreen</QuietButton>

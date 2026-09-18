@@ -77,7 +77,7 @@ it('retains only current query data and one nearby preview during sequential bro
       await waitFor(() => expect(screen.getByLabelText(items[index + 1].fileName)).toBeVisible())
       expect(document.querySelectorAll('video')).toHaveLength(1)
     }
-    await waitFor(() => expect(client.getQueryCache().getAll().length).toBeLessThanOrEqual(3))
+    await waitFor(() => expect(client.getQueryCache().getAll().length).toBeLessThanOrEqual(4))
     expect(preloads.filter(image => image.hasAttribute('src'))).toHaveLength(1)
     unmount()
     expect(preloads.filter(image => image.hasAttribute('src'))).toHaveLength(0)

@@ -19,7 +19,14 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
-        if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested) return false;
+        // sqlite3_interrupt reports SQLITE_INTERRUPT rather than OperationCanceledException.
+        // Only classify it as cancellation when the HTTP request was actually aborted.
+        if ((context.RequestAborted.IsCancellationRequested || cancellationToken.IsCancellationRequested) &&
+            exception is OperationCanceledException or SqliteException { SqliteErrorCode: 9 })
+        {
+            context.Response.StatusCode = 499;
+            return true;
+        }
         if (exception is ApiRequestException request)
         {
             if (request.Code == "cache_unavailable") context.Response.Headers.RetryAfter = "30";

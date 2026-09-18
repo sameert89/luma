@@ -8,8 +8,8 @@ import { errorMessage, isGif, mediaPage, type Filters, type Media } from './api'
 import { useFolderIndexing } from './useFolderIndexing'
 import { usePreviewPriority } from './usePreviewPriority'
 
-export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent }: {
-  filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode
+export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent, scopePending = false, scopeError }: {
+  filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode; scopePending?: boolean; scopeError?: Error | null
 }) {
   const indexing = useFolderIndexing(filters.folderId)
   const query = useInfiniteQuery({ queryKey: ['media', filters], queryFn: ({ pageParam, signal }) => mediaPage(filters, pageParam, signal),
@@ -83,10 +83,11 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
     <div ref={gridRef} className="w-full">
       <div ref={leadingRef}>{leadingContent}</div>
       {indexing.waiting && <p role="status" className="flex items-center gap-2 pb-3 text-sm text-muted"><LoaderCircle className="size-4 motion-safe:animate-spin" />Checking this folder and preparing previews…</p>}
+      {scopeError && <p role="alert" className="pb-3 text-sm text-danger">{errorMessage(scopeError)}</p>}
       {indexing.error && <p role="alert" className="pb-3 text-sm text-danger">{errorMessage(indexing.error)}</p>}
-      {query.isPending && <div role="status" className="flex items-center justify-center gap-3 py-20 text-muted"><LoaderCircle className="size-5 animate-spin" />Loading your collection…</div>}
+      {(query.isPending || (query.isFetching || scopePending) && !items.length) && <div role="status" className="flex items-center justify-center gap-3 py-20 text-muted"><LoaderCircle className="size-5 animate-spin" />Loading your collection…</div>}
       {query.isError && <div role="alert" className="space-y-3 p-5 text-danger"><p>{errorMessage(query.error)}</p><QuietButton onClick={() => void query.refetch()}>Try again</QuietButton></div>}
-      {!query.isPending && !query.isError && items.length === 0 && !leadingContent && <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center"><Images className="size-12 text-muted" /><h2 className="text-xl font-semibold">No media to show</h2><p className="text-sm leading-relaxed text-muted">Try another folder or adjust your filters. If this is a new library, start a scan to add your photos and videos.</p></div>}
+      {query.isSuccess && !query.isFetching && !indexing.waiting && !indexing.error && !scopePending && !scopeError && items.length === 0 && !leadingContent && <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center"><Images className="size-12 text-muted" /><h2 className="text-xl font-semibold">No media to show</h2><p className="text-sm leading-relaxed text-muted">Try another folder or adjust your filters. If this is a new library, start a scan to add your photos and videos.</p></div>}
       {query.hasPreviousPage && <QuietButton className="sr-only focus:not-sr-only focus:absolute focus:z-10" onClick={() => void load(true)} disabled={query.isFetching}>Load earlier items</QuietButton>}
       <div className="relative" style={{ height: virtual.getTotalSize() }} data-testid="gallery-grid" data-retained-items={items.length}>
         {visible.map(row => <div key={row.index} className="absolute left-0 top-0 w-full pb-3" style={{ height: row.size, transform: `translateY(${row.start - leadingHeight}px)` }}>
@@ -97,6 +98,7 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
               <CachedImage key={`${item.thumbnail.url}:${item.thumbnail.status}`} url={item.thumbnail.url} status={item.thumbnail.status} alt="" className="aspect-square w-full bg-surface object-cover" />
               <span className="block truncate px-1 py-2 text-xs text-muted">{item.fileName}</span>
             </button>
+            {item.mediaType === 'video' && item.watchProgress && item.watchProgress.state !== 'unwatched' && <span aria-label={item.watchProgress.state === 'completed' ? 'Watched' : 'In progress'} className="pointer-events-none absolute bottom-9 left-0 h-1 bg-accent" style={{ width: `${item.watchProgress.state === 'completed' ? 100 : Math.min(100, item.watchProgress.positionSeconds / item.watchProgress.durationSeconds * 100)}%` }} />}
             {item.mediaType === 'video' && <span className="pointer-events-none absolute bottom-10 right-2 flex items-center gap-1 rounded bg-canvas/90 px-2 py-1 text-xs"><Film className="size-3" aria-hidden="true" />Video</span>}
             {isGif(item) && <span className="pointer-events-none absolute bottom-10 right-2 rounded bg-canvas/90 px-2 py-1 text-xs font-semibold">GIF</span>}
             {item.preference === 'liked' && <Heart className="pointer-events-none absolute right-2 top-2 size-4 fill-accent text-accent" aria-label="Liked" />}

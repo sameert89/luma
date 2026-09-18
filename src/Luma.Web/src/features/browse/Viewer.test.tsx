@@ -16,7 +16,7 @@ it('offers only the two explicit cover actions only inside media details', async
     if (init?.method === 'PUT') return Promise.resolve(new Response(null, { status: 204 }))
     const data = url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 10 }]
       : url.includes('/neighbors?') ? { previous: null, next: null } : media
-    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
   })
   vi.stubGlobal('fetch', fetch)
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
@@ -52,8 +52,8 @@ it('runs a slideshow at the chosen pace, preloads the next slide and stops at th
   const items = [photo(1), photo(2)]
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
-    const data = url === '/api/libraries' ? [] : url.includes('/neighbors?') ? { previous: items[id - 2] ?? null, next: items[id] ?? null } : items[id - 1]
-    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    const data = url === '/api/tasks' || url === '/api/libraries' ? [] : url.includes('/neighbors?') ? { previous: items[id - 2] ?? null, next: items[id] ?? null } : items[id - 1]
+    return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
   }))
   const preloads: HTMLImageElement[] = []
   vi.stubGlobal('Image', function () { const image = document.createElement('img'); preloads.push(image); return image })
@@ -83,7 +83,7 @@ it('offers Watch on Reels for videos and GIFs', async () => {
   const gif = { id: 9, libraryId: 1, folderId: 3, fileName: 'loop.gif', mediaType: 'image', extension: '.gif', availability: 'present', preference: 'neutral',
     modifiedAt: '2026-01-01T00:00:00Z', effectiveDate: '2026-01-01T00:00:00Z', capturedAt: null, width: null, height: null, durationMs: null,
     sizeBytes: 100, tags: [], thumbnail: { status: 'ready', url: '/thumb', width: null, height: null }, preview: { status: 'ready', url: '/preview', width: null, height: null } } as Media
-  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/libraries' ? [] : url.includes('/neighbors?') ? { previous: null, next: null } : gif), { headers: { 'Content-Type': 'application/json' } }))))
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' || url === '/api/libraries' ? [] : url.includes('/neighbors?') ? { previous: null, next: null } : gif), { headers: { 'Content-Type': 'application/json' } }))))
   const onWatchReels = vi.fn()
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
     <Viewer active={gif} filters={{}} onChange={vi.fn()} onClose={vi.fn()} onWatchReels={onWatchReels} restoreFocus={vi.fn()} />
@@ -97,7 +97,7 @@ it('keeps rating and a bottom menu with navigation in one row, and shows dislike
   const photo = { id: 5, libraryId: 1, folderId: 3, fileName: 'photo.jpg', mediaType: 'image', extension: '.jpg', availability: 'present', preference: 'disliked',
     modifiedAt: '2026-01-01T00:00:00Z', effectiveDate: '2026-01-01T00:00:00Z', capturedAt: null, width: null, height: null, durationMs: null,
     sizeBytes: 100, tags: [], thumbnail: { status: 'ready', url: '/thumb', width: null, height: null }, preview: { status: 'ready', url: '/preview', width: null, height: null } } as Media
-  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/libraries' ? [] : url.includes('/neighbors?') ? { previous: null, next: null } : photo), { headers: { 'Content-Type': 'application/json' } }))))
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' || url === '/api/libraries' ? [] : url.includes('/neighbors?') ? { previous: null, next: null } : photo), { headers: { 'Content-Type': 'application/json' } }))))
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
     <Viewer active={photo} filters={{}} onChange={vi.fn()} onClose={vi.fn()} restoreFocus={vi.fn()} />
   </QueryClientProvider>)

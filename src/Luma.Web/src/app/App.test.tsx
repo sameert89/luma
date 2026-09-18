@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
@@ -11,7 +11,7 @@ function renderApp() {
   return render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
 }
 function emptyApi() {
-  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url.startsWith('/api/libraries') ? [] : { items: [], nextCursor: null, previousCursor: null }), { headers: { 'Content-Type': 'application/json' } }))))
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' || url.startsWith('/api/libraries') ? [] : { items: [], nextCursor: null, previousCursor: null }), { headers: { 'Content-Type': 'application/json' } }))))
 }
 function browsingApi() {
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -19,7 +19,7 @@ function browsingApi() {
     const data = url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
       : url.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
         : url.startsWith('/api/indexing') ? { libraries: [] } : { items: [], nextCursor: null, previousCursor: null }
-    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
   }))
 }
 
@@ -58,14 +58,18 @@ describe('browsing shell', () => {
     await screen.findByRole('heading', { name: 'Trips' })
     expect(screen.queryByRole('combobox', { name: 'Sort media' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Import folder metadata' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Folder actions for Trips' }))
     await userEvent.click(screen.getByRole('button', { name: 'Select media' }))
-    expect(screen.getByRole('button', { name: 'Done selecting' }).querySelector('svg')).toHaveClass('lucide-x')
+    await userEvent.click(screen.getByRole('button', { name: 'Folder actions for Trips' }))
+    expect(screen.getByRole('button', { name: 'Done selecting' })).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Done selecting' }))
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     expect(screen.queryByRole('textbox', { name: 'Keyword' })).not.toBeInTheDocument()
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'name')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort direction' }), 'asc')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(window.location.search).toContain('sort=name')
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith('/api/folders?') && new URL(String(url), window.location.href).searchParams.get('order') === 'asc')).toBe(true))
     expect(window.location.search).toContain('folderId=2')
     expect(screen.getAllByRole('button', { name: 'Library' })[0]).toHaveAttribute('aria-current', 'page')
     expect(screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))).not.toHaveAttribute('aria-current', 'page')
@@ -75,7 +79,7 @@ describe('browsing shell', () => {
     expect(screen.getByRole('dialog', { name: 'Folder information' })).toHaveTextContent('Photos')
   })
 
-  it('shows all matching media when sorting an empty search and preserves the keyword when resetting filters', async () => {
+  it('shows all matching media when sorting an empty search and clears the keyword when resetting filters', async () => {
     browsingApi()
     renderApp()
     await userEvent.click(screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))!)
@@ -88,8 +92,8 @@ describe('browsing shell', () => {
     await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'Beach{Enter}')
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     await userEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
-    expect(window.location.search).toBe('?q=Beach')
-    expect(screen.getByRole('textbox', { name: 'Search media' })).toHaveValue('Beach')
+    expect(window.location.search).toBe('')
+    expect(screen.getByRole('textbox', { name: 'Search media' })).toHaveValue('')
   })
 
   it('opens a child folder menu without navigating and imports that folder rather than the parent', async () => {
@@ -102,7 +106,7 @@ describe('browsing shell', () => {
           : url === '/api/imports/tags' ? { id: 9 }
             : url === '/api/jobs/9' ? { id: 9, state: 'completed', processed: 1, failed: 0, items: [] }
               : url === '/api/indexing' ? { libraries: [] } : { items: [] }
-      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     }))
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
     await userEvent.click(await screen.findByRole('button', { name: `Folder actions for ${name}` }))
@@ -166,7 +170,7 @@ describe('browsing shell', () => {
             : url.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
               : url.startsWith('/api/indexing') ? { libraries: [] }
                 : { items: [], nextCursor: null, previousCursor: null }
-      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
@@ -182,7 +186,7 @@ describe('browsing shell', () => {
   })
 
   it('shows libraries on home without fetching the combined media feed', async () => {
-    const fetch = vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/libraries'
+    const fetch = vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : url === '/api/libraries'
       ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
       : { libraries: [] }), { headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetch)
@@ -213,7 +217,7 @@ describe('browsing shell', () => {
     expect(window.location.search).toContain('q=Summer')
     expect(window.location.search).toContain('preference=liked')
   })
-  it('opens reels as a global feed of videos and GIFs instead of the current folder', async () => {
+  it('opens reels with the current folder represented by visible filters', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
     const clip = { id: 10, libraryId: 1, folderId: 2, fileName: 'clip.mp4', mediaType: 'video', extension: '.mp4', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preview: { status: 'pending' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
     const fetch = vi.fn().mockImplementation((url: string) => {
@@ -224,7 +228,7 @@ describe('browsing shell', () => {
         : text.includes('/neighbors?') ? { previous: null, next: null }
             : /\/api\/media\/\d+$/.test(text) ? clip
               : { items: [clip], nextCursor: null, previousCursor: null }
-      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
     localStorage.clear()
@@ -235,11 +239,11 @@ describe('browsing shell', () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
 
-    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/media?') && String(url).includes('mediaType=motion') && !String(url).includes('folderId=2') && !String(url).includes('libraryId=1'))).toBe(true))
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/media?') && String(url).includes('mediaType=motion') && String(url).includes('folderId=2') && String(url).includes('libraryId=1'))).toBe(true))
     expect(window.location.search).toContain('mediaType=motion')
-    expect(window.location.search).not.toContain('folderId=2')
+    expect(window.location.search).toContain('folderId=2')
   })
-  it('clears the reels media filter when opening search', async () => {
+  it('keeps the visible reels media filter when opening search, until explicitly cleared', async () => {
     const fetch = vi.fn().mockImplementation((url: string) => {
       const text = String(url)
       const data = text.startsWith('/api/libraries')
@@ -248,17 +252,19 @@ describe('browsing shell', () => {
           ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
           : text.includes('/neighbors?') ? { previous: null, next: null }
             : { items: [], nextCursor: null, previousCursor: null }
-      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
     renderApp()
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
     expect(window.location.search).toContain('mediaType=motion')
     await userEvent.click((await screen.findAllByRole('button', { name: 'Search' })).find(button => button.textContent?.includes('Search'))!)
+    expect(window.location.search).toContain('mediaType=motion')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all filters' }))
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
     expect(window.location.search).not.toContain('mediaType=motion')
   })
-  it('never lets reels change the folder library returns to', async () => {
+  it('carries visible folder and media filters across gallery and reels', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
     const clip = { id: 10, libraryId: 1, folderId: 2, fileName: 'clip.mp4', mediaType: 'video', extension: '.mp4', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preview: { status: 'pending' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
     const fetch = vi.fn().mockImplementation((url: string) => {
@@ -269,7 +275,7 @@ describe('browsing shell', () => {
         : text.includes('/neighbors?') ? { previous: null, next: null }
             : /\/api\/media\/\d+$/.test(text) ? clip
               : { items: [clip], nextCursor: null, previousCursor: null }
-      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
     localStorage.clear()
@@ -280,13 +286,13 @@ describe('browsing shell', () => {
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
     await waitFor(() => expect(window.location.search).toContain('mediaType=motion'))
-    // Sanity: entering Reels really did drop the folder scope, so restoring it below proves the fix.
-    expect(window.location.search).not.toContain('folderId=2')
+    // Switching presentation preserves the visible query scope.
+    expect(window.location.search).toContain('folderId=2')
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
     expect(window.location.search).toContain('libraryId=1')
     expect(window.location.search).toContain('folderId=2')
-    expect(window.location.search).not.toContain('mediaType=motion')
+    expect(window.location.search).toContain('mediaType=motion')
   })
   it('starts a slideshow from the gallery and hands a video over to reels in the same folder', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
@@ -299,7 +305,7 @@ describe('browsing shell', () => {
         : text.includes('/neighbors?') ? { previous: null, next: null }
             : /\/api\/media\/\d+$/.test(text) ? clip
               : { items: [clip], nextCursor: null, previousCursor: null }
-      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
     localStorage.clear()
@@ -308,20 +314,22 @@ describe('browsing shell', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
     try {
       render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
-      await userEvent.click(await screen.findByRole('button', { name: 'Start slideshow' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Folder actions for Trips' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Start slideshow' }))
       expect(await screen.findByRole('button', { name: 'Slideshow' })).toHaveAttribute('aria-pressed', 'true')
       // A slideshow plays videos through rather than waiting for a Play press.
       await waitFor(() => expect(play).toHaveBeenCalled())
 
       await userEvent.click(screen.getByRole('button', { name: 'Watch on Reels' }))
-      await waitFor(() => expect(window.location.search).toContain('mediaType=motion'))
+      await waitFor(() => expect(window.location.search).toContain('view=reels'))
+      expect(window.location.search).not.toContain('mediaType=')
       expect(window.location.search).toContain('folderId=2')
       expect(await screen.findByRole('region', { name: 'Reels' })).toBeVisible()
       expect(await screen.findByLabelText('clip.mp4')).toBeInTheDocument()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     } finally { vi.restoreAllMocks() }
   })
-  it('restores the filters last used in reels when returning to it', async () => {
+  it('carries the current visible search and filters into reels', async () => {
     const photo = { id: 7, libraryId: 1, folderId: 1, fileName: 'beach.jpg', mediaType: 'image', extension: '.jpg', sizeBytes: 10, modifiedAt: '2026-01-01T00:00:00Z', preference: 'neutral', thumbnail: { status: 'ready', url: '/thumb.jpg' }, preview: { status: 'ready', url: '/preview.jpg' }, tags: [] }
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
       const text = String(url)
@@ -330,7 +338,7 @@ describe('browsing shell', () => {
           : text.includes('/neighbors?') ? { previous: null, next: null }
             : /\/api\/media\/\d+$/.test(text) ? photo
               : { items: [photo], nextCursor: null, previousCursor: null }
-      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     }))
     renderApp()
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
@@ -348,7 +356,7 @@ describe('browsing shell', () => {
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
     expect(window.location.search).toContain('mediaType=image')
     expect(window.location.search).toContain('preference=liked')
-    expect(window.location.search).not.toContain('q=beach')
+    expect(window.location.search).toContain('q=beach')
   })
   it('does not show a random feed on the empty search destination', async () => {
     const fetch = vi.fn().mockImplementation((url: string) => {
@@ -358,7 +366,7 @@ describe('browsing shell', () => {
         : text.startsWith('/api/indexing')
           ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
           : { items: [], nextCursor: null, previousCursor: null }
-      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
     renderApp()
@@ -367,4 +375,193 @@ describe('browsing shell', () => {
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
     expect(screen.queryByTestId('gallery-scroll')).not.toBeInTheDocument()
   })
+})
+
+it('restores the open file and query from a refreshed URL and clears only the file when closing', async () => {
+  window.history.replaceState(null, '', '/?libraryId=1&folderId=2&tag=Trips&media=9')
+  localStorage.clear()
+  const photo = { id: 9, libraryId: 1, folderId: 2, fileName: 'selected.jpg', mediaType: 'image', extension: '.jpg', preference: 'neutral', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preview: { status: 'ready', url: '/selected.jpg' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+    const data = url === '/api/tasks' ? [] : url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }] : url === '/api/media/9' ? photo : url.includes('/neighbors?') ? { previous: null, next: null } : url.startsWith('/api/indexing') ? { libraries: [] } : url.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] } : { items: [], nextCursor: null }
+    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+  }))
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+  expect(await screen.findByRole('dialog', { name: 'selected.jpg' })).toBeVisible()
+  expect(new URLSearchParams(window.location.search).get('media')).toBe('9')
+  expect(new URLSearchParams(window.location.search).get('tag')).toBe('Trips')
+  await userEvent.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  await waitFor(() => expect(new URLSearchParams(window.location.search).get('media')).toBeNull())
+  expect(new URLSearchParams(window.location.search).get('folderId')).toBe('2')
+})
+
+
+it('organizes settings under consistent headings without an installation panel', async () => {
+  emptyApi()
+  renderApp()
+  await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
+  for (const name of ['Theme & appearance', 'Random media URL', 'Metadata exchange', 'Hidden folders', 'Help']) {
+    expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
+  }
+  expect(screen.getAllByRole('heading', { name: 'Metadata exchange' })).toHaveLength(1)
+  expect(screen.queryByText('Install Luma')).not.toBeInTheDocument()
+})
+
+describe('help', () => {
+  function libraryApi() {
+    const fetch = vi.fn().mockImplementation((url: string) => {
+      const data = url === '/api/tasks' ? [] : url === '/api/libraries' ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+        : url.startsWith('/api/folders/hidden') ? []
+          : url.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
+            : url.startsWith('/api/indexing') ? { libraries: [] } : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    return fetch
+  }
+  function navigationSize() { return screen.getAllByRole('navigation', { name: 'Primary navigation' }).map(nav => nav.querySelectorAll('button').length) }
+
+  it('opens from a labeled button beside Your libraries and returns home', async () => {
+    libraryApi()
+    renderApp()
+    await screen.findByRole('heading', { name: 'Photos' })
+    const navigation = navigationSize()
+    const entry = screen.getByRole('button', { name: 'Help' })
+    expect(entry).toHaveTextContent('Help')
+    await userEvent.click(entry)
+    expect(screen.getByRole('heading', { name: 'Help', level: 1 })).toBeVisible()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('help')
+    expect(new URLSearchParams(window.location.search).get('from')).toBe('library')
+    // Help is not another bottom-bar destination.
+    expect(navigationSize()).toEqual(navigation)
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('heading', { name: 'Your libraries' })).toBeVisible()
+    expect(window.location.search).toBe('')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Help' })).toHaveFocus())
+  })
+
+  it('opens from Settings without losing folder scope or filters, and Back returns to Settings', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2&mediaType=video')
+    localStorage.clear()
+    const fetch = libraryApi()
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
+    expect(screen.queryByText('Viewer shortcuts')).not.toBeInTheDocument()
+    const link = screen.getByRole('link', { name: 'Open the Help guide' })
+    expect(link.getAttribute('href')).toContain('view=help')
+    await userEvent.click(link)
+    expect(screen.getByRole('heading', { name: 'Help', level: 1 })).toBeVisible()
+    const params = new URLSearchParams(window.location.search)
+    expect([params.get('folderId'), params.get('mediaType'), params.get('from')]).toEqual(['2', 'video', 'settings'])
+    const requests = fetch.mock.calls.length
+    await userEvent.click(screen.getByRole('link', { name: /Gestures and keyboard shortcuts/ }))
+    expect(screen.getByRole('heading', { name: 'Gestures and keyboard shortcuts', level: 2 })).toHaveFocus()
+    // Static content: reading Help requests no media, scans or tasks.
+    expect(fetch.mock.calls.slice(requests).some(([url]) => /\/api\/(media|scans|libraries\/\d+\/scans)/.test(String(url)))).toBe(false)
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('heading', { name: 'Theme & appearance' })).toBeVisible()
+    expect(window.location.search).toBe('?libraryId=1&folderId=2&mediaType=video')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
+    expect(await screen.findByRole('heading', { name: 'Trips' })).toBeVisible()
+  })
+
+  it('restores Help and its return destination from a refreshed URL', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2&view=help&from=settings')
+    localStorage.clear()
+    const fetch = libraryApi()
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    expect(screen.getByRole('heading', { name: 'Help', level: 1 })).toBeVisible()
+    expect(window.location.search).toBe('?libraryId=1&folderId=2&view=help&from=settings')
+    expect(fetch.mock.calls.some(([url, init]) => String(url).startsWith('/api/media') || (init as RequestInit | undefined)?.method === 'POST')).toBe(false)
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('heading', { name: 'Theme & appearance' })).toBeVisible()
+    expect(window.location.search).toBe('?libraryId=1&folderId=2')
+  })
+})
+
+describe('folder actions', () => {
+  const photo = { id: 7, libraryId: 1, folderId: 3, fileName: 'nested.jpg', mediaType: 'image', extension: '.jpg', preference: 'neutral', sizeBytes: 10, modifiedAt: '2026-01-01T00:00:00Z', thumbnail: { status: 'ready', url: '/thumb.jpg' }, preview: { status: 'ready', url: '/preview.jpg' }, tags: [] }
+  function folderApi() {
+    const fetch = vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const data = text === '/api/tasks' ? [] : text === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+        : text.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, parentId: 1, name: 'Trips' }, ancestors: [], items: [{ id: 3, libraryId: 1, name: 'Beach' }] }
+          : text.startsWith('/api/indexing') ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
+            : text.includes('/neighbors?') ? { previous: null, next: null }
+              : text === '/api/media/7' ? photo
+                // The folder holds only subfolders: media appears only when subfolders are included.
+                : text.startsWith('/api/media?') ? { items: text.includes('recursive=true') ? [photo] : [], nextCursor: null, previousCursor: null }
+                  : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    return fetch
+  }
+  function renderFolder() {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+    localStorage.clear()
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+  }
+
+  it('starts a slideshow of a folder that only contains subfolders', async () => {
+    const fetch = folderApi()
+    renderFolder()
+    await userEvent.click(await screen.findByRole('button', { name: 'Folder actions for Trips' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Start slideshow' }))
+    expect(await screen.findByRole('dialog', { name: 'nested.jpg' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Slideshow' })).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes('/neighbors?') && String(url).includes('recursive=true'))).toBe(true))
+  })
+
+  it('asks before rescanning when refreshing a library collection', async () => {
+    const fetch = folderApi()
+    renderFolder()
+    await userEvent.click(await screen.findByRole('button', { name: 'Folder actions for Trips' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh collection' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Background tasks' })
+    expect(dialog).toHaveTextContent('Start a rescan now?')
+    expect(fetch.mock.calls.some(([url, init]) => String(url).endsWith('/scans') && (init as RequestInit | undefined)?.method === 'POST')).toBe(false)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Not now' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('shows folder information without library scan status', async () => {
+    folderApi()
+    renderFolder()
+    await userEvent.click(await screen.findByRole('button', { name: 'Folder actions for Trips' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Folder information' }))
+    const dialog = screen.getByRole('dialog', { name: 'Folder information' })
+    expect(dialog).toHaveTextContent('Photos')
+    expect(within(dialog).queryByRole('region', { name: 'Library indexing' })).not.toBeInTheDocument()
+  })
+})
+
+it('remembers filter-row visibility separately for Reels', async () => {
+  window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+  localStorage.clear()
+  const photo = { id: 7, libraryId: 1, folderId: 2, fileName: 'beach.jpg', mediaType: 'image', extension: '.jpg', sizeBytes: 10, modifiedAt: '2026-01-01T00:00:00Z', preference: 'neutral', thumbnail: { status: 'ready', url: '/thumb.jpg' }, preview: { status: 'ready', url: '/preview.jpg' }, tags: [] }
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+    const text = String(url)
+    const data = text === '/api/tasks' ? [] : text === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+      : text.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
+        : text.startsWith('/api/indexing') ? { libraries: [] } : text.includes('/neighbors?') ? { previous: null, next: null }
+          : /\/api\/media\/\d+$/.test(text) ? photo : { items: [photo], nextCursor: null, previousCursor: null }
+    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+  }))
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  try {
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+    expect(await screen.findByRole('navigation', { name: 'Active filters' })).toBeVisible()
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    expect(screen.getByRole('navigation', { name: 'Active filters' })).toBeVisible()
+    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Hide filters' }))
+    expect(screen.queryByRole('navigation', { name: 'Active filters' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
+    expect(await screen.findByRole('navigation', { name: 'Active filters' })).toBeVisible()
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    expect(screen.queryByRole('navigation', { name: 'Active filters' })).not.toBeInTheDocument()
+  } finally { vi.restoreAllMocks() }
 })

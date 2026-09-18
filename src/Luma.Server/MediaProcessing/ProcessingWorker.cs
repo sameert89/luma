@@ -8,7 +8,7 @@ namespace Luma.Server.MediaProcessing;
 public sealed class ProcessingWorker(Database database, IndexingOptions options, MediaProcessor processor,
     GeneratedCache cache, ILogger<ProcessingWorker> logger) : BackgroundService
 {
-    private readonly SemaphoreSlim aggregate = new(options.ProcessingWorkers, options.ProcessingWorkers);
+    private readonly SemaphoreSlim aggregate = options.ProcessingSlots;
     protected override Task ExecuteAsync(CancellationToken stoppingToken) => options.Libraries.Count == 0 ? Task.CompletedTask : Task.WhenAll(
         Enumerable.Range(0, options.ImageWorkers).Select(_ => RunAsync("image", stoppingToken))
             .Concat(Enumerable.Range(0, options.VideoWorkers).Select(_ => RunAsync("video", stoppingToken)))

@@ -124,7 +124,7 @@ export function ViewerVideoControls({ video, mediaId, playing, muted, volume, ra
       {(clock, shown) => <span className="order-1 tabular-nums text-xs text-ink phone-portrait:order-none phone-portrait:mr-auto phone-portrait:pl-1">{formatTime(shown)} / {formatTime(clock.duration)}</span>}
     </Scrubber>
     <IconButton label={muted ? 'Unmute' : 'Mute'} className="phone-portrait:border-transparent" onClick={onToggleMute}>{muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}</IconButton>
-    <Range aria-label="Volume" aria-valuetext={`${Math.round(volume * 100)} percent`} min={0} max={1} step={0.05} value={volume} className="w-20 phone-portrait:hidden" onChange={event => onVolume(Number(event.target.value))} />
+    <Range aria-label="Volume" aria-valuetext={`${Math.round(volume * 100)} percent`} min={0} max={1} step={0.05} value={volume} className="w-20" onChange={event => onVolume(Number(event.target.value))} />
     <QuietButton className="order-1 min-h-10 px-3 phone-portrait:border-transparent" aria-label="Playback speed" onClick={onRate}>{rate}×</QuietButton>
     {pictureInPicture && <IconButton label="Picture in picture" className="order-1 border-transparent" onClick={onPictureInPicture}><PictureInPicture2 className="size-4" /></IconButton>}
     <IconButton label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} className="order-1 border-transparent" onClick={onFullscreen}>{fullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}</IconButton>
@@ -136,7 +136,7 @@ export function ReelsSeek({ video, mediaId, visible, stripRef, onReveal }: {
   video: RefObject<HTMLVideoElement | null>; mediaId: number; visible: boolean; stripRef: RefObject<HTMLDivElement | null>; onReveal: () => void
 }) {
   return <div ref={stripRef} data-testid="reels-seek" data-visible={visible}
-    className={`absolute inset-x-0 bottom-16 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 transition-opacity duration-200 md:bottom-0 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+    className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 transition-opacity duration-200 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
     {/* A hidden strip's first change only reveals it, so a stray touch never jumps playback. */}
     <Scrubber video={video} mediaId={mediaId} label="Seek video" interactive={visible} className={`w-full ${visible ? '' : 'pointer-events-none'}`}
       onInteract={onReveal} onFocus={onReveal} onBlur={onReveal} />

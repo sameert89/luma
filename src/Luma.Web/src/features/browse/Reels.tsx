@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Clapperboard, Info, Settings2, SlidersHorizontal, Tag, Timer, Volume2, VolumeX } from 'lucide-react'
+import { ChevronDown, ChevronUp, Clapperboard, Info, Settings2, SlidersHorizontal, Eye, EyeOff, Tag, Timer, Volume2, VolumeX } from 'lucide-react'
 import { IconButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { MediaStage } from './MediaStage'
 import { MediaActions, actionButton } from './MediaActions'
 import { MediaInformation } from './MediaInformation'
+import { MetadataExchange } from '../tags/MetadataExchange'
 import { TagEditor } from '../tags/TagEditor'
 import { useFullscreen } from './useFullscreen'
 import { usePreviewPriority } from './usePreviewPriority'
@@ -29,7 +30,7 @@ function savedReelsState(query: string) {
 // later plays it. Whole videos are never downloaded ahead.
 const warmNextMs = 1000
 
-export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenViewer }: { filters: Filters; startId?: number | null; viewerOpen?: boolean; onFilters: () => void; onOpenViewer: (item: Media) => void }) {
+export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenViewer, onItemChange, filtersVisible = true, onToggleFilters }: { filters: Filters; filtersVisible?: boolean; onToggleFilters?: () => void; startId?: number | null; viewerOpen?: boolean; onFilters: () => void; onItemChange?: (id: number) => void; onOpenViewer: (item: Media) => void }) {
   const isFullscreen = useFullscreen()
   const root = useRef<HTMLElement>(null)
   const queryFilters: Filters = filters
@@ -53,6 +54,7 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
   const baseId = active?.id ?? restoredId ?? base?.id
   const detail = useQuery({ queryKey: ['detail', baseId], queryFn: ({ signal }) => request<Media>(`/api/media/${baseId}`, signal), enabled: !!baseId, gcTime: 0, refetchInterval: query => query.state.data?.preview.status === 'ready' ? false : 3000 })
   const item = detail.data ?? (base?.id === baseId ? base : undefined)
+  useEffect(() => { if (item) onItemChange?.(item.id) }, [item?.id, onItemChange])
   useEffect(() => {
     if (restoredId && !active && (detail.data?.availability === 'missing' || detail.error instanceof ApiError && detail.error.status === 404)) setRestoredId(null)
   }, [restoredId, active, detail.data?.availability, detail.error])
@@ -98,14 +100,15 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
   const liked = item.preference === 'liked'
   return <section ref={root} aria-label="Reels" className="relative flex min-h-0 flex-1 flex-col bg-black">
     {/* Reels loop until the person moves on; auto-scroll advances at the end instead. */}
-    <div className="flex min-h-0 flex-1"><MediaStage item={item} direction={direction} optionsOpen={optionsOpen} onOptionsOpenChange={setOptionsOpen} reels muted={muted} suspended={suspended} loop={!(autoScroll && next)} fullscreenRoot={root} onOpenViewer={onOpenViewer} onNavigate={navigate} onLike={() => { if (!liked) preference.mutate({ id: item.id, value: 'liked' }) }} onDislike={() => { if (item.preference !== 'disliked') preference.mutate({ id: item.id, value: 'disliked' }) }} onEnded={() => { if (!suspended && autoScroll && next) { setDirection('next'); setActive(next) } }} /></div>
+    <div className="flex min-h-0 flex-1"><MediaStage item={item} direction={direction} optionsOpen={optionsOpen} onOptionsOpenChange={setOptionsOpen} reels muted={muted} onMutedChange={setMuted} suspended={suspended} loop={!(autoScroll && next)} fullscreenRoot={root} onOpenViewer={onOpenViewer} onNavigate={navigate} onLike={() => { if (!liked) preference.mutate({ id: item.id, value: 'liked' }) }} onDislike={() => { if (item.preference !== 'disliked') preference.mutate({ id: item.id, value: 'disliked' }) }} onEnded={() => { if (!suspended && autoScroll && next) { setDirection('next'); setActive(next) } }} /></div>
     <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start p-3 sm:p-5">
       <p className="pointer-events-auto rounded-full bg-canvas/80 px-3 py-1 text-lg font-semibold tracking-tight">luma<span className="text-accent">.</span><Clapperboard className="ml-1 inline size-3 align-super text-accent" aria-hidden="true" /><span className="sr-only"> reels</span></p>
     </div>
     {/* The shared action row sits just above the seek strip; see MediaActions. */}
     <div hidden={isFullscreen}><MediaActions preference={item.preference} pending={preference.isPending} onPreference={value => preference.mutate({ id: item.id, value })}
-      menuOpen={menuOpen} onMenuOpenChange={setMenuOpen} menuLabel="Reels menu" className="bottom-32 md:bottom-16">
+      menuOpen={menuOpen} onMenuOpenChange={setMenuOpen} menuLabel="Reels menu" className="bottom-16">
       <IconButton label="Filters" className={actionButton} onClick={onFilters}><SlidersHorizontal className="size-4" /></IconButton>
+      {onToggleFilters && <IconButton label={filtersVisible ? 'Hide filters' : 'Show filters'} className={actionButton} onClick={onToggleFilters}>{filtersVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</IconButton>}
       <IconButton label={muted ? 'Unmute' : 'Mute'} className={actionButton} aria-pressed={muted} onClick={() => setMuted(!muted)}>{muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}</IconButton>
       <IconButton label="Auto-scroll" className={actionButton} aria-pressed={autoScroll} onClick={() => setAutoScroll(value => !value)}><Timer className={`size-4 ${autoScroll ? 'text-accent' : ''}`} /></IconButton>
       <IconButton label="Tags" className={actionButton} aria-pressed={tags} onClick={() => setTags(!tags)}><Tag className="size-4" /></IconButton>
@@ -115,7 +118,7 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
       <IconButton label="Next" className={actionButton} disabled={!next} onClick={() => navigate('next')}><ChevronDown className="size-4" /></IconButton>
     </MediaActions></div>
     <Modal open={tags} onOpenChange={setTags} title="Tags" description="Add or remove tags for this item." sheet><div className="overflow-auto p-5"><TagEditor key={item.id} mediaIds={[item.id]} tags={item.tags} /></div></Modal>
-    <Modal open={infoOpen} onOpenChange={setInfoOpen} title="Media information" description="File information for this reel." sheet><div className="overflow-auto p-5"><MediaInformation item={item} /></div></Modal>
+    <Modal open={infoOpen} onOpenChange={setInfoOpen} title="Media information" description="File information for this reel." sheet><div className="overflow-auto p-5"><MediaInformation item={item} /><div className="mt-6"><MetadataExchange mediaIds={[item.id]} /></div></div></Modal>
     {preference.isError && <p role="alert" className="absolute bottom-28 z-10 rounded-full bg-canvas px-4 py-2 text-sm text-danger">{errorMessage(preference.error)}</p>}
     {neighbors.isError && <p role="alert" className="absolute bottom-20 z-10 rounded-full bg-canvas px-4 py-2 text-sm text-danger">{errorMessage(neighbors.error)}</p>}
   </section>

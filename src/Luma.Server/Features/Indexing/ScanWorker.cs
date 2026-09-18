@@ -55,10 +55,10 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                     await Task.Delay(TimeSpan.FromSeconds(5), ct);
                     await FinishFailedAsync(scan.Id, "interrupted", "database_busy", ct);
                     await db.ExecuteAsync(new CommandDefinition("""
-                        INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt)
-                        SELECT @LibraryId,@FolderId,'queued',@Force,@RetryFailures,@now
+                        INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt,MetadataMode)
+                        SELECT @LibraryId,@FolderId,'queued',@Force,@RetryFailures,@now,@MetadataMode
                         WHERE NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))
-                        """, new { scan.LibraryId, scan.FolderId, scan.Force, scan.RetryFailures, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
+                        """, new { scan.LibraryId, scan.FolderId, scan.Force, scan.RetryFailures, scan.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
                 }
                 catch (Exception error)
                 {

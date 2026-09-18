@@ -12,7 +12,7 @@ export function ScanControls({ libraryId }: { libraryId: number }) {
   const progress = useQuery({ queryKey: ['scan', id], queryFn: ({ signal }) => request<Scan>(`/api/scans/${id}`, signal), enabled: !!id, refetchInterval: 3000, gcTime: 0 })
   const scan = progress.data
   const running = scan?.state === 'running' || scan?.state === 'queued'
-  const action = useMutation({ mutationFn: (cancel: boolean) => request(cancel ? `/api/scans/${id}/cancel` : `/api/libraries/${libraryId}/scans`, undefined, 'POST', cancel ? undefined : {}), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['indexing'] }), client.invalidateQueries({ queryKey: ['scan'] })]) } })
+  const action = useMutation({ mutationKey: ['background-task'], mutationFn: (cancel: boolean) => request(cancel ? `/api/scans/${id}/cancel` : `/api/libraries/${libraryId}/scans`, undefined, 'POST', cancel ? undefined : {}), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['tasks'] }), client.invalidateQueries({ queryKey: ['indexing'] }), client.invalidateQueries({ queryKey: ['scan'] })]) } })
   useEffect(() => {
     if (scan) {
       void client.invalidateQueries({ queryKey: ['media'] })

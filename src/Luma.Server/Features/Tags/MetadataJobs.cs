@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
@@ -11,16 +12,17 @@ using Microsoft.Data.Sqlite;
 
 namespace Luma.Server.Features.Tags;
 
-public sealed record MetadataJobRequest(long[]? MediaIds = null,MediaQuery? Query = null,bool IncludeSidecars = false);
+public sealed record MetadataJobRequest(long[]? MediaIds = null,MediaQuery? Query = null,bool IncludeSidecars = false,bool Automatic = false,long? ScanId = null);
 public sealed record JobAccepted(long Id);
 public sealed record JobItem(long MediaId,string Code);
 public sealed record MetadataJobStatus(long Id,string Kind,string State,string CreatedAt,string? SnapshotAt,string? FinishedAt,
-    int Processed,int Failed,string? FailureCode,IReadOnlyList<JobItem> Items,long? NextMediaId,string? ContentUrl);
+    int Processed,int Failed,string? FailureCode,IReadOnlyList<JobItem> Items,long? NextMediaId,string? ContentUrl,int Found = 0,int Updated = 0,int Skipped = 0);
 
 // One durable queue, one worker. Imports are capped at 500 selected items and exports
 // stream 100-row batches from one SQLite read snapshot without loading the whole result.
 public sealed class MetadataJobs(Database database,IndexingOptions options,ILogger<MetadataJobs>? logger = null) : BackgroundService
 {
+    private readonly ConcurrentDictionary<long,CancellationTokenSource> active = new();
     private const long Quota=1024L*1024*1024;
     private string JobDirectory => Path.Combine(Path.GetDirectoryName(database.Path)!,"exports");
     private string ContentPath(long id,string kind) => Path.Combine(JobDirectory,$"{id}.{(kind=="xmp"?"zip":"jsonl")}");
@@ -43,10 +45,36 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
             if(library is null) throw ApiRequestException.Missing();
             if(query.LibraryId is { } root && root!=library) throw ApiRequestException.Invalid();
         }
-        var id=await db.ExecuteScalarAsync<long>(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt) VALUES(@kind,'queued',@request,@now) RETURNING Id",
-            new{kind,request=JsonSerializer.Serialize(request),now=DateTimeOffset.UtcNow.ToString("O")},tx,cancellationToken:ct));
+        var id=await db.ExecuteScalarAsync<long>(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,ScanId) VALUES(@kind,'queued',@request,@now,@scanId) RETURNING Id",
+            new{kind,scanId=request.ScanId,request=JsonSerializer.Serialize(request),now=DateTimeOffset.UtcNow.ToString("O")},tx,cancellationToken:ct));
+        if(request.ScanId is { } scanId) await db.ExecuteAsync(new CommandDefinition("UPDATE Scans SET MetadataQueued=1 WHERE Id=@scanId",new{scanId},tx,cancellationToken:ct));
         tx.Commit();
         return new(id);
+    }
+
+    public async Task CancelAsync(long id,CancellationToken ct)
+    {
+        await using var db=await database.OpenAsync(ct);
+        if(!await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM MetadataJobs WHERE Id=@id)",new{id},cancellationToken:ct))) throw ApiRequestException.Missing();
+        var changed=await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State='cancelled',FinishedAt=@now WHERE Id=@id AND State IN ('queued','running')",new{id,now=DateTimeOffset.UtcNow.ToString("O")},cancellationToken:ct));
+        if(changed>0 && active.TryGetValue(id,out var source)) { try { source.Cancel(); } catch(ObjectDisposedException) { } }
+    }
+
+    public async Task<JobAccepted> QueueAgainAsync(long id,CancellationToken ct)
+    {
+        await using var db=await database.OpenAsync(ct);
+        using var tx=db.BeginTransaction();
+        var job=await db.QuerySingleOrDefaultAsync<Job>(new CommandDefinition("SELECT * FROM MetadataJobs WHERE Id=@id",new{id},tx,cancellationToken:ct)) ?? throw ApiRequestException.Missing();
+        if(job.State is "queued" or "running" || active.ContainsKey(id)) throw new ApiRequestException(409,"conflict","This operation is still stopping or already queued.");
+        if(await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')",transaction:tx,cancellationToken:ct))>=16) throw new ApiRequestException(429,"rate_limited","The metadata job queue is full.");
+        if(job.State=="cancelled" && job.Kind=="import") {
+            var request=JsonSerializer.Deserialize<MetadataJobRequest>(job.Request)! with {ScanId=null};
+            await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State='queued',QueueDismissed=0,FinishedAt=NULL,FailureCode=NULL,ScanId=NULL,Request=@request WHERE Id=@id",new{id,request=JsonSerializer.Serialize(request)},tx,cancellationToken:ct));
+            tx.Commit();
+            return new(id);
+        }
+        tx.Commit();
+        return await EnqueueAsync(job.Kind,JsonSerializer.Deserialize<MetadataJobRequest>(job.Request)! with {ScanId=null},ct);
     }
 
     public async Task<MetadataJobStatus> StatusAsync(long id,long? afterMediaId,CancellationToken ct)
@@ -58,7 +86,7 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
         var more=items.Count>100;
         if(more) items.RemoveAt(100);
         return new(job.Id,job.Kind,job.State,job.CreatedAt,job.SnapshotAt,job.FinishedAt,job.Processed,job.Failed,job.FailureCode,items,
-            more?items[^1].MediaId:null,job.State=="completed" && job.Kind!="import"?$"/api/jobs/{id}/content":null);
+            more?items[^1].MediaId:null,job.State=="completed" && job.Kind!="import"?$"/api/jobs/{id}/content":null,job.Found,job.Updated,job.Skipped);
     }
 
     public async Task<IResult> ContentAsync(long id,CancellationToken ct)
@@ -96,12 +124,12 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
     private async Task RecoverAsync(CancellationToken ct)
     {
         await using(var db=await database.OpenAsync(ct)) {
-            var interrupted=await db.QueryAsync<Job>(new CommandDefinition("SELECT * FROM MetadataJobs WHERE State='running' OR FailureCode='interrupted'",cancellationToken:ct));
+            var interrupted=await db.QueryAsync<Job>(new CommandDefinition("SELECT * FROM MetadataJobs WHERE Kind<>'import' AND (State='running' OR FailureCode='interrupted')",cancellationToken:ct));
             foreach(var job in interrupted) {
                 File.Delete(ContentPath(job.Id,job.Kind));
                 File.Delete(ContentPath(job.Id,job.Kind)+".tmp");
             }
-            await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State='failed',FailureCode='interrupted',ContentBytes=0,FinishedAt=@now WHERE State='running'",new{now=DateTimeOffset.UtcNow.ToString("O")},cancellationToken:ct));
+            await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State='failed',FailureCode='interrupted',ContentBytes=0,FinishedAt=@now WHERE State='running' AND Kind<>'import'; UPDATE MetadataJobs SET State='queued',FailureCode=NULL,FinishedAt=NULL WHERE Kind='import' AND State='running'",new{now=DateTimeOffset.UtcNow.ToString("O")},cancellationToken:ct));
         }
     }
 
@@ -109,16 +137,61 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
     private async Task<bool> RunNextAsync(CancellationToken ct)
     {
         await CleanupAsync(ct);
+        await using(var repair=await database.OpenAsync(ct)) {
+            using var tx=repair.BeginTransaction();
+            if(await repair.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')",transaction:tx,cancellationToken:ct))<16) {
+                var scan=await repair.QuerySingleOrDefaultAsync<ScanRow>(new CommandDefinition("SELECT s.* FROM Scans s JOIN Libraries l ON l.Id=s.LibraryId WHERE l.Enabled=1 AND s.MetadataQueued=0 AND s.MetadataMode<>'none' AND s.State IN ('queued','running','completed') ORDER BY s.Id LIMIT 1",transaction:tx,cancellationToken:ct));
+                if(scan is not null) {
+                    var request=new MetadataJobRequest(Query:new MediaQuery{LibraryId=scan.LibraryId,FolderId=scan.FolderId}.Normalize(),IncludeSidecars:scan.MetadataMode=="xmp",Automatic:true,ScanId:scan.Id);
+                    await repair.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,ScanId) VALUES('import','queued',@request,@now,@scanId); UPDATE Scans SET MetadataQueued=1 WHERE Id=@scanId",new{scanId=scan.Id,request=JsonSerializer.Serialize(request),now=DateTimeOffset.UtcNow.ToString("O")},transaction:tx,cancellationToken:ct));
+                }
+            }
+            tx.Commit();
+        }
         Job? job;
-        await using(var db=await database.OpenAsync(ct)) job=await db.QuerySingleOrDefaultAsync<Job>(new CommandDefinition("UPDATE MetadataJobs SET State='running' WHERE Id=(SELECT Id FROM MetadataJobs WHERE State='queued' ORDER BY Id LIMIT 1) RETURNING *",cancellationToken:ct));
+        await using(var db=await database.OpenAsync(ct)) job=await db.QuerySingleOrDefaultAsync<Job>(new CommandDefinition("UPDATE MetadataJobs SET State='running' WHERE Id=(SELECT Id FROM MetadataJobs WHERE State='queued' AND (ScanId IS NULL OR NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=json_extract(MetadataJobs.Request,'$.Query.LibraryId') AND State IN ('queued','running'))) ORDER BY Id LIMIT 1) RETURNING *",cancellationToken:ct));
         if(job is null) return false;
+        using var jobCancellation=CancellationTokenSource.CreateLinkedTokenSource(ct);
+        active[job.Id]=jobCancellation;
+        try { return await RunClaimedAsync(job,jobCancellation,ct); }
+        finally {
+            active.TryRemove(job.Id,out _);
+            if(jobCancellation.IsCancellationRequested && !ct.IsCancellationRequested) {
+                File.Delete(ContentPath(job.Id,job.Kind));
+                File.Delete(ContentPath(job.Id,job.Kind)+".tmp");
+            }
+        }
+    }
+
+    private async Task<bool> RunClaimedAsync(Job job,CancellationTokenSource cancellation,CancellationToken hostToken)
+    {
+        var ct=cancellation.Token;
+        await using(var check=await database.OpenAsync(hostToken)) {
+            if(await check.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM MetadataJobs WHERE Id=@Id",job,cancellationToken:hostToken))!="running") return true;
+        }
         var (state,code,bytes)=("completed",(string?)null,0L);
         try {
             var request=JsonSerializer.Deserialize<MetadataJobRequest>(job.Request)!;
+            if(request.ScanId is { } scanId) {
+                await using var lookup=await database.OpenAsync(ct);
+                var scanState=await lookup.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM Scans WHERE Id=@scanId",new{scanId},cancellationToken:ct));
+                if(scanState is "cancelled" or "failed") throw new IOException("Indexing did not finish.");
+            }
             if(job.Kind=="import") await ImportAsync(job,request,ct);
             else await ExportAsync(job,request,ct);
             bytes=job.Kind=="import"?0:new FileInfo(ContentPath(job.Id,job.Kind)).Length;
-        } catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
+        } catch(OperationCanceledException) when(hostToken.IsCancellationRequested) { throw; }
+        catch(OperationCanceledException) when(ct.IsCancellationRequested) {
+            File.Delete(ContentPath(job.Id,job.Kind));
+            File.Delete(ContentPath(job.Id,job.Kind)+".tmp");
+            return true;
+        }
+        catch(SqliteException error) when(error.SqliteErrorCode is 5 or 6 && job.Kind=="import") {
+            await using var retry=await database.OpenAsync(ct);
+            await retry.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State='queued' WHERE Id=@Id AND State='running'",job,cancellationToken:ct));
+            await Task.Delay(1000,ct);
+            return true;
+        }
         catch(Exception error) {
             File.Delete(ContentPath(job.Id,job.Kind));
             File.Delete(ContentPath(job.Id,job.Kind)+".tmp");
@@ -126,7 +199,7 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
         }
         // Recorded outside the job's own error handling, so a busy database while saving the
         // outcome cannot turn a finished export into a failed one.
-        await FinishAsync(job.Id,state,code,bytes,ct);
+        await FinishAsync(job.Id,state,code,bytes,hostToken);
         return true;
     }
 
@@ -204,7 +277,7 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
         // bounded cursor pattern exports use, so a whole library can be imported without
         // holding the result set in memory.
         var (predicate,p)=request.Query!.Predicate();
-        var after=0L;
+        var after=job.LastMediaId;
         while(true) {
             p.Add("after",after);
             var ids=(await db.QueryAsync<long>(new CommandDefinition($"SELECT m.Id FROM Media m WHERE {predicate} AND m.Id>@after ORDER BY m.Id LIMIT 200",p,cancellationToken:ct))).ToArray();
@@ -216,11 +289,27 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
 
     private async Task ImportOneAsync(SqliteConnection db,Job job,MetadataJobRequest request,long id,CancellationToken ct)
     {
+        if(await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM MetadataJobItems WHERE JobId=@jobId AND MediaId=@id)",new{jobId=job.Id,id},cancellationToken:ct))) return;
+        // Foreground previews go first; a decoder already in flight remains bounded by its deadline.
+        while(await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM ProcessingJobs j WHERE j.State='pending' AND j.MediaType='image' AND j.NextAttemptAt<'1970' AND EXISTS(SELECT 1 FROM Scans WHERE Id=j.ScanId AND State IN ('running','completed'))) OR EXISTS(SELECT 1 FROM ProcessingJobs j WHERE j.State='pending' AND j.MediaType='video' AND j.NextAttemptAt<'1970' AND EXISTS(SELECT 1 FROM Scans WHERE Id=j.ScanId AND State IN ('running','completed')))",cancellationToken:ct))) await Task.Delay(200,ct);
+        await options.ProcessingSlots.WaitAsync(ct);
+        try { await ImportClaimedAsync(db,job,request,id,ct); }
+        finally { options.ProcessingSlots.Release(); }
+    }
+
+    private async Task ImportClaimedAsync(SqliteConnection db,Job job,MetadataJobRequest request,long id,CancellationToken ct)
+    {
         var code="imported";
+        var found=0; var updated=0; var skipped=0;
         try {
-            var source=await db.QuerySingleOrDefaultAsync<ImportRow>(new CommandDefinition("SELECT LibraryId,RelativePath,MediaType FROM Media WHERE Id=@id",new{id},cancellationToken:ct)) ?? throw new IOException();
+            var source=await db.QuerySingleOrDefaultAsync<ImportRow>(new CommandDefinition("SELECT LibraryId,RelativePath,MediaType,SourceRevision FROM Media WHERE Id=@id",new{id},cancellationToken:ct)) ?? throw new IOException();
             var root=options.Libraries.SingleOrDefault(x=>x.Id==source.LibraryId) ?? throw new IOException();
             var path=SourcePaths.Resolve(root,source.RelativePath);
+            var fingerprint=$"{source.SourceRevision}:{SourceFingerprint(root,path,request.IncludeSidecars)}";
+            if(request.Automatic && await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM MetadataRevisions WHERE MediaId=@id AND IncludeSidecars=@sidecars AND Fingerprint=@fingerprint)",new{id,sidecars=request.IncludeSidecars,fingerprint},cancellationToken:ct))) {
+                await RecordImportAsync(db,job.Id,id,"unchanged",0,0,1,ct);
+                return;
+            }
             using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
             var keywords=new List<string>(source.MediaType=="image"?await MetadataKeywords.ReadImageProcessAsync(path,timeout.Token):await ReadVideoAsync(path,timeout.Token));
@@ -242,15 +331,36 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
                 catch(ApiRequestException) {code="invalid_tags";}
                 if(normalized.Count>100) throw new InvalidDataException();
             }
-            // One short transaction per media: failures cannot leave a partial union.
+            found=keywords.Count>0?1:0;
+            if(fingerprint!=$"{source.SourceRevision}:{SourceFingerprint(root,path,request.IncludeSidecars)}") throw new MetadataChangedException();
+            // Tags, revision and checkpoint commit together so restart cannot double-count.
+
             using var tx=db.BeginTransaction();
+            if(!await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Media WHERE Id=@id AND SourceRevision=@revision)",new{id,revision=source.SourceRevision},tx,cancellationToken:ct))) throw new MetadataChangedException();
+            var before=await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@id",new{id},tx,cancellationToken:ct));
             foreach(var tag in normalized) await db.ExecuteAsync(new CommandDefinition("INSERT INTO Tags(Name,NormalizedKey) VALUES(@name,@key) ON CONFLICT(NormalizedKey) DO NOTHING; INSERT INTO MediaTags(MediaId,TagId) SELECT @id,Id FROM Tags WHERE NormalizedKey=@key ON CONFLICT DO NOTHING",new{id,key=tag.Key,name=tag.Value},tx,cancellationToken:ct));
             if(await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@id",new{id},tx,cancellationToken:ct))>100) throw new InvalidDataException();
+            var after=await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@id",new{id},tx,cancellationToken:ct));
+            updated=after>before?1:0; skipped=updated==0?1:0;
+            if(code=="imported" && found==0) code="no_metadata";
+            if(code!="invalid_tags") await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataRevisions(MediaId,IncludeSidecars,Fingerprint) VALUES(@id,@sidecars,@fingerprint) ON CONFLICT DO UPDATE SET Fingerprint=excluded.Fingerprint",new{id,sidecars=request.IncludeSidecars,fingerprint},tx,cancellationToken:ct));
+            await RecordImportAsync(db,job.Id,id,code,found,updated,skipped,ct,tx);
             tx.Commit();
+            await Task.Delay(15,ct);
+            return;
         } catch(OperationCanceledException) when(ct.IsCancellationRequested) {throw;}
-        catch(Exception error) {code=error is IOException or UnauthorizedAccessException?"source_unavailable":error is OperationCanceledException?"metadata_timeout":"invalid_metadata";}
-        await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobItems(JobId,MediaId,Code) VALUES(@jobId,@id,@code) ON CONFLICT DO UPDATE SET Code=excluded.Code",new{jobId=job.Id,id,code},cancellationToken:ct));
-        await ProgressAsync(job.Id,1,code=="imported"?0:1,ct);
+        catch(SqliteException error) when(error.SqliteErrorCode is 5 or 6) {throw;}
+        catch(Exception error) {code=error is MetadataChangedException?"source_changed":error is IOException or UnauthorizedAccessException?"source_unavailable":error is OperationCanceledException?"metadata_timeout":"invalid_metadata";}
+        await RecordImportAsync(db,job.Id,id,code,found,0,0,ct);
+    }
+
+    private static async Task RecordImportAsync(SqliteConnection db,long jobId,long id,string code,int found,int updated,int skipped,CancellationToken ct,SqliteTransaction? transaction=null)
+    {
+        using var owned=transaction is null?db.BeginTransaction():null;
+        var tx=transaction??owned!;
+        await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobItems(JobId,MediaId,Code,Found,Updated,Skipped) VALUES(@jobId,@id,@code,@found,@updated,@skipped)",new{jobId,id,code,found,updated,skipped},tx,cancellationToken:ct));
+        await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET Processed=Processed+1,LastMediaId=MAX(LastMediaId,@id),Found=Found+@found,Updated=Updated+@updated,Skipped=Skipped+@skipped,Failed=Failed+@failed WHERE Id=@jobId",new{jobId,id,found,updated,skipped,failed=code is "imported" or "no_metadata" or "unchanged"?0:1},tx,cancellationToken:ct));
+        owned?.Commit();
     }
 
     private async Task<IReadOnlyList<string>> ReadVideoAsync(string path,CancellationToken ct)
@@ -287,15 +397,27 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
         for(var attempt=1;;attempt++) {
             try {
                 await using var db=await database.OpenAsync(ct);
-                await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State=@state,FailureCode=@code,ContentBytes=@bytes,FinishedAt=@now WHERE Id=@id",new{id,state,code,bytes,now=DateTimeOffset.UtcNow.ToString("O")},cancellationToken:ct));
+                await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State=@state,FailureCode=@code,ContentBytes=@bytes,FinishedAt=@now WHERE Id=@id AND State='running'",new{id,state,code,bytes,now=DateTimeOffset.UtcNow.ToString("O")},cancellationToken:ct));
                 return;
             } catch(SqliteException error) when(error.SqliteErrorCode is 5 or 6 && attempt<12) { await Task.Delay(5000,ct); }
         }
     }
     public const string MergeInstructions="Luma exported standalone XMP only; originals were not changed. paths.jsonl maps media IDs to library-relative paths. Back up existing metadata and originals. With external software, union dc:subject keywords after trimming, Unicode NFC and invariant case normalization. Preserve unrelated XMP properties and existing spelling, review conflicts, then write with your external tool. Do not blindly replace existing sidecars or embedded metadata. Exports use a SQLite snapshot at processing start (SnapshotAt); later edits require another export.";
+    private static string SourceFingerprint(LibraryOptions root,string path,bool sidecars)
+    {
+        var file=new FileInfo(path);
+        var fingerprint=$"{file.Length}:{file.LastWriteTimeUtc.Ticks}";
+        if(sidecars) foreach(var candidate in new[]{path+".xmp",Path.ChangeExtension(path,".xmp")}.Distinct()) {
+            var adjacent=new FileInfo(candidate);
+            if(adjacent.Exists) SourcePaths.Check(root,candidate);
+            fingerprint += adjacent.Exists?$"|{adjacent.Length}:{adjacent.LastWriteTimeUtc.Ticks}":"|missing";
+        }
+        return fingerprint;
+    }
+    private sealed class MetadataChangedException : IOException;
     private sealed class JobQuotaException : Exception;
-    private sealed class Job { public long Id{get;set;} public string Kind{get;set;}=""; public string State{get;set;}=""; public string Request{get;set;}=""; public string CreatedAt{get;set;}=""; public string? SnapshotAt{get;set;} public string? FinishedAt{get;set;} public int Processed{get;set;} public int Failed{get;set;} public string? FailureCode{get;set;} }
+    private sealed class Job { public long Id{get;set;} public string Kind{get;set;}=""; public string State{get;set;}=""; public string Request{get;set;}=""; public string CreatedAt{get;set;}=""; public string? SnapshotAt{get;set;} public string? FinishedAt{get;set;} public long LastMediaId{get;set;} public int Processed{get;set;} public int Failed{get;set;} public int Found{get;set;} public int Updated{get;set;} public int Skipped{get;set;} public string? FailureCode{get;set;} }
     private sealed record ExportRow(long Id,long LibraryId,string RelativePath,string Availability,string LibraryPath);
     private sealed record ExportTag(long MediaId,string Name);
-    private sealed record ImportRow(long LibraryId,string RelativePath,string MediaType);
+    private sealed record ImportRow(long LibraryId,string RelativePath,string MediaType,long SourceRevision);
 }

@@ -50,6 +50,7 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
 
     public async Task<MediaPage> ListAsync(MediaQuery query,CancellationToken ct)
     {
+        if(query.GroupBy=="tag") throw ApiRequestException.Invalid("Browse tag collections using /api/collections/tag-groups, then select a tag.");
         await using var db=await database.OpenAsync(ct);
         using var deadline=CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(2));
@@ -218,6 +219,7 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
             SELECT c.MediaId,c.Variant,c.State,c.Width,c.Height FROM CacheEntries c JOIN Media m ON m.Id=c.MediaId
             WHERE c.MediaId IN (SELECT value FROM json_each(@ids)) AND c.SourceRevision=m.SourceRevision AND c.EncoderVersion=@version
             """,new{ids,version=IndexingOptions.EncoderVersion},tx,cancellationToken:ct))).ToLookup(x=>x.MediaId);
+        var progress=(await db.QueryAsync<WatchState>(new CommandDefinition("SELECT * FROM WatchProgress WHERE MediaId IN (SELECT value FROM json_each(@ids))",new{ids},tx,cancellationToken:ct))).ToDictionary(x=>x.MediaId);
         return rows.Select(row=>
         {
             CacheRepresentation Variant(string variant)
@@ -227,7 +229,7 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
             }
             return new MediaSummary(row.Id,row.LibraryId,row.FolderId,row.FileName,row.MediaType,row.Extension,row.SizeBytes,row.Width,row.Height,row.DurationMs,
                 row.ModifiedAt,row.EffectiveDate,row.CapturedAt,row.Preference,row.Availability,Variant("thumbnail"),Variant(row.MediaType=="image"?"preview":"poster"),
-                tags[row.Id].Select(x=>new TagSummary(x.Id,x.Name)).ToArray());
+                tags[row.Id].Select(x=>new TagSummary(x.Id,x.Name)).ToArray(),WatchProgress:progress.GetValueOrDefault(row.Id));
         }).ToArray();
     }
     private sealed record GroupFolder(long Id,string Name);

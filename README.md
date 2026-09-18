@@ -144,10 +144,20 @@ This copies the generated frontend to the host's `wwwroot` and publishes to `.lo
 
 See the [staging handoff](docs/STAGE-7-HANDOFF.md), [verification results](docs/STAGE-7-VERIFICATION.md), and [Docker deployment/recovery guide](docs/DEPLOYMENT.md).
 
-Filters expose library-scoped keyword/tag search, all/any tag matching, availability, six sorts and folder/date/type grouping. Sort direction is visible on mobile. Reels defaults to videos and GIFs when entered; its filter sheet supports Photos, GIFs and mixed media. Folders can be hidden from their folder actions and shown again from Settings. Serve Luma over HTTPS to install it as an app; see [Deployment](docs/DEPLOYMENT.md#https-and-installing-luma-as-an-app). Viewers navigate their active query. Collections opens library folders/albums, paginated tags and favourites.
+Filters expose library-scoped keyword/tag search, all/any tag matching, availability, six sorts and folder/date/type grouping. Sort direction is visible on mobile. Reels defaults to videos and GIFs when entered; its filter sheet supports Photos, GIFs and mixed media. Folders can be hidden from their folder actions and shown again from Settings. Luma works over HTTP; installation/shortcut options are described in the deployment guide. Use trusted HTTPS for full LAN PWA support (HTTP localhost also qualifies on the browser’s own device); see [Deployment](docs/DEPLOYMENT.md#https-and-installing-luma-as-an-app). Viewers navigate their active query. Collections opens library folders/albums, paginated tags and favourites.
 
 Media details select/reset folder/library covers and explicitly import embedded/optional-sidecar tags or download XMP. Bulk tag details support metadata exchange for up to 500 selected items. Settings exposes whole-library XMP and disliked-path exports. Jobs report per-item findings, share a 1 GiB export quota and expire downloads after 24 hours. Originals stay read-only; archives include merge instructions and relative-path manifests.
 
 `GET /api/random` returns filtered cached JPEG content for embedding; for example `/api/random?tag=wallpaper&orientation=landscape`. It uses no-store and reports 404 for empty results or 503 for unavailable previews.
 
 Build the staging image with `docker build -t luma:gate7-staging .`. Actual Pi deployment, real-library and long-session measurements are separate release requirements.
+
+### Installing Luma on your home screen
+
+Luma works over HTTP, but full PWA features require trusted HTTPS on LAN addresses.
+HTTP localhost/127.0.0.1 qualifies only on the device running the browser; your server’s
+LAN IP does not. Over HTTP you can try the browser’s Add to Home Screen menu, which
+may create an online-only shortcut instead of an installed PWA. On iPhone/iPad use
+Share → Add to Home Screen. Over trusted HTTPS use Install app or Add to Home Screen.
+No installation panel is displayed in Settings. See [local HTTPS setup](docs/DEPLOYMENT.md#https-and-installing-luma-as-an-app)
+for Kestrel certificates and reverse-proxy configuration, including client CA trust.

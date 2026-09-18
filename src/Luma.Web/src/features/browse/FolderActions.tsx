@@ -1,16 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { EllipsisVertical, EyeOff, FileInput, Info } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from '../../components/ui/Button'
 import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { MetadataExchange } from '../tags/MetadataExchange'
-import { ScanControls } from './ScanControls'
 import { hiddenFolderQueries } from './HiddenFolders'
 import { errorMessage, request, type FolderPage } from './api'
 
-export function FolderActions({ folder, libraryName, ancestors = [], onHidden }: {
-  folder: FolderPage['current']; libraryName?: string; ancestors?: FolderPage['ancestors']; onHidden?: () => void
+export function FolderActions({ folder, libraryName, ancestors = [], onHidden, extraActions }: {
+  folder: FolderPage['current']; libraryName?: string; ancestors?: FolderPage['ancestors']; onHidden?: () => void; extraActions?: (close: () => void) => ReactNode
 }) {
   const [panel, setPanel] = useState<'actions' | 'info' | 'import' | 'hide' | null>(null)
   const client = useQueryClient()
@@ -22,7 +21,7 @@ export function FolderActions({ folder, libraryName, ancestors = [], onHidden }:
     <Modal open={panel !== null} onOpenChange={open => { if (!open) setPanel(null) }} title={title}
       description={panel === 'import' ? 'Merge EXIF/XMP tags from every indexed photo and video directly in this folder, regardless of the current filters. Originals stay unchanged.' : folder.name} sheet>
       <div className="space-y-4 overflow-auto p-5">
-        {panel === 'actions' && <div className="flex flex-wrap gap-2">
+        {panel === 'actions' && <div className="flex flex-wrap gap-2">{extraActions?.(() => setPanel(null))}
           <QuietButton onClick={() => setPanel('info')}><Info className="size-4" />Folder information</QuietButton>
           <QuietButton onClick={() => setPanel('import')}><FileInput className="size-4" />Import folder metadata</QuietButton>
           {/* A library root is the library itself; only folders inside it can be hidden. */}
@@ -32,7 +31,7 @@ export function FolderActions({ folder, libraryName, ancestors = [], onHidden }:
           <div><dt className="text-muted">Name</dt><dd className="break-words">{folder.name}</dd></div>
           <div><dt className="text-muted">Library</dt><dd className="break-words">{libraryName ?? 'Library'}</dd></div>
           <div><dt className="text-muted">Location</dt><dd className="break-words">{[...ancestors, folder].map(item => item.name).join(' / ')}</dd></div>
-        </dl><ScanControls libraryId={folder.libraryId} /></>}
+        </dl></>}
         {panel === 'import' && <MetadataExchange key={folder.id} filters={{ libraryId: folder.libraryId, folderId: folder.id }} exports={false} />}
         {panel === 'hide' && <>
           <p className="text-sm leading-relaxed text-muted">“{folder.name}” and everything inside it will disappear from the library, search, reels and slideshows, and will no longer be indexed. Nothing is deleted; show it again from Settings at any time.</p>

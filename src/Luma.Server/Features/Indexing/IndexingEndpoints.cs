@@ -1,4 +1,7 @@
 using Dapper;
+using System.Text.Json;
+using Luma.Server.Features.Tags;
+using Luma.Server.Features.Media;
 using Luma.Server.Data;
 using Luma.Server.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -6,7 +9,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Luma.Server.Features.Indexing;
 
-public sealed record StartScanRequest(bool Force = false, bool RetryFailures = false);
+public sealed record StartScanRequest(bool Force = false, bool RetryFailures = false,string MetadataMode = "embedded");
 public sealed record ScanAccepted(long Id);
 public sealed record ScanFailure(long Id, long? MediaId, string Code, string OccurredAt);
 public sealed record ScanProgress(long Id, long LibraryId, string State, long Discovered, long Skipped,
@@ -26,7 +29,7 @@ public static class IndexingEndpoints
             await using var db = await database.OpenAsync(ct);
             using var tx = db.BeginTransaction();
             var folder = await db.QuerySingleOrDefaultAsync<FolderIndexRow>(new CommandDefinition("""
-                SELECT f.LibraryId,f.DirectIndexedAt FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
+                SELECT f.LibraryId,f.DirectIndexedAt,l.MetadataMode FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
                 WHERE f.Id=@id AND l.Enabled=1
                 """, new { id }, tx, cancellationToken: ct));
             if (folder is null) return Problem(404, context);
@@ -43,8 +46,9 @@ public static class IndexingEndpoints
             }
             if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))", folder, tx, cancellationToken: ct))) return Problem(409, context);
             var scanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
-                INSERT INTO Scans(LibraryId,FolderId,State,StartedAt) VALUES(@LibraryId,@id,'queued',@now) RETURNING Id
-                """, new { folder.LibraryId, id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+                INSERT INTO Scans(LibraryId,FolderId,State,StartedAt,MetadataMode) VALUES(@LibraryId,@id,'queued',@now,@MetadataMode) RETURNING Id
+                """, new { folder.LibraryId, folder.MetadataMode, id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+            await QueueMetadataAsync(db,tx,scanId,folder.LibraryId,id,folder.MetadataMode,ct);
             tx.Commit();
             return TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId));
         }).WithName("IndexFolder").Produces<ApiProblem>(404, "application/problem+json").Produces<ApiProblem>(409, "application/problem+json");
@@ -63,13 +67,20 @@ public static class IndexingEndpoints
         app.MapPost("/api/libraries/{id:long}/scans", async Task<Results<Accepted<ScanAccepted>, ProblemHttpResult>>
             (long id, StartScanRequest request, Database database, HttpContext context, CancellationToken ct) =>
         {
+            if(request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400,context);
             await using var db = await database.OpenAsync(ct);
             try
             {
+                using var tx=db.BeginTransaction();
                 var scanId = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition("""
-                    INSERT INTO Scans(LibraryId,State,Force,RetryFailures,StartedAt)
-                    SELECT Id,'queued',@Force,@RetryFailures,@now FROM Libraries WHERE Id=@id AND Enabled=1 RETURNING Id
-                    """, new { id, request.Force, request.RetryFailures, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
+                    INSERT INTO Scans(LibraryId,State,Force,RetryFailures,StartedAt,MetadataMode)
+                    SELECT Id,'queued',@Force,@RetryFailures,@now,@MetadataMode FROM Libraries WHERE Id=@id AND Enabled=1 RETURNING Id
+                    """, new { id, request.Force, request.RetryFailures, request.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") },tx, cancellationToken: ct));
+                if(scanId is { } accepted) {
+                    await db.ExecuteAsync(new CommandDefinition("UPDATE Libraries SET MetadataMode=@MetadataMode WHERE Id=@id",new{id,request.MetadataMode},tx,cancellationToken:ct));
+                    await QueueMetadataAsync(db,tx,accepted,id,null,request.MetadataMode,ct);
+                }
+                tx.Commit();
                 return scanId is null ? Problem(404, context) : TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId.Value));
             }
             catch (SqliteException error) when (error.SqliteErrorCode == 19) { return Problem(409, context); }
@@ -96,7 +107,7 @@ public static class IndexingEndpoints
         }).WithName("GetScan").Produces<ApiProblem>(400, "application/problem+json").Produces<ApiProblem>(404, "application/problem+json");
 
         app.MapPost("/api/scans/{id:long}/cancel", async Task<Results<Accepted<ScanAccepted>, ProblemHttpResult>>
-            (long id, Database database, ScanWorker worker, HttpContext context, CancellationToken ct) =>
+            (long id, Database database, ScanWorker worker, MetadataJobs metadataJobs, HttpContext context, CancellationToken ct) =>
         {
             await using var db = await database.OpenAsync(ct);
             if (!await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Scans WHERE Id=@id)", new { id }, cancellationToken: ct)))
@@ -109,8 +120,18 @@ public static class IndexingEndpoints
                   AND EXISTS(SELECT 1 FROM Scans WHERE Id=@id AND State='cancelled');
                 """, new { id, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
             worker.Cancel(id);
+            var metadataIds=await db.QueryAsync<long>(new CommandDefinition("SELECT Id FROM MetadataJobs WHERE ScanId=@id AND State IN ('queued','running') AND EXISTS(SELECT 1 FROM Scans WHERE Id=@id AND State='cancelled')",new{id},cancellationToken:ct));
+            foreach(var metadataId in metadataIds) await metadataJobs.CancelAsync(metadataId,ct);
             return TypedResults.Accepted($"/api/scans/{id}", new ScanAccepted(id));
         }).WithName("CancelScan").Produces<ApiProblem>(404, "application/problem+json");
+    }
+
+    internal static async Task QueueMetadataAsync(SqliteConnection db,SqliteTransaction tx,long scanId,long libraryId,long? folderId,string mode,CancellationToken ct)
+    {
+        if(mode=="none") return;
+        if(await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')",transaction:tx,cancellationToken:ct))>=16) throw new ApiRequestException(429,"rate_limited","The metadata job queue is full.");
+        var request=new MetadataJobRequest(Query:new MediaQuery{LibraryId=libraryId,FolderId=folderId,Recursive=folderId is null},IncludeSidecars:mode=="xmp",Automatic:true,ScanId:scanId);
+        await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,ScanId) VALUES('import','queued',@request,@now,@scanId); UPDATE Scans SET MetadataQueued=1 WHERE Id=@scanId",new{scanId,request=JsonSerializer.Serialize(request with {Query=request.Query!.Normalize()}),now=DateTimeOffset.UtcNow.ToString("O")},tx,cancellationToken:ct));
     }
 
     private static ProblemHttpResult Problem(int status, HttpContext context) =>
@@ -123,6 +144,7 @@ public static class IndexingEndpoints
     private sealed class FolderIndexRow
     {
         public long LibraryId { get; set; }
+        public string MetadataMode { get; set; } = "embedded";
         public string? DirectIndexedAt { get; set; }
     }
     private sealed class LibraryRow
@@ -140,6 +162,7 @@ public sealed class ScanRow
     public long Id { get; set; }
     public long LibraryId { get; set; }
     public string State { get; set; } = "";
+    public string MetadataMode { get; set; } = "none";
     public bool Force { get; set; }
     public bool RetryFailures { get; set; }
     public long Discovered { get; set; }

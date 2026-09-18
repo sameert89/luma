@@ -1,9 +1,15 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { StrictMode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { StrictMode, type ReactNode } from 'react'
 import { MediaStage } from './MediaStage'
 import type { Media } from './api'
+
+function render(ui: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  return rtlRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> })
+}
 
 const image = { id: 1, fileName: 'image.jpg', mediaType: 'image', width: 640, height: 480, preview: { url: '/cached.jpg', status: 'ready' } } as Media
 
@@ -260,7 +266,7 @@ describe('media viewing', () => {
       fireEvent.durationChange(video)
       const seek = screen.getByRole('slider', { name: 'Seek' })
       expect(seek).toHaveClass('seek', 'phone-portrait:order-first', 'phone-portrait:basis-full')
-      expect(screen.getByRole('slider', { name: 'Volume' })).toHaveClass('phone-portrait:hidden')
+      expect(screen.getByRole('slider', { name: 'Volume' })).not.toHaveClass('phone-portrait:hidden')
 
       const assigned: number[] = []
       Object.defineProperty(video, 'currentTime', { configurable: true, get: () => assigned.at(-1) ?? 0, set: value => { assigned.push(value) } })
@@ -364,3 +370,90 @@ function tap(element: Element, clientX: number, clientY: number) {
     element.dispatchEvent(new PointerEvent('pointerup', options))
   })
 }
+
+it('zooms photos at a double-tapped region, suppresses navigation while panning, and resets on another double tap', () => {
+  const navigate = vi.fn()
+  const { container } = render(<MediaStage item={image} onNavigate={navigate} />)
+  const stage = container.querySelector('.touch-none') as HTMLElement
+  vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400, height: 800, right: 400, bottom: 800, x: 0, y: 0, toJSON: () => ({}) })
+  tap(stage, 300, 400); tap(stage, 300, 400)
+  const transform = screen.getByRole('img').parentElement!
+  expect(transform.style.transform).toContain('scale(2.5)')
+  expect(transform.style.transform).toContain('translate(-150px, 0px)')
+  fireEvent.pointerDown(stage, { pointerId: 1, clientX: 300, clientY: 400 })
+  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 200, clientY: 400 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 200, clientY: 400 })
+  expect(navigate).not.toHaveBeenCalled()
+  tap(stage, 200, 400); tap(stage, 200, 400)
+  expect(transform.style.transform).toContain('scale(1)')
+  expect(transform.style.transform).toContain('translate(0px, 0px)')
+})
+
+it('pinches from a fixed two-finger anchor and cannot navigate on either finger release', () => {
+  const navigate = vi.fn()
+  const { container } = render(<MediaStage item={image} onNavigate={navigate} />)
+  const stage = container.querySelector('.touch-none') as HTMLElement
+  stage.setPointerCapture = () => {}
+  vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400, height: 800, right: 400, bottom: 800, x: 0, y: 0, toJSON: () => ({}) })
+  fireEvent.pointerDown(stage, { pointerId: 1, clientX: 100, clientY: 400 })
+  fireEvent.pointerDown(stage, { pointerId: 2, clientX: 200, clientY: 400 })
+  fireEvent.pointerMove(stage, { pointerId: 2, clientX: 300, clientY: 400 })
+  expect(screen.getByRole('img').parentElement!.style.transform).toContain('scale(2)')
+  fireEvent.pointerUp(stage, { pointerId: 2, clientX: 300, clientY: 400 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 100, clientY: 400 })
+  expect(navigate).not.toHaveBeenCalled()
+})
+
+it('uses right-side swipes for volume in the normal player without seeking or navigating', () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const navigate = vi.fn()
+  const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={navigate} />)
+  const stage = container.querySelector('.touch-none') as HTMLElement
+  stage.setPointerCapture = () => {}
+  vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400, height: 800, right: 400, bottom: 800, x: 0, y: 0, toJSON: () => ({}) })
+  const player = container.querySelector('video')!
+  fireEvent.pointerDown(stage, { pointerId: 1, button: 0, clientX: 350, clientY: 300 })
+  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 350, clientY: 380 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 350, clientY: 380 })
+  expect(player.volume).toBeCloseTo(0.5)
+  expect(player.currentTime).toBe(0)
+  expect(screen.getByRole('status')).toHaveTextContent('Volume 50%')
+  expect(navigate).not.toHaveBeenCalled()
+  vi.restoreAllMocks()
+})
+
+it('offers persisted resume and start-over choices only for a partially watched normal video', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const progress = { mediaId: 1, positionSeconds: 754, durationSeconds: 1000, watchedSeconds: 60, state: 'in_progress', updatedAt: '2026' }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(progress))))
+  const { container, rerender } = render(<MediaStage item={{ ...image, mediaType: 'video', watchProgress: progress }} onNavigate={vi.fn()} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Resume from 12:34' }))
+  expect(container.querySelector('video')!.currentTime).toBe(754)
+  expect(screen.queryByRole('button', { name: 'Start from beginning' })).not.toBeInTheDocument()
+  rerender(<MediaStage item={{ ...image, id: 2, mediaType: 'video', watchProgress: { ...progress, mediaId: 2 } }} onNavigate={vi.fn()} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Start from beginning' }))
+  expect(container.querySelector('video')!.currentTime).toBe(0)
+  vi.restoreAllMocks()
+})
+
+it('keeps right-side vertical swipes available for Reels navigation without changing volume', () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const navigate = vi.fn()
+  const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} reels muted onNavigate={navigate} />)
+  const stage = container.querySelector('.touch-none') as HTMLElement
+  stage.setPointerCapture = () => {}
+  vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400, height: 800, right: 400, bottom: 800, x: 0, y: 0, toJSON: () => ({}) })
+  fireEvent.pointerDown(stage, { pointerId: 1, button: 0, clientX: 350, clientY: 500 })
+  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 350, clientY: 300 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 350, clientY: 300 })
+  expect(container.querySelector('video')!.volume).toBe(1)
+  expect(screen.queryByText(/Volume \d+%/)).not.toBeInTheDocument()
+  expect(navigate).toHaveBeenCalledWith('next')
+  vi.restoreAllMocks()
+})

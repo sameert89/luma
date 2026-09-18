@@ -27,8 +27,8 @@ export function Select({ className = '', shape = 'field', ...props }: ComponentP
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="flex min-w-0 flex-col gap-2 text-sm font-medium text-muted">{label}{children}</label>
 }
-export function QuietButton({ className = '', type = 'button', ...props }: ComponentProps<'button'>) {
-  return <button type={type} className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-surface disabled:cursor-default disabled:opacity-40 ${className}`} {...props} />
+export function QuietButton({ className = '', type = 'button', compact = false, ...props }: ComponentProps<'button'> & { compact?: boolean }) {
+  return <button type={type} className={`inline-flex ${compact ? 'min-h-7 px-2 py-1 text-xs' : 'min-h-10 px-3 py-2 text-sm'} items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line font-medium text-ink hover:bg-surface disabled:cursor-default disabled:opacity-40 ${className}`} {...props} />
 }
 export function QuietLink({ className = '', children, ...props }: ComponentProps<'a'>) {
   return <a className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-surface ${className}`} {...props}>{children}</a>

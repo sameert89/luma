@@ -5,6 +5,8 @@ namespace Luma.Server.Features.Indexing;
 
 public sealed class IndexingOptions
 {
+    private SemaphoreSlim? processingSlots;
+    internal SemaphoreSlim ProcessingSlots => LazyInitializer.EnsureInitialized(ref processingSlots,()=>new SemaphoreSlim(ProcessingWorkers,ProcessingWorkers));
     public List<LibraryOptions> Libraries { get; set; } = [];
     public string CachePath { get; set; } = ".local/cache";
     public string FfmpegPath { get; set; } = "ffmpeg";
@@ -89,11 +91,11 @@ public sealed class IndexingSetup(Database database, IndexingOptions options)
             await db.ExecuteAsync(new CommandDefinition("""
                 INSERT INTO Libraries(Id,Name,Path,CaseSensitive) VALUES(@Id,@Name,@Path,@CaseSensitive)
                 ON CONFLICT(Id) DO UPDATE SET Name=excluded.Name, Enabled=1;
-                INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt)
+                INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt,MetadataMode)
                 SELECT @Id,CASE WHEN NOT @ScanOnStartup AND NOT @encoderChanged THEN
                   (SELECT FolderId FROM Scans WHERE LibraryId=@Id AND State='interrupted' ORDER BY Id DESC LIMIT 1) ELSE NULL END,'queued',
                   COALESCE((SELECT Force FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),
-                  COALESCE((SELECT RetryFailures FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),@now WHERE
+                  COALESCE((SELECT RetryFailures FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),@now,(SELECT MetadataMode FROM Libraries WHERE Id=@Id) WHERE
                   (@ScanOnStartup OR @encoderChanged OR (SELECT State FROM Scans WHERE LibraryId=@Id ORDER BY Id DESC LIMIT 1)='interrupted')
                   AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running'));
                 """, new { root.Id, root.Name, root.Path, root.CaseSensitive, root.ScanOnStartup, encoderChanged, now = DateTimeOffset.UtcNow.ToString("O") }, tx,

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Modal } from './Modal'
@@ -21,4 +21,44 @@ describe('modal history integration', () => {
       vi.stubGlobal('crypto', originalCrypto)
     }
   })
+})
+
+it('releases overlays and body interaction locks immediately through repeated and nested close cycles', async () => {
+  const change = vi.fn()
+  const ui = (outer: boolean, inner: boolean) => <><Modal open={outer} onOpenChange={change} title="Viewer" description="Media"><button type="button">Play</button></Modal><Modal open={inner} onOpenChange={change} title="Options" description="Controls"><button type="button">Fit</button></Modal></>
+  const { rerender } = render(ui(false, false))
+  for (let cycle = 0; cycle < 5; cycle++) {
+    rerender(ui(true, false))
+    await screen.findByRole('dialog', { name: 'Viewer' })
+    rerender(ui(true, true))
+    expect(await screen.findByRole('dialog', { name: 'Options' })).toBeVisible()
+    rerender(ui(true, false))
+    expect(screen.queryByRole('dialog', { name: 'Options' })).not.toBeInTheDocument()
+    rerender(ui(false, false))
+    expect(document.querySelector('[data-motion]')).toBeNull()
+    expect(document.querySelector('.motion-overlay')).toBeNull()
+    await waitFor(() => expect(document.body.style.pointerEvents).not.toBe('none'))
+    expect(document.body.hasAttribute('data-scroll-locked')).toBe(false)
+  }
+})
+
+it('keeps a modal opened while a closing modal is still leaving its history entry', async () => {
+  history.replaceState({}, '', location.href)
+  const menuChange = vi.fn()
+  const viewerChange = vi.fn()
+  const ui = (menu: boolean, viewer: boolean) => <><Modal open={menu} onOpenChange={menuChange} title="Folder actions" description="Menu"><button type="button">Start slideshow</button></Modal><Modal open={viewer} onOpenChange={viewerChange} title="Viewer" description="Media"><button type="button">Play</button></Modal></>
+  // Browsers finish a history traversal a little later, as a separate task.
+  const back = history.back.bind(history)
+  const delayed = vi.spyOn(history, 'back').mockImplementation(() => { setTimeout(back, 20) })
+  const { rerender } = render(ui(true, false))
+  await waitFor(() => expect(history.state?.lumaModal).toMatch(/^luma-modal-/))
+  rerender(ui(false, false))
+  // The menu's entry is being left (history.back is pending) when the viewer opens.
+  await new Promise(resolve => setTimeout(resolve, 0))
+  rerender(ui(false, true))
+  await waitFor(() => expect(history.state?.lumaModal).toMatch(/^luma-modal-/))
+  await new Promise(resolve => setTimeout(resolve, 50))
+  expect(viewerChange).not.toHaveBeenCalledWith(false)
+  expect(screen.getByRole('dialog', { name: 'Viewer' })).toBeVisible()
+  delayed.mockRestore()
 })

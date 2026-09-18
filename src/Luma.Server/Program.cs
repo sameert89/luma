@@ -77,6 +77,8 @@ app.UseStatusCodePages(async context =>
 app.MapStatus();
 app.MapIndexing();
 app.MapMedia();
+app.MapPlayback();
+app.MapTasks();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseRouting();
 app.Use(async (context, next) =>

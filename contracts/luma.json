@@ -483,6 +483,277 @@
         }
       }
     },
+    "/api/collections/tag-groups": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetTagGroups",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "libraryId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "collectionTag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagged",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "mediaType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "extension",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "maxSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "orientation",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minHeight",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "height",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "maxAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "preference",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "afterId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagGroupPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/random": {
       "get": {
         "tags": [
@@ -564,6 +835,13 @@
               "items": {
                 "type": "string"
               }
+            }
+          },
+          {
+            "name": "collectionTag",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -903,6 +1181,20 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1000,6 +1292,13 @@
               "items": {
                 "type": "string"
               }
+            }
+          },
+          {
+            "name": "collectionTag",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -1296,6 +1595,13 @@
               "items": {
                 "type": "string"
               }
+            }
+          },
+          {
+            "name": "collectionTag",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -1812,6 +2118,158 @@
           }
         }
       }
+    },
+    "/api/media/{id}/progress": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetWatchProgress",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchState"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetWatchProgress",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatchUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/clear-finished": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ClearFinishedBackgroundTasks",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CancelBackgroundTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/queue": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "QueueBackgroundTaskAgain",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetBackgroundTasks",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BackgroundTask"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1849,6 +2307,48 @@
           },
           "traceId": {
             "type": "string"
+          }
+        }
+      },
+      "BackgroundTask": {
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "createdAt",
+          "processed",
+          "failed",
+          "pending"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "processed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -2313,6 +2813,10 @@
             },
             "nullable": true
           },
+          "collectionTag": {
+            "type": "string",
+            "nullable": true
+          },
           "tagMode": {
             "type": "string",
             "nullable": true
@@ -2508,6 +3012,15 @@
           "groupLabel": {
             "type": "string",
             "nullable": true
+          },
+          "watchProgress": {
+            "type": "object",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WatchState"
+              }
+            ],
+            "nullable": true
           }
         }
       },
@@ -2534,6 +3047,15 @@
           "includeSidecars": {
             "type": "boolean",
             "default": false
+          },
+          "automatic": {
+            "type": "boolean",
+            "default": false
+          },
+          "scanId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
           }
         }
       },
@@ -2601,6 +3123,21 @@
           "contentUrl": {
             "type": "string",
             "nullable": true
+          },
+          "found": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -2741,6 +3278,10 @@
           "retryFailures": {
             "type": "boolean",
             "default": false
+          },
+          "metadataMode": {
+            "type": "string",
+            "default": "embedded"
           }
         }
       },
@@ -2760,6 +3301,26 @@
           }
         }
       },
+      "TagGroupPage": {
+        "required": [
+          "items",
+          "nextId"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagSummary"
+            }
+          },
+          "nextId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
       "TagSummary": {
         "required": [
           "id",
@@ -2773,6 +3334,63 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "WatchState": {
+        "required": [
+          "mediaId",
+          "positionSeconds",
+          "durationSeconds",
+          "watchedSeconds",
+          "state",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "positionSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "watchedSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "state": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "WatchUpdate": {
+        "required": [
+          "positionSeconds",
+          "durationSeconds",
+          "watchedSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "positionSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "watchedSeconds": {
+            "type": "number",
+            "format": "double"
           }
         }
       }

@@ -192,6 +192,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collections/tag-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetTagGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/random": {
         parameters: {
             query?: never;
@@ -448,6 +464,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/media/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetWatchProgress"];
+        put: operations["SetWatchProgress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/clear-finished": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ClearFinishedBackgroundTasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CancelBackgroundTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["QueueBackgroundTaskAgain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetBackgroundTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -461,6 +557,19 @@ export interface components {
             instance?: string | null;
             code: string;
             traceId: string;
+        };
+        BackgroundTask: {
+            id: string;
+            kind: string;
+            state: string;
+            createdAt: string;
+            /** Format: int64 */
+            processed: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            pending: number;
+            scope?: string | null;
         };
         BulkTagsRequest: {
             mediaIds: number[];
@@ -584,6 +693,7 @@ export interface components {
             startsWith?: string | null;
             endsWith?: string | null;
             tag?: string[] | null;
+            collectionTag?: string | null;
             tagMode?: string | null;
             tagged?: boolean | null;
             mediaType?: string | null;
@@ -642,12 +752,17 @@ export interface components {
             tags: components["schemas"]["TagSummary"][];
             groupKey?: string | null;
             groupLabel?: string | null;
+            watchProgress?: components["schemas"]["WatchState"] | null;
         };
         MetadataJobRequest: {
             mediaIds?: number[] | null;
             query?: components["schemas"]["MediaQuery"] | null;
             /** @default false */
             includeSidecars: boolean;
+            /** @default false */
+            automatic: boolean;
+            /** Format: int64 */
+            scanId?: number | null;
         };
         MetadataJobStatus: {
             /** Format: int64 */
@@ -666,6 +781,21 @@ export interface components {
             /** Format: int64 */
             nextMediaId: number | null;
             contentUrl: string | null;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            found: number;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            updated: number;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            skipped: number;
         };
         PreferenceRequest: {
             preference: string;
@@ -712,16 +842,43 @@ export interface components {
             force: boolean;
             /** @default false */
             retryFailures: boolean;
+            /** @default embedded */
+            metadataMode: string;
         };
         StatusResponse: {
             status: string;
             /** Format: int32 */
             schemaVersion: number;
         };
+        TagGroupPage: {
+            items: components["schemas"]["TagSummary"][];
+            /** Format: int64 */
+            nextId: number | null;
+        };
         TagSummary: {
             /** Format: int64 */
             id: number;
             name: string;
+        };
+        WatchState: {
+            /** Format: int64 */
+            mediaId: number;
+            /** Format: double */
+            positionSeconds: number;
+            /** Format: double */
+            durationSeconds: number;
+            /** Format: double */
+            watchedSeconds: number;
+            state: string;
+            updatedAt: string;
+        };
+        WatchUpdate: {
+            /** Format: double */
+            positionSeconds: number;
+            /** Format: double */
+            durationSeconds: number;
+            /** Format: double */
+            watchedSeconds: number;
         };
     };
     responses: never;
@@ -1122,6 +1279,60 @@ export interface operations {
             };
         };
     };
+    GetTagGroups: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                libraryId?: number;
+                folderId?: number;
+                recursive?: boolean;
+                q?: string;
+                path?: string;
+                startsWith?: string;
+                endsWith?: string;
+                tag?: string[];
+                collectionTag?: string;
+                tagMode?: string;
+                tagged?: boolean;
+                mediaType?: string;
+                extension?: string[];
+                dateFrom?: string;
+                dateTo?: string;
+                minSizeBytes?: number;
+                maxSizeBytes?: number;
+                orientation?: string;
+                minWidth?: number;
+                width?: number;
+                minHeight?: number;
+                height?: number;
+                minAspectRatio?: number;
+                maxAspectRatio?: number;
+                preference?: string;
+                availability?: string;
+                sort?: string;
+                order?: string;
+                seed?: string;
+                groupBy?: string;
+                afterId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagGroupPage"];
+                };
+            };
+        };
+    };
     GetRandomImage: {
         parameters: {
             query?: {
@@ -1135,6 +1346,7 @@ export interface operations {
                 startsWith?: string;
                 endsWith?: string;
                 tag?: string[];
+                collectionTag?: string;
                 tagMode?: string;
                 tagged?: boolean;
                 mediaType?: string;
@@ -1285,6 +1497,8 @@ export interface operations {
                 parentId?: number;
                 limit?: number;
                 cursor?: string;
+                sort?: string;
+                order?: string;
             };
             header?: never;
             path?: never;
@@ -1316,6 +1530,7 @@ export interface operations {
                 startsWith?: string;
                 endsWith?: string;
                 tag?: string[];
+                collectionTag?: string;
                 tagMode?: string;
                 tagged?: boolean;
                 mediaType?: string;
@@ -1390,6 +1605,7 @@ export interface operations {
                 startsWith?: string;
                 endsWith?: string;
                 tag?: string[];
+                collectionTag?: string;
                 tagMode?: string;
                 tagged?: boolean;
                 mediaType?: string;
@@ -1687,6 +1903,132 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetWatchProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchState"];
+                };
+            };
+        };
+    };
+    SetWatchProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchState"];
+                };
+            };
+        };
+    };
+    ClearFinishedBackgroundTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CancelBackgroundTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    QueueBackgroundTaskAgain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetBackgroundTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackgroundTask"][];
+                };
             };
         };
     };

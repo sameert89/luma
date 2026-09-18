@@ -40,9 +40,17 @@ on real Android/iOS clients from Chromium device emulation.
 
 ## HTTPS and installing Luma as an app
 
-Browsers only allow installing Luma (PWA), its service worker and some media features
-on a secure origin: HTTPS, or `localhost` itself. Plain HTTP on the LAN keeps working as
-an ordinary website. HTTPS also enables HTTP/2, which multiplexes video range requests
+Luma runs over plain HTTP, including LAN addresses, without mandatory HTTPS redirection.
+Full PWA installation capabilities, service workers and offline startup require a secure
+context: trusted HTTPS, or HTTP `localhost`/`127.0.0.1` on the browser's own device.
+A private LAN IP such as `http://192.168.1.20:5080` and an HTTP `.local` hostname do
+not qualify. Adding a manifest, changing `display`, or adding a home-screen icon cannot
+lift the service-worker restriction. Some browsers allow manually saving HTTP sites as
+home-screen shortcuts; their window mode depends on the browser and they remain online-only.
+Use the browser's Install app/Add to Home Screen controls; there is no installation
+panel in Settings. On iPhone/iPad use Share → Add to Home Screen.
+The server may remain HTTP behind a trusted HTTPS reverse proxy; the browser-facing URL
+is what determines PWA capability. HTTPS also enables HTTP/2, which multiplexes video range requests
 and thumbnails over one connection instead of queueing behind HTTP/1.1's six-connection
 limit, noticeably reducing seek and reel-switch stalls.
 
@@ -79,9 +87,16 @@ responses (for nginx: `proxy_buffering off;` on that location). For example, Cad
 
 ```text
 luma.example.lan {
+  tls internal
   reverse_proxy 127.0.0.1:5080
 }
 ```
+
+For that private `.lan` example, configure local DNS to point the hostname at your
+server and install Caddy's local CA root certificate into each client device's trusted
+certificate store. `tls internal` does not produce a publicly trusted certificate; merely
+clicking through a certificate warning is not sufficient. A public DNS name with a
+publicly trusted certificate is another option and does not require exposing Luma publicly.
 
 Once served over HTTPS, use the browser's **Install app** / **Add to Home Screen**. The
 installed app opens standalone, uses the Luma icon and follows the chosen theme colour.

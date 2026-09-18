@@ -13,6 +13,9 @@ public sealed class OriginalContentTests
         await using var fixture = await PipelineFixture.CreateAsync();
         await fixture.CreateImageAsync("image.png");
         await fixture.ScanAsync();
+        // Prepare previews before starting hosted workers so source-deletion assertions
+        // do not race an unrelated image decoder holding a Windows file handle.
+        await fixture.ProcessAllAsync();
         var bytes = await File.ReadAllBytesAsync(Path.Combine(fixture.Root.Path, "image.png"));
         await using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Testing")
             .UseSetting("Luma:DatabasePath", fixture.Database.Path)

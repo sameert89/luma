@@ -227,3 +227,11 @@ Frontend tests should live alongside their features. Shared connection and migra
 The initial release does not include cloud synchronization, facial/object recognition, AI search, duplicate detection, automatic albums, media editing, collaborative sharing, clustering, or complex authorization. Authentication is deferred under the existing local/private-network product contract.
 
 Do not add external infrastructure services, unbounded workers, request-time original processing, or automatic original transcoding to satisfy a delivery stage. If a requirement cannot meet the architecture or agreed performance budgets, document the conflict before changing the design.
+
+## Stage 8 — v1.0.2
+
+Functional implementation delivered locally: [requirements and acceptance](STAGE-8.md), [verification](STAGE-8-VERIFICATION.md). Real-device scroll/gesture acceptance and target-hardware measurements remain open. E2E runs are excluded by user instruction.
+
+## Stage 9 — Help and control discoverability
+
+Functional implementation delivered locally: [requirements](STAGE-9.md), [verification](STAGE-9-VERIFICATION.md). A labeled Help button beside Your libraries and a Settings link open a dedicated, URL-addressable guide covering actual icons, locations, actions, gestures and shortcuts; Back restores the previous destination, filters and folder scope. The bottom bar is unchanged. Real-browser/device layout review remains open. E2E runs are excluded by user instruction.

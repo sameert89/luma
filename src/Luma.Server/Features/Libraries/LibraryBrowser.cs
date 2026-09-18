@@ -35,8 +35,10 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
             """,new { encoder=IndexingOptions.EncoderVersion },cancellationToken:ct));
         return rows.Select(x=>new LibrarySummary(x.Id,x.Name,x.Availability,x.RootFolderId,x.CoverUrl)).ToArray();
     }
-    public async Task<FolderPage> FoldersAsync(long? libraryId,long? parentId,int? limit,string? cursor,CancellationToken ct)
+    public async Task<FolderPage> FoldersAsync(long? libraryId,long? parentId,int? limit,string? cursor,CancellationToken ct,string? sort = null,string? sortOrder = null)
     {
+        sort ??= "id"; sortOrder ??= "asc";
+        if(sort is not ("id" or "name") || sortOrder is not ("asc" or "desc")) throw ApiRequestException.Invalid();
         if(limit is <1 or >200 || libraryId<=0 || parentId<=0 || (libraryId is null && parentId is null)) throw ApiRequestException.Invalid();
         await using var db=await database.OpenAsync(ct);
         var current=await db.QuerySingleOrDefaultAsync<FolderRow>(new CommandDefinition("""
@@ -44,11 +46,16 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
             WHERE (@parentId IS NOT NULL AND f.Id=@parentId) OR (@parentId IS NULL AND f.LibraryId=@libraryId AND f.PathKey='')
             """,new{parentId,libraryId},cancellationToken:ct)) ?? throw ApiRequestException.Missing();
         if(libraryId is not null && current.LibraryId!=libraryId) throw ApiRequestException.Invalid();
-        var scope=$"folders:{current.Id}";
+        var scope=sort=="id" && sortOrder=="asc"?$"folders:{current.Id}":$"folders:{current.Id}:{sort}:{sortOrder}";
         var position=cursor is null?null:cursors.Decode(cursor,scope);
         var backwards=position?.Backward==true;
-        var order=backwards?"DESC":"ASC";
-        var seek=position is null?"":$"AND f.Id {(backwards?"<":">")} @after";
+        var descending=(sortOrder=="desc") != backwards;
+        var order=descending?"DESC":"ASC";
+        var compare=descending?"<":">";
+        if(position is not null && sort=="name" && position.Tuple is not {Length:1}) throw new ApiRequestException(400,"invalid_cursor","Refresh the folder listing.");
+        var seek=position is null?"":sort=="name"?$"AND (f.RelativePath COLLATE NOCASE,f.Id) {compare} (@key COLLATE NOCASE,@after)":$"AND f.Id {compare} @after";
+        var ordering=sort=="name"?$"f.RelativePath COLLATE NOCASE {order},f.Id {order}":$"f.Id {order}";
+        string Encode(FolderRow row,bool backward)=>sort=="name"?cursors.Encode(scope,[row.RelativePath],row.Id,backward):cursors.Encode(scope,0,row.Id,backward);
         var rows=(await db.QueryAsync<FolderRow>(new CommandDefinition($"""
             SELECT f.*,
             COALESCE((SELECT '/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion
@@ -59,16 +66,16 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
              FROM FolderAncestry a CROSS JOIN Media m ON m.FolderId=a.DescendantId AND m.LibraryId=f.LibraryId
              CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
              WHERE a.AncestorId=f.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT 1)) CoverUrl
-            FROM Folders f WHERE ParentId=@id AND Hidden=0 {seek} ORDER BY Id {order} LIMIT @limit
-            """,new{id=current.Id,after=position?.Id,limit=(limit??100)+1,encoder=IndexingOptions.EncoderVersion},cancellationToken:ct))).ToList();
+            FROM Folders f WHERE ParentId=@id AND Hidden=0 {seek} ORDER BY {ordering} LIMIT @limit
+            """,new{id=current.Id,after=position?.Id,key=position?.Tuple?[0],limit=(limit??100)+1,encoder=IndexingOptions.EncoderVersion},cancellationToken:ct))).ToList();
         var more=rows.Count>(limit??100);if(more)rows.RemoveAt(rows.Count-1);if(backwards)rows.Reverse();
         var ancestors=await db.QueryAsync<FolderRow>(new CommandDefinition("""
             SELECT f.*,l.Name LibraryName FROM FolderAncestry a JOIN Folders f ON f.Id=a.AncestorId JOIN Libraries l ON l.Id=f.LibraryId
             WHERE a.DescendantId=@id AND a.AncestorId<>@id ORDER BY f.Id
             """,new{id=current.Id},cancellationToken:ct));
         return new(ToSummary(current),ancestors.Select(ToSummary).ToArray(),rows.Select(ToSummary).ToArray(),
-            rows.Count>0 && (backwards?position is not null:more)?cursors.Encode(scope,0,rows[^1].Id,false):null,
-            rows.Count>0 && (backwards?more:position is not null)?cursors.Encode(scope,0,rows[0].Id,true):null);
+            rows.Count>0 && (backwards?position is not null:more)?Encode(rows[^1],false):null,
+            rows.Count>0 && (backwards?more:position is not null)?Encode(rows[0],true):null);
     }
     public async Task SetCoverAsync(long folder,long? mediaId,CancellationToken ct)
     {
