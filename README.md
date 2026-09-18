@@ -144,7 +144,7 @@ This copies the generated frontend to the host's `wwwroot` and publishes to `.lo
 
 See the [staging handoff](docs/STAGE-7-HANDOFF.md), [verification results](docs/STAGE-7-VERIFICATION.md), and [Docker deployment/recovery guide](docs/DEPLOYMENT.md).
 
-Filters expose library-scoped keyword/tag search, all/any tag matching, availability, six sorts and folder/date/type grouping. Sort direction is visible on mobile. Reels defaults to video when entered; its filter sheet supports Photos and mixed media. Viewers navigate their active query. Collections opens library folders/albums, paginated tags and favourites.
+Filters expose library-scoped keyword/tag search, all/any tag matching, availability, six sorts and folder/date/type grouping. Sort direction is visible on mobile. Reels defaults to videos and GIFs when entered; its filter sheet supports Photos, GIFs and mixed media. Folders can be hidden from their folder actions and shown again from Settings. Serve Luma over HTTPS to install it as an app; see [Deployment](docs/DEPLOYMENT.md#https-and-installing-luma-as-an-app). Viewers navigate their active query. Collections opens library folders/albums, paginated tags and favourites.
 
 Media details select/reset folder/library covers and explicitly import embedded/optional-sidecar tags or download XMP. Bulk tag details support metadata exchange for up to 500 selected items. Settings exposes whole-library XMP and disliked-path exports. Jobs report per-item findings, share a 1 GiB export quota and expire downloads after 24 hours. Originals stay read-only; archives include merge instructions and relative-path manifests.
 

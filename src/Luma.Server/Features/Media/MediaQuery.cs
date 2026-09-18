@@ -77,7 +77,7 @@ public sealed record MediaQuery
         if (extensions.Any(x => x.Length > 16 || !x.All(char.IsAsciiLetterOrDigit))) throw ApiRequestException.Invalid("Invalid extension.");
         return this with { Limit = Limit ?? 60, Q = Text(Q), Path = Text(Path), StartsWith = Text(StartsWith), EndsWith = Text(EndsWith),
             Tag = Tag?.Select(Tags.TagText.Normalize).Select(x => x.Key).Distinct().Order().ToArray() ?? [], Extension = extensions,
-            MediaType = Choice(MediaType,"image","video"), Orientation = Choice(Orientation,"landscape","portrait","square"),
+            MediaType = Choice(MediaType,"image","video","gif","motion"), Orientation = Choice(Orientation,"landscape","portrait","square"),
             Preference = Choice(Preference,"neutral","liked","disliked"), Availability = Choice(Availability,"present","missing","all") ?? "present",
             Seed = Seed ?? (Sort == "shuffle" ? Guid.NewGuid().ToString("N") : null),
             Sort = Choice(Sort,"modified","captured","name","type","size","shuffle") ?? "modified", Order = Choice(Order,"asc","desc") ?? "desc", GroupBy = Choice(GroupBy,"none","folder","date","type") ?? "none",
@@ -94,7 +94,12 @@ public sealed record MediaQuery
         if (Availability != "all") Add("m.Availability=@availability", "availability", Availability);
         Add("m.LibraryId=@libraryId", "libraryId", LibraryId);
         Add(Recursive == true ? "m.FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@folderId)" : "m.FolderId=@folderId", "folderId", FolderId);
-        Add("m.MediaType=@mediaType", "mediaType", MediaType);
+        // Hidden folders drop out of every view, including their descendants.
+        conditions.Add($"m.FolderId NOT IN ({Libraries.HiddenFolders.Descendants})");
+        // GIFs are indexed as images; "motion" is the Reels set of videos plus animated GIFs.
+        if (MediaType == "gif") conditions.Add("m.Extension='.gif'");
+        else if (MediaType == "motion") conditions.Add("(m.MediaType='video' OR m.Extension='.gif')");
+        else Add("m.MediaType=@mediaType", "mediaType", MediaType);
         Add("m.Preference=@preference", "preference", Preference);
         Add("m.Orientation=@orientation", "orientation", Orientation);
         Add("m.SizeBytes>=@minSize", "minSize", MinSizeBytes); Add("m.SizeBytes<=@maxSize", "maxSize", MaxSizeBytes);

@@ -197,6 +197,163 @@ describe('media viewing', () => {
       expect(play).toHaveBeenCalled()
     } finally { vi.restoreAllMocks(); vi.useRealTimers() }
   })
+  it('skips on side double taps, plays at 2× while held and shows buffering only for real stalls', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false)
+    try {
+      const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={vi.fn()} />)
+      const video = container.querySelector('video')!
+      const stage = video.parentElement!
+      vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ top: 0, left: 0, width: 900, height: 600 } as DOMRect)
+      Object.defineProperty(video, 'duration', { configurable: true, value: 120 })
+      video.currentTime = 50
+
+      tap(stage, 850, 300); tap(stage, 852, 302)
+      expect(video.currentTime).toBe(60)
+      // Further taps inside the window keep skipping, as in streaming players.
+      tap(stage, 850, 300)
+      expect(video.currentTime).toBe(70)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      tap(stage, 40, 300); tap(stage, 42, 300)
+      expect(video.currentTime).toBe(60)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(pause).not.toHaveBeenCalled()
+
+      // A single centre tap toggles playback once the double-tap window closes.
+      tap(stage, 450, 300)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(pause).toHaveBeenCalledTimes(1)
+
+      const hold = { pointerId: 2, clientX: 450, clientY: 300, bubbles: true }
+      act(() => { stage.dispatchEvent(new PointerEvent('pointerdown', hold)) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      expect(video.playbackRate).toBe(2)
+      expect(screen.getByText('2×')).toBeInTheDocument()
+      act(() => { stage.dispatchEvent(new PointerEvent('pointerup', hold)) })
+      expect(video.playbackRate).toBe(1)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      // Releasing a hold is not a tap.
+      expect(pause).toHaveBeenCalledTimes(1)
+
+      fireEvent.waiting(video)
+      await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+      fireEvent.playing(video)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(screen.queryByTestId('buffering')).not.toBeInTheDocument()
+      fireEvent.waiting(video)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(screen.getByTestId('buffering')).toBeInTheDocument()
+      fireEvent.playing(video)
+      expect(screen.queryByTestId('buffering')).not.toBeInTheDocument()
+    } finally { vi.restoreAllMocks(); vi.useRealTimers() }
+  })
+  it('stacks the scrubber above compact controls and throttles seeking while dragging', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    try {
+      const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={vi.fn()} />)
+      const video = container.querySelector('video')!
+      Object.defineProperty(video, 'duration', { configurable: true, value: 100 })
+      fireEvent.durationChange(video)
+      const seek = screen.getByRole('slider', { name: 'Seek' })
+      expect(seek).toHaveClass('seek', 'phone-portrait:order-first', 'phone-portrait:basis-full')
+      expect(screen.getByRole('slider', { name: 'Volume' })).toHaveClass('phone-portrait:hidden')
+
+      const assigned: number[] = []
+      Object.defineProperty(video, 'currentTime', { configurable: true, get: () => assigned.at(-1) ?? 0, set: value => { assigned.push(value) } })
+      fireEvent.pointerDown(seek)
+      fireEvent.change(seek, { target: { value: '10' } })
+      fireEvent.change(seek, { target: { value: '20' } })
+      fireEvent.change(seek, { target: { value: '30' } })
+      expect(assigned).toEqual([10])
+      expect(seek).toHaveAttribute('aria-valuetext', '0:30 of 1:40')
+      fireEvent.pointerUp(seek)
+      expect(assigned.at(-1)).toBe(30)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      expect(assigned).toEqual([10, 30])
+      // Keyboard seeking stays immediate.
+      fireEvent.change(seek, { target: { value: '45' } })
+      expect(assigned.at(-1)).toBe(45)
+    } finally { vi.restoreAllMocks(); vi.useRealTimers() }
+  })
+  it('auto-hides fullscreen controls during playback and always offers a visible exit', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    let fullscreen: Element | null = null
+    const descriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement')
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => fullscreen })
+    try {
+      const { container, rerender } = render(<MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={vi.fn()} />)
+      const video = container.querySelector('video')!
+      fullscreen = video.parentElement
+      act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+      const bar = screen.getByRole('button', { name: 'Exit fullscreen' }).parentElement!
+      fireEvent.play(video)
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100) })
+      expect(bar).toHaveClass('opacity-0')
+      act(() => { window.dispatchEvent(new Event('pointermove')) })
+      expect(bar).not.toHaveClass('opacity-0')
+      // Paused video keeps its controls up.
+      fireEvent.pause(video)
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100) })
+      expect(bar).not.toHaveClass('opacity-0')
+
+      // Photos (and reels) get a standalone exit control in fullscreen.
+      rerender(<MediaStage item={image} onNavigate={vi.fn()} />)
+      const exit = screen.getByRole('button', { name: 'Exit fullscreen' })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100) })
+      expect(exit).toHaveClass('opacity-0')
+      fullscreen = null
+      act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+      expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).not.toBeInTheDocument()
+    } finally {
+      if (descriptor) Object.defineProperty(document, 'fullscreenElement', descriptor)
+      else Reflect.deleteProperty(document, 'fullscreenElement')
+      vi.restoreAllMocks(); vi.useRealTimers()
+    }
+  })
+  it('animates GIFs from the original and loops reels when asked', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    try {
+      const { unmount } = render(<MediaStage item={{ ...image, fileName: 'loop.gif', extension: '.gif' }} onNavigate={vi.fn()} />)
+      expect(screen.getByRole('img')).toHaveAttribute('src', '/api/media/1/original')
+      unmount()
+      render(<MediaStage item={{ ...image, mediaType: 'video' }} reels loop muted onNavigate={vi.fn()} />)
+      expect(screen.getByLabelText('image.jpg')).toHaveProperty('loop', true)
+    } finally { vi.restoreAllMocks() }
+  })
+  it('likes on a centre double tap only once a third tap cannot follow, and dislikes on a triple tap', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    const onLike = vi.fn()
+    const onDislike = vi.fn()
+    try {
+      const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} reels muted onNavigate={vi.fn()} onLike={onLike} onDislike={onDislike} />)
+      const stage = container.querySelector('[data-testid="reels-seek"]')!.parentElement!
+      vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ top: 0, left: 0, width: 400, height: 800 } as DOMRect)
+
+      tap(stage, 200, 400); tap(stage, 200, 400)
+      // The heart shows at once, but the like waits for the triple-tap window.
+      expect(container.querySelector('.lucide-heart.motion-like')).not.toBeNull()
+      expect(onLike).not.toHaveBeenCalled()
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(onLike).toHaveBeenCalledTimes(1)
+
+      tap(stage, 200, 400); tap(stage, 200, 400); tap(stage, 200, 400)
+      expect(onDislike).toHaveBeenCalledTimes(1)
+      expect(container.querySelector('.lucide-heart-crack.motion-like')).not.toBeNull()
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      // The triple tap replaces the pending like instead of sending both.
+      expect(onLike).toHaveBeenCalledTimes(1)
+    } finally { vi.restoreAllMocks(); vi.useRealTimers() }
+  })
 })
 
 function tap(element: Element, clientX: number, clientY: number) {

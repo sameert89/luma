@@ -11,8 +11,8 @@ public sealed class RandomImage(Database database,CacheContent cache)
     public async Task<IResult> ServeAsync(MediaQuery query,HttpContext context,CancellationToken ct)
     {
         context.Response.Headers.CacheControl="no-store";
-        if(query.MediaType == "video" || query.Cursor is not null) throw ApiRequestException.Invalid("Random content requires images and does not accept page cursors.");
-        query=query with {MediaType="image"};
+        if(query.MediaType is "video" or "motion" || query.Cursor is not null) throw ApiRequestException.Invalid("Random content requires images and does not accept page cursors.");
+        query=query with {MediaType=query.MediaType=="gif"?"gif":"image"};
         var (predicate,p)=query.Predicate();
         p.Add("pivot",BitConverter.ToInt64(RandomNumberGenerator.GetBytes(8)) & long.MaxValue);
         p.Add("encoder",IndexingOptions.EncoderVersion);

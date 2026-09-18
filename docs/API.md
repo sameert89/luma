@@ -24,7 +24,7 @@ All predicates combine with AND, except alternatives within a repeated field. Un
 | tag | Repeated normalized tag names, at most 50; unknown tag means empty result |
 | tagMode | all (default) or any; applies only to tag predicates |
 | tagged | true/false; false with tag values is invalid |
-| mediaType | image/video; omitted means both |
+| mediaType | image/video/gif/motion; omitted means everything. GIFs are indexed as images, so `image` includes them; `gif` selects `.gif` only and `motion` selects videos plus GIFs (the Reels default) |
 | extension | Repeated lowercase extension without dot, at most 20 |
 | dateFrom, dateTo | Inclusive start/exclusive end UTC, over effectiveDate |
 | minSizeBytes, maxSizeBytes | Inclusive nonnegative byte bounds |
@@ -76,6 +76,7 @@ Rare broad substring/multifilter queries have a 2 s database execution deadline;
 | DELETE /api/tags/{id} | Removes the tag and every assignment; 204, 404 unknown; Gate 7 feedback |
 | POST /api/media/tags | Atomic bulk `{mediaIds, addTagIds, removeTagIds}`, 204; limits in TAGGING.md; stage 5 |
 | PUT /api/media/{id}/preference | `{preference}` neutral/liked/disliked; 204; stage 5 |
+| PUT /api/folders/{id}/hidden; GET /api/folders/hidden | `{hidden}` hides or shows a non-root folder and its descendants (204; root 400; unknown 404). Lists hidden folders with library name and relative path (max 500) |
 | PUT /api/folders/{id}/cover | `{mediaId}` or null for default; must be present descendant in same root; 204; stage 7 |
 | GET /api/random | Same filters, forces images; conflicting video filter 400; returns cached preview content, no match 404, cache pressure 503; no-store; stage 7 |
 | POST /api/exports/dislikes; POST /api/exports/xmp; POST /api/imports/tags | Explicit bounded jobs, 202 with Location; inspect via GET /api/jobs/{id}, download finished exports via GET /api/jobs/{id}/content; stage 7 |
@@ -102,7 +103,7 @@ Failure codes include `source_unavailable`, `source_changed`, `invalid_media`, `
 
 ## Stage 6 original access
 
-`GET /api/media/{id}/original` is implemented as explicit source access, separate from indexed browse/detail/cache requests. Inline streaming is the default; optional `download=true` uses attachment disposition with the indexed filename. The server validates the stored relative path against the configured enabled library root and rejects links and paths outside it. Single-byte-range requests return 206; unsatisfiable ranges return 416. ASP.NET Core handles range processing without buffering the whole original. Unknown/disabled records return 404; missing/unreadable source files return 503 `source_unavailable` using the common error contract. Cancellation flows through database lookup and HTTP streaming. Files are opened read-only; there is no decoding or transcoding.
+`GET /api/media/{id}/original` is implemented as explicit source access, separate from indexed browse/detail/cache requests. Inline streaming is the default; optional `download=true` uses attachment disposition with the indexed filename. The server validates the stored relative path against the configured enabled library root and rejects links and paths outside it. Single-byte-range requests return 206; unsatisfiable ranges return 416. Open-ended streaming ranges (`bytes=N-`) are answered with at most 8 MiB so abandoned requests end promptly and connections are reused; media elements request the next chunk themselves. Downloads (`download=true`) are never chunked. Responses carry a strong `ETag`, `Last-Modified` and `Cache-Control: private, max-age=86400`, so browsers revalidate (304) and reuse cached byte ranges across seeks and preloaded reels. ASP.NET Core handles range processing without buffering the whole original. Unknown/disabled records return 404; missing/unreadable source files return 503 `source_unavailable` using the common error contract. Cancellation flows through database lookup and HTTP streaming. Files are opened read-only; there is no decoding or transcoding.
 
 Unsupported browser codecs: copy the absolute original stream URL from the viewer, then paste it into an external player's network-stream command (for example VLC's Open Network Stream). The player must be able to reach this server. The browser can also explicitly open or download the original. There is no server-side player launch or codec conversion.
 
@@ -127,3 +128,7 @@ Imports recognize image XMP `dc:subject`, EXIF `XPKeywords`, and video format/st
 Export `snapshotAt` identifies a SQLite read snapshot established at processing start, not enqueue time. All media/tag batches use it; later edits require a new export. XMP ZIPs contain media-ID `.xmp` files, `paths.jsonl` (media/library IDs, relative paths and sidecar names), and `MERGE-INSTRUCTIONS.txt`. Only explicit disliked JSON Lines downloads contain absolute configured source paths and availability; reconstructing them never stats originals.
 
 `GET /api/jobs/{id}/content` streams completed exports as attachments. Downloads expire after 24 hours and share a separate 1 GiB quota, checked against uncompressed output and final archive bytes. Quota exhaustion is visible as `job_quota_exceeded`; missing/unfinished/expired downloads are 404. Queued jobs survive restart. Running jobs fail as `interrupted`, partial files are discarded and explicit retry is safe. These operations never rewrite embedded metadata, write adjacent source sidecars or delete originals.
+
+## Hidden folders
+
+`Folders.Hidden` (migration 0012) marks a folder the person chose to hide. Every shared media query appends `m.FolderId NOT IN (hidden descendants)`, a non-correlated subquery over the partial index `IX_Folders_Hidden`, so gallery, search, Reels, slideshows, neighbors, random images, exports by filter and automatic covers all exclude the subtree; folder listings omit hidden children. Library scans still see the hidden directory entry but do not descend into it, and completed scans never reconcile hidden media as missing, so showing a folder again is immediate and the next scan refreshes it. Hiding moves pending preparation for the subtree to `waiting`; showing it needs no requeue because visible-item priority adopts waiting work. Nothing on disk is changed or deleted.

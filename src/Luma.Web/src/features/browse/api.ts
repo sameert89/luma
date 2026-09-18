@@ -29,3 +29,5 @@ export function queryString(filters: Filters) {
 }
 export const mediaPage = (filters: Filters, cursor: string | undefined, signal?: AbortSignal) => request<MediaPage>(`/api/media?${queryString({ ...filters, limit: 60, cursor })}`, signal)
 export const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Please try again.'
+// GIFs are indexed as images, but only their original animates.
+export const isGif = (item: Pick<Media, 'extension'>) => item.extension?.toLowerCase() === '.gif'

@@ -8,9 +8,9 @@ public static class MediaEndpoints
 {
     public static void MapMedia(this WebApplication app)
     {
-        app.MapGet("/api/media/{id:long}/original", async (long id, bool? download, OriginalContent content, CancellationToken ct) =>
-            await content.ServeAsync(id, download ?? false, ct)).WithName("GetOriginalMedia")
-            .Produces(200).Produces(206).Produces(416).Produces<ApiProblem>(503,"application/problem+json");
+        app.MapGet("/api/media/{id:long}/original", async (long id, bool? download, HttpContext context, OriginalContent content, CancellationToken ct) =>
+            await content.ServeAsync(id, download ?? false, context, ct)).WithName("GetOriginalMedia")
+            .Produces(200).Produces(206).Produces(304).Produces(416).Produces<ApiProblem>(503,"application/problem+json");
         app.MapPost("/api/imports/tags",async(MetadataJobRequest request,MetadataJobs jobs,CancellationToken ct)=>
         {var accepted=await jobs.EnqueueAsync("import",request,ct);return TypedResults.Accepted($"/api/jobs/{accepted.Id}",accepted);}).WithName("ImportTags");
         app.MapPost("/api/exports/xmp",async(MetadataJobRequest request,MetadataJobs jobs,CancellationToken ct)=>
@@ -23,6 +23,10 @@ public static class MediaEndpoints
             await random.ServeAsync(query.Normalize(context.Request.Query),context,ct)).WithName("GetRandomImage").Produces(200,contentType:"image/jpeg");
         app.MapPut("/api/folders/{id:long}/cover",async(long id,CoverRequest request,LibraryBrowser browser,CancellationToken ct)=>
         {await browser.SetCoverAsync(id,request.MediaId,ct);return TypedResults.NoContent();}).WithName("SetFolderCover");
+        app.MapPut("/api/folders/{id:long}/hidden",async(long id,FolderVisibilityRequest request,LibraryBrowser browser,CancellationToken ct)=>
+        {await browser.SetHiddenAsync(id,request.Hidden,ct);return TypedResults.NoContent();}).WithName("SetFolderHidden")
+            .Produces<ApiProblem>(400,"application/problem+json").Produces<ApiProblem>(404,"application/problem+json");
+        app.MapGet("/api/folders/hidden",async(LibraryBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.HiddenAsync(ct))).WithName("GetHiddenFolders");
         app.MapGet("/api/libraries",async(LibraryBrowser browser,CancellationToken ct)=>TypedResults.Ok(await browser.LibrariesAsync(ct))).WithName("GetLibraries");
         app.MapGet("/api/folders",async(long? libraryId,long? parentId,int? limit,string? cursor,LibraryBrowser browser,CancellationToken ct)=>
             TypedResults.Ok(await browser.FoldersAsync(libraryId,parentId,limit,cursor,ct))).WithName("GetFolders");

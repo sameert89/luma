@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { viewerAction } from './helpers'
 import { DatabaseSync } from 'node:sqlite'
 import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -31,6 +32,10 @@ test('anchors mobile search to its icon and closes it with the cross', async ({ 
   await expect.poll(async () => (await filters.boundingBox())?.x).toBe(filterPosition!.x)
   await search.fill('holiday')
   await page.screenshot({ animations: 'disabled', path: 'test-results/search-mobile.png' })
+  // With text entered the cross clears it first; the next cross closes the field.
+  await expect(page.getByRole('button', { name: 'Close search' })).toBeHidden()
+  await page.getByRole('button', { name: 'Clear search' }).click()
+  await expect(search).toHaveValue('')
   await page.getByRole('button', { name: 'Close search' }).click()
   await expect(open).toBeVisible()
   await expect(search).toBeHidden()
@@ -78,9 +83,8 @@ test('cancelling preparation stops the busy indicator even with paused jobs', as
   expect(cancelled).toBe(true)
 })
 
-test('selection is visible and its full checkbox target can be tapped', async ({ page }, testInfo) => {
-  if (testInfo.project.name === 'desktop') expect(await page.getByRole('combobox', { name: 'Sort media' }).evaluate(element => parseFloat(getComputedStyle(element).borderTopLeftRadius) >= element.getBoundingClientRect().height / 2)).toBe(true)
-  await page.getByRole('button', { name: 'Select', exact: true }).click()
+test('selection is visible and its full checkbox target can be tapped', async ({ page }) => {
+  await page.getByRole('button', { name: 'Select media', exact: true }).click()
   const done = page.getByRole('button', { name: 'Done selecting', exact: true })
   await expect(done).toHaveAttribute('aria-pressed', 'true')
   const checkbox = page.getByRole('checkbox').first()
@@ -92,7 +96,7 @@ test('selection is visible and its full checkbox target can be tapped', async ({
   await page.screenshot({ animations: 'disabled', path: `test-results/selection-${test.info().project.name}.png` })
   await done.click()
   await expect(page.getByRole('checkbox')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('button', { name: 'Select media', exact: true })).toHaveAttribute('aria-pressed', 'false')
 })
 
 test('Collections favourites clear browse filters and keeps a persisted like across refresh and navigation', async ({ page }) => {
@@ -124,7 +128,7 @@ test('Collections favourites clear browse filters and keeps a persisted like acr
 
 test('dialog motion supports entering, exiting and reduced motion', async ({ page }) => {
   await page.getByRole('button', { name: 'Filters' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Search and filters' })
+  const dialog = page.getByRole('dialog', { name: 'Filters and sorting' })
   await expect(dialog.getByRole('combobox', { name: 'Media type' })).toBeVisible()
   await expect(dialog.locator('[data-motion-panel]')).toHaveCSS('animation-duration', '0.18s')
   await page.keyboard.press('Escape')
@@ -139,7 +143,7 @@ test('dialog motion supports entering, exiting and reduced motion', async ({ pag
   await expect(dialog).toBeHidden()
   await page.getByTestId('media-cell').first().locator('button[data-media-id]').click()
   await expect(page.locator('.motion-media')).toHaveCSS('animation-name', 'none')
-  await expect(page.getByRole('button', { name: 'Close viewer' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Close viewer', exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toBeHidden()
 })
@@ -193,8 +197,11 @@ test('requires confirmation before starting a rescan and exposes mobile progress
   expect(requested).toBe(false)
   await rescan.click()
   await confirmation.getByRole('button', { name: 'Start rescan' }).click()
-  await expect(page.getByRole('button', { name: 'View scan progress for Sample library' })).toContainText('Scanning')
+  const progress = page.getByRole('button', { name: 'View scan progress for Sample library' })
+  await expect(progress).toBeVisible()
   expect(requested).toBe(true)
+  await progress.click()
+  await expect(page.getByRole('dialog', { name: 'Library scan progress' }).getByRole('status')).toContainText('Checking folders for changes')
   await page.screenshot({ animations: 'disabled', path: `test-results/scanning-${testInfo.project.name}.png` })
 })
 
@@ -219,12 +226,12 @@ test('browses cached media, navigates the viewer, and restores position and focu
   await expect(viewer).toBeVisible()
   await expect(viewer.locator('img,video')).toBeVisible()
   await page.screenshot({ animations: 'disabled', path: `test-results/viewer-${test.info().project.name}.png`, fullPage: true })
-  await viewer.getByRole('button', { name: 'Media details' }).click()
+  await (await viewerAction(page, 'Media details')).click()
   const details = page.getByRole('dialog', { name: 'Media details' })
   await expect(details.getByRole('heading', { level: 2, name: 'Tags' })).toBeVisible()
   await page.keyboard.press('Escape')
   const currentTitle = await viewer.locator('header').textContent()
-  const next = viewer.getByRole('button', { name: 'Next item' })
+  const next = await viewerAction(page, 'Next item')
   await expect(next).toBeEnabled()
   await next.click()
   await expect(viewer.locator('header')).not.toHaveText(currentTitle ?? '')
@@ -243,7 +250,7 @@ test('browses cached media, navigates the viewer, and restores position and focu
 test('keeps the mobile filter sheet inside the viewport', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile', 'Mobile-specific layout check')
   await page.getByRole('button', { name: 'Filters' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Search and filters' })
+  const dialog = page.getByRole('dialog', { name: 'Filters and sorting' })
   await expect(dialog).toBeVisible()
   await page.screenshot({ animations: 'disabled', path: `test-results/filters-${testInfo.project.name}.png`, fullPage: true })
   expect(await dialog.evaluate(element => {
@@ -280,7 +287,7 @@ test('searches and edits tags with keyboard-accessible controls', async ({ page 
   await expect(page).toHaveURL(/q=holiday/)
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Select', exact: true }).click()
+  await page.getByRole('button', { name: 'Select media', exact: true }).click()
   await page.getByRole('checkbox').first().check()
   await page.getByRole('button', { name: 'Edit tags' }).click()
   const editor = page.getByRole('dialog', { name: /Tag 1 items/ })

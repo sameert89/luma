@@ -118,15 +118,15 @@ test('double tapping a reel likes it without toggling playback', async ({ page }
   await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
-  await reels.getByRole('button', { name: 'Reels menu' }).click()
-  await expect(reels.getByRole('button', { name: 'Like', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  const like = reels.getByRole('button', { name: 'Like', exact: true })
+  await expect(like).toHaveAttribute('aria-pressed', 'false')
 
   const bounds = (await reels.locator('video').boundingBox())!
   // Clear of the centred play affordance, the control column and the seek strip.
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height * 0.35)
   await page.mouse.down(); await page.mouse.up()
   await page.mouse.down(); await page.mouse.up()
-  await expect(reels.getByRole('button', { name: 'Unlike', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(like).toHaveAttribute('aria-pressed', 'true')
   // The like is persisted, not only reflected in the reels control.
   await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Collections', exact: true }).click()
   await page.getByRole('button', { name: 'Open favourites', exact: true }).click()
@@ -140,7 +140,7 @@ test('reels keep their own filters when switching modes', async ({ page }) => {
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
   await reels.getByRole('button', { name: 'Reels menu' }).click()
   await reels.getByRole('button', { name: 'Filters', exact: true }).click()
-  const sheet = page.getByRole('dialog', { name: 'Search and filters' })
+  const sheet = page.getByRole('dialog', { name: 'Filters and sorting' })
   await sheet.getByLabel('Media type').selectOption('image')
   await sheet.getByLabel('Sort direction').selectOption('asc')
   await sheet.getByRole('button', { name: 'Apply filters' }).click()

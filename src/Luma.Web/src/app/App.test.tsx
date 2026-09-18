@@ -213,7 +213,7 @@ describe('browsing shell', () => {
     expect(window.location.search).toContain('q=Summer')
     expect(window.location.search).toContain('preference=liked')
   })
-  it('opens reels as a global video feed instead of the current folder', async () => {
+  it('opens reels as a global feed of videos and GIFs instead of the current folder', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
     const clip = { id: 10, libraryId: 1, folderId: 2, fileName: 'clip.mp4', mediaType: 'video', extension: '.mp4', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preview: { status: 'pending' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
     const fetch = vi.fn().mockImplementation((url: string) => {
@@ -235,11 +235,11 @@ describe('browsing shell', () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
 
-    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/media?') && String(url).includes('mediaType=video') && !String(url).includes('folderId=2') && !String(url).includes('libraryId=1'))).toBe(true))
-    expect(window.location.search).toContain('mediaType=video')
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/media?') && String(url).includes('mediaType=motion') && !String(url).includes('folderId=2') && !String(url).includes('libraryId=1'))).toBe(true))
+    expect(window.location.search).toContain('mediaType=motion')
     expect(window.location.search).not.toContain('folderId=2')
   })
-  it('clears the reels video filter when opening search', async () => {
+  it('clears the reels media filter when opening search', async () => {
     const fetch = vi.fn().mockImplementation((url: string) => {
       const text = String(url)
       const data = text.startsWith('/api/libraries')
@@ -253,10 +253,10 @@ describe('browsing shell', () => {
     vi.stubGlobal('fetch', fetch)
     renderApp()
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
-    expect(window.location.search).toContain('mediaType=video')
+    expect(window.location.search).toContain('mediaType=motion')
     await userEvent.click((await screen.findAllByRole('button', { name: 'Search' })).find(button => button.textContent?.includes('Search'))!)
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
-    expect(window.location.search).not.toContain('mediaType=video')
+    expect(window.location.search).not.toContain('mediaType=motion')
   })
   it('never lets reels change the folder library returns to', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
@@ -279,14 +279,47 @@ describe('browsing shell', () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
-    await waitFor(() => expect(window.location.search).toContain('mediaType=video'))
+    await waitFor(() => expect(window.location.search).toContain('mediaType=motion'))
     // Sanity: entering Reels really did drop the folder scope, so restoring it below proves the fix.
     expect(window.location.search).not.toContain('folderId=2')
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
     expect(window.location.search).toContain('libraryId=1')
     expect(window.location.search).toContain('folderId=2')
-    expect(window.location.search).not.toContain('mediaType=video')
+    expect(window.location.search).not.toContain('mediaType=motion')
+  })
+  it('starts a slideshow from the gallery and hands a video over to reels in the same folder', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+    const clip = { id: 10, libraryId: 1, folderId: 2, fileName: 'clip.mp4', mediaType: 'video', extension: '.mp4', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preference: 'neutral', preview: { status: 'pending', url: '/poster.jpg' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
+    const fetch = vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const data = text.startsWith('/api/libraries') ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+        : text.startsWith('/api/indexing') ? { libraries: [] }
+        : text.startsWith('/api/folders') ? { current: { id: 2, libraryId: 1, parentId: 1, name: 'Trips' }, ancestors: [], items: [] }
+        : text.includes('/neighbors?') ? { previous: null, next: null }
+            : /\/api\/media\/\d+$/.test(text) ? clip
+              : { items: [clip], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    localStorage.clear()
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    try {
+      render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+      await userEvent.click(await screen.findByRole('button', { name: 'Start slideshow' }))
+      expect(await screen.findByRole('button', { name: 'Slideshow' })).toHaveAttribute('aria-pressed', 'true')
+      // A slideshow plays videos through rather than waiting for a Play press.
+      await waitFor(() => expect(play).toHaveBeenCalled())
+
+      await userEvent.click(screen.getByRole('button', { name: 'Watch on Reels' }))
+      await waitFor(() => expect(window.location.search).toContain('mediaType=motion'))
+      expect(window.location.search).toContain('folderId=2')
+      expect(await screen.findByRole('region', { name: 'Reels' })).toBeVisible()
+      expect(await screen.findByLabelText('clip.mp4')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    } finally { vi.restoreAllMocks() }
   })
   it('restores the filters last used in reels when returning to it', async () => {
     const photo = { id: 7, libraryId: 1, folderId: 1, fileName: 'beach.jpg', mediaType: 'image', extension: '.jpg', sizeBytes: 10, modifiedAt: '2026-01-01T00:00:00Z', preference: 'neutral', thumbnail: { status: 'ready', url: '/thumb.jpg' }, preview: { status: 'ready', url: '/preview.jpg' }, tags: [] }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, ChevronRight, Clapperboard, FolderOpen, Images, Keyboard, ListChecks, MonitorPlay, RefreshCw, Search, Settings, Smartphone, Tag, X } from 'lucide-react'
+import { Bookmark, ChevronRight, Clapperboard, FolderOpen, Images, Keyboard, ListChecks, MonitorPlay, Presentation, RefreshCw, Search, Settings, Smartphone, Tag, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
@@ -17,16 +17,20 @@ import { Gallery } from '../features/browse/Gallery'
 import { ScanControls } from '../features/browse/ScanControls'
 import { Reels } from '../features/browse/Reels'
 import { Viewer } from '../features/browse/Viewer'
+import { HiddenFolders } from '../features/browse/HiddenFolders'
 import { MetadataExchange } from '../features/tags/MetadataExchange'
 import { TagEditor } from '../features/tags/TagEditor'
-import { errorMessage, queryString, request, type Filters, type FolderPage, type Library, type Media } from '../features/browse/api'
+import { errorMessage, queryString, request, type Filters, type FolderPage, type Library, type Media, type MediaPage } from '../features/browse/api'
 
 type Section = 'library' | 'reels' | 'search' | 'collections' | 'settings'
 
 const reelsFilterKey = 'luma-reels-filters'
 
+// Reels play everything that moves: videos and animated GIFs.
+const reelsMediaType = 'motion'
+
 function reelsFilters(value: Filters): Filters {
-  return { ...value, libraryId: undefined, folderId: undefined, mediaType: 'video' }
+  return { ...value, libraryId: undefined, folderId: undefined, mediaType: reelsMediaType }
 }
 
 // Reels keeps its own query: returning to it restores the filters last used there
@@ -84,6 +88,8 @@ export function App() {
   const [selected, setSelected] = useState(new Set<number>())
   const [selectionError, setSelectionError] = useState('')
   const [active, setActive] = useState<Media | null>(null)
+  const [slideshowStart, setSlideshowStart] = useState(false)
+  const [reelsStart, setReelsStart] = useState<number | null>(null)
   const [folderCursor, setFolderCursor] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const [theme, setTheme] = useState<Theme>(() => themes.find(theme => theme.id === localStorage.getItem('luma-theme'))?.id ?? 'obsidian')
@@ -99,7 +105,12 @@ export function App() {
   const library = libraries.data?.find(item => item.id === filters.libraryId)
   const folders = useQuery({ queryKey: ['folders', filters.libraryId, filters.folderId, folderCursor], queryFn: ({ signal }) => request<FolderPage>(`/api/folders?${new URLSearchParams({ ...(filters.libraryId ? { libraryId: String(filters.libraryId) } : {}), ...(filters.folderId ? { parentId: String(filters.folderId) } : {}), ...(folderCursor ? { cursor: folderCursor } : {}), limit: '48' })}`, signal), enabled: !!(filters.folderId || library?.rootFolderId), gcTime: 0 })
   const startScan = useMutation({ mutationFn: (libraryId: number) => request(`/api/libraries/${libraryId}/scans`, undefined, 'POST', {}), onSuccess: () => client.invalidateQueries({ queryKey: ['indexing'] }) })
-  useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('luma-theme', theme) }, [theme])
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme; localStorage.setItem('luma-theme', theme)
+    // Installed apps and mobile browsers tint their own chrome to match the theme.
+    const canvas = getComputedStyle(document.documentElement).getPropertyValue('--color-canvas').trim()
+    if (canvas) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas)
+  }, [theme])
   useEffect(() => {
     if (section === 'reels') { reelsMemory.current = filters; try { localStorage.setItem(reelsFilterKey, JSON.stringify(filters)) } catch { /* private browsing keeps the in-memory copy */ } }
     else if (section === 'library' || section === 'search') browseMemory.current = filters
@@ -111,12 +122,12 @@ export function App() {
     function back(event: PopStateEvent) {
       if (event.state?.lumaModal) return
       const value = event.state?.filters ?? readFilters()
-      setFilters(value); setSearch(value.q ?? ''); setSection(event.state?.section ?? 'library'); setFolderCursor(undefined)
+      setFilters(value); setSearch(value.q ?? ''); setSection(event.state?.section ?? 'library'); setFolderCursor(undefined); setReelsStart(null)
     }
     window.addEventListener('popstate', back)
     return () => window.removeEventListener('popstate', back)
   }, [])
-  function apply(value: Filters, target: Section = 'library') { window.history[window.history.state?.lumaModal ? 'replaceState' : 'pushState']({ filters: value, section: target }, '', `${window.location.pathname}${queryString(value) ? `?${queryString(value)}` : ''}`); setFilters(value); setSearch(value.q ?? ''); setSelected(new Set()); setFolderCursor(undefined); setFilterOpen(false); setSection(target) }
+  function apply(value: Filters, target: Section = 'library', reelStart: number | null = null) { setReelsStart(reelStart); window.history[window.history.state?.lumaModal ? 'replaceState' : 'pushState']({ filters: value, section: target }, '', `${window.location.pathname}${queryString(value) ? `?${queryString(value)}` : ''}`); setFilters(value); setSearch(value.q ?? ''); setSelected(new Set()); setFolderCursor(undefined); setFilterOpen(false); setSection(target) }
   function visitLibrary(item: Library) { apply({ libraryId: item.id, folderId: item.rootFolderId ?? undefined }); if (!item.rootFolderId) startScan.mutate(item.id) }
   function navigateSection(target: Section) {
     setSearchFocusRequested(target === 'search')
@@ -138,6 +149,20 @@ export function App() {
     else apply({}, 'search')
   }
   function select(id: number) { setSelected(old => { const next = new Set(old); if (next.has(id)) next.delete(id); else if (next.size < 500) next.add(id); else { setSelectionError('Select at most 500 items at a time.'); return old }; return next }) }
+  function openViewer(item: Media, slideshow = false) { triggerId.current = item.id; viewerScrollTop.current = scroll.current?.scrollTop ?? 0; setSlideshowStart(slideshow); setActive(item) }
+  async function startSlideshow() {
+    setSelectionError('')
+    try {
+      const page = await request<MediaPage>(`/api/media?${queryString({ ...galleryFilters, limit: 1 })}`)
+      if (page.items[0]) openViewer(page.items[0], true)
+    } catch (error) { setSelectionError(errorMessage(error)) }
+  }
+  // Continues the viewer's current place in Reels: same scope and filters, limited to
+  // media that moves, starting at this item.
+  function watchOnReels(item: Media) {
+    setActive(null); setSlideshowStart(false)
+    apply({ ...filters, mediaType: reelsMediaType }, 'reels', item.id)
+  }
   function restoreViewerPosition() { if (scroll.current) scroll.current.scrollTop = viewerScrollTop.current; const button = document.querySelector<HTMLButtonElement>(`button[data-media-id="${triggerId.current}"]`); if (button) button.focus({ preventScroll: true }); else scroll.current?.focus({ preventScroll: true }) }
   const hasViewOptions = Object.entries(filters).some(([key, val]) => !['q', 'cursor', 'limit'].includes(key) && val !== undefined && val !== '' && !(Array.isArray(val) && !val.length))
   const home = section === 'library' && !filters.q && !hasViewOptions
@@ -148,8 +173,8 @@ export function App() {
   const galleryTitle = section === 'reels' ? 'Reels' : section === 'collections' ? 'Collections' : filters.q ? `Results for “${filters.q}”` : folders.data?.current.name ?? library?.name ?? (showAllMedia ? 'All media' : 'Library')
   const showGallery = section !== 'collections' && (section === 'reels' || (!home && !idleSearch))
   const helpCards = [
-    { icon: Keyboard, title: 'Viewer shortcuts', body: 'Left and Right move through media. + and − zoom, 1 opens actual size, R rotates, F toggles fullscreen, I opens details, T jumps to tags, and Escape closes the top panel.' },
-    { icon: Smartphone, title: 'Touch gestures', body: 'Swipe left or right in the viewer. Pinch images to zoom, then drag to pan. Reels use vertical swipes and Up or Down on a keyboard.' },
+    { icon: Keyboard, title: 'Viewer shortcuts', body: 'Left and Right move through media. + and − zoom, 1 opens actual size, R rotates, F toggles fullscreen, S starts or pauses a slideshow, I opens details, T jumps to tags, and Escape closes the top panel. In videos, Space or K plays and pauses, J and L skip 10 seconds and M mutes.' },
+    { icon: Smartphone, title: 'Touch gestures', body: 'Swipe left or right in the viewer. Pinch images to zoom, then drag to pan. Double-tap the left or right of a video to skip 10 seconds, and press and hold to play at 2×. Reels use vertical swipes and Up or Down on a keyboard; double-tap a reel to like it and triple-tap to dislike it.' },
     { icon: MonitorPlay, title: 'Video handoff', body: 'If a video is unsupported, copy its stream URL and open it in VLC or another network-stream player that can reach this Luma server. Originals are streamed without transcoding.' }
   ]
   // auto-fit/minmax has no equivalent in the fixed column-count scale: a single card
@@ -174,24 +199,25 @@ export function App() {
     {section !== 'reels' && <SearchHeader value={search} onChange={setSearch} onHome={() => apply({})} onFilters={() => setFilterOpen(true)} onSearch={submitSearch} onClear={clearSearch} searchRequested={searchFocusRequested} />}
     <div className="flex min-h-0 flex-1"><aside className="hidden w-56 shrink-0 border-r border-line p-3 md:block"><nav aria-label="Primary navigation" className="space-y-2">{navItems.map(item => { const Icon = item.icon; const current = section === item.id; return <QuietButton key={item.id} aria-current={current ? 'page' : undefined} className={`w-full justify-start ${current ? 'border-transparent bg-surface text-accent' : 'border-transparent'}`} onClick={() => navigateSection(item.id as Section)}><Icon className="size-4" />{item.label}</QuietButton> })}</nav><div className="mt-8 border-t border-line pt-4"><p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted">Libraries</p>{libraries.data?.map(item => <QuietButton key={item.id} className={`mb-1 w-full justify-start border-transparent ${filters.libraryId === item.id && section === 'library' ? 'bg-surface' : ''}`} onClick={() => visitLibrary(item)}><FolderOpen className="size-4" /><span className="truncate">{item.name}</span></QuietButton>)}</div></aside>
       <main key={`${section}:${queryString(filters)}`} id="collection" className={`motion-page flex min-w-0 flex-1 flex-col ${section === 'reels' ? 'pb-0' : 'pb-20 md:pb-0'}`} tabIndex={-1}>
-        {section === 'settings' ? <div className="overflow-auto"><div className="mx-auto max-w-5xl p-5"><MetadataExchange dislikes /></div><ThemePicker value={theme} onChange={setTheme} /><section className="mx-auto grid max-w-5xl gap-4 p-5 sm:grid-cols-3"><div className="rounded-3xl border border-line bg-surface p-5 sm:col-span-3"><p className="text-sm font-medium text-accent">Guide</p><h2 className="mt-1 text-2xl font-semibold">Help and shortcuts</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">Quick controls for browsing large collections without leaving the keyboard or touch surface.</p></div>{helpCards.map(card => { const Icon = card.icon; return <article key={card.title} className="rounded-3xl border border-line bg-surface p-5"><span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-canvas text-accent"><Icon className="size-6" /></span><h3 className="text-base font-semibold">{card.title}</h3><p className="mt-2 text-sm leading-relaxed text-muted">{card.body}</p></article> })}</section></div> : <>
+        {section === 'settings' ? <div className="overflow-auto"><div className="mx-auto max-w-5xl p-5"><MetadataExchange dislikes /></div><ThemePicker value={theme} onChange={setTheme} /><HiddenFolders /><section className="mx-auto grid max-w-5xl gap-4 p-5 sm:grid-cols-3"><div className="rounded-3xl border border-line bg-surface p-5 sm:col-span-3"><p className="text-sm font-medium text-accent">Guide</p><h2 className="mt-1 text-2xl font-semibold">Help and shortcuts</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">Quick controls for browsing large collections without leaving the keyboard or touch surface.</p></div>{helpCards.map(card => { const Icon = card.icon; return <article key={card.title} className="rounded-3xl border border-line bg-surface p-5"><span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-canvas text-accent"><Icon className="size-6" /></span><h3 className="text-base font-semibold">{card.title}</h3><p className="mt-2 text-sm leading-relaxed text-muted">{card.body}</p></article> })}</section></div> : <>
           {section !== 'reels' && <div className="shrink-0 space-y-2 px-4 pb-2 pt-3 sm:px-6 sm:pb-3 sm:pt-4"><div className="flex min-w-0 items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">{section === 'library' && filters.folderId && <FolderOpen className="size-5 shrink-0 text-accent" />}<h1 className="min-w-0 truncate text-xl font-semibold sm:text-2xl" title={home ? 'Your libraries' : galleryTitle}>{home ? 'Your libraries' : galleryTitle}</h1></div>
             <div className="flex shrink-0 items-center gap-2">{showGallery && <>
               {filters.libraryId && section === 'library' ? <RescanButton libraryId={filters.libraryId} name={library?.name} /> : <IconButton label="Refresh collection" onClick={() => { void client.invalidateQueries({ queryKey: ['media'] }); setRefresh(x => x + 1) }}><RefreshCw className="size-4" /></IconButton>}
+              <IconButton label="Start slideshow" onClick={() => void startSlideshow()}><Presentation className="size-4" /></IconButton>
               <IconButton label={selecting ? 'Done selecting' : 'Select media'} className={selecting ? 'border-accent bg-accent text-on-accent' : ''} aria-pressed={selecting} onClick={() => { setSelecting(!selecting); if (selecting) setSelected(new Set()) }}>{selecting ? <X className="size-4" /> : <ListChecks className="size-4" />}</IconButton>
-            </>}{section === 'library' && folders.data && <FolderActions folder={folders.data.current} libraryName={library?.name} ancestors={folders.data.ancestors} />}</div>
+            </>}{section === 'library' && folders.data && <FolderActions folder={folders.data.current} libraryName={library?.name} ancestors={folders.data.ancestors} onHidden={() => apply({ ...filters, folderId: folders.data?.current.parentId ?? undefined })} />}</div>
           </div>
           {section === 'library' && folders.data && <>{folders.data.ancestors.length > 0 && <nav aria-label="Folder breadcrumb" className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm text-muted">{[...folders.data.ancestors, folders.data.current].map((folder, index) => <span key={folder.id} className="flex shrink-0 items-center gap-1"><button type="button" className="rounded-full px-2 py-1 hover:bg-surface hover:text-ink" onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}>{folder.name}</button>{index < folders.data.ancestors.length && <ChevronRight className="size-3" />}</span>)}</nav>}</>}
           {selected.size > 0 && <div className="flex items-center gap-3 rounded-2xl bg-surface p-3"><p className="text-sm">{selected.size} selected</p><Button className="min-h-10" onClick={() => setBulkOpen(true)}><Tag className="mr-2 size-4" />Edit tags</Button><IconButton label="Clear selection" onClick={() => setSelected(new Set())}><X className="size-4" /></IconButton></div>}{selectionError && <p role="alert" className="text-sm text-danger">{selectionError}</p>}
           </div>}
-          {section === 'collections' ? <Collections onChoose={value => apply(value, 'search')} /> : libraries.data?.length === 0 ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><FolderOpen className="size-12 text-accent" /><h2 className="text-xl font-semibold">Connect your first library</h2><p className="leading-relaxed text-muted">Add a media folder in the server configuration, then restart Luma.</p></section> : idleSearch ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><Search className="size-12 text-muted" /><h2 className="text-xl font-semibold">Search your media</h2><p className="text-sm leading-relaxed text-muted">Type a search or open filters to choose exactly what to show.</p></section> : home ? <div className="overflow-auto p-4 sm:p-6"><div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3">{libraries.data?.map(item => <section key={item.id} className="overflow-hidden rounded-2xl border border-line bg-surface"><button type="button" aria-label={`Open ${item.name}`} className="block w-full text-left" disabled={startScan.isPending} onClick={() => visitLibrary(item)}><CoverArt url={item.coverUrl} height="h-24 sm:h-32" fallback={<div className="flex h-full items-center justify-center gap-2 text-xs text-muted sm:text-sm"><Images className="size-5 sm:size-6" />{item.rootFolderId ? 'Preparing album cover' : 'No media indexed yet'}</div>} /><div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-5"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-canvas text-accent sm:size-11 sm:rounded-2xl"><FolderOpen className="size-4 sm:size-6" /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold sm:text-lg">{item.name}</h2><p className="text-xs text-muted sm:text-sm">{item.rootFolderId ? 'Browse library' : 'Start indexing'}</p></div></div></button><div className="border-t border-line p-4">{item.rootFolderId ? <RescanButton libraryId={item.id} name={item.name} /> : <p className="text-xs leading-relaxed text-muted">Indexing starts when you open this library. Other libraries stay idle.</p>}{item.rootFolderId && <details className="mt-3"><summary className="cursor-pointer text-xs text-muted">Indexing status</summary><ScanControls libraryId={item.id} /></details>}</div></section>)}</div></div> : <>{section === 'reels' ? <Reels key={`${queryString(filters)}:${refresh}`} filters={filters} viewerOpen={!!active} onFilters={() => setFilterOpen(true)} onOpenViewer={item => { triggerId.current = item.id; setActive(item) }} /> : <Gallery key={`${section}:${queryString(galleryFilters)}:${refresh}`} filters={galleryFilters} selected={selected} selecting={selecting} onSelect={select} onOpen={item => { triggerId.current = item.id; viewerScrollTop.current = scroll.current?.scrollTop ?? 0; setActive(item) }} scrollerRef={scroll} leadingContent={folderCards} />}</>}
+          {section === 'collections' ? <Collections onChoose={value => apply(value, 'search')} /> : libraries.data?.length === 0 ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><FolderOpen className="size-12 text-accent" /><h2 className="text-xl font-semibold">Connect your first library</h2><p className="leading-relaxed text-muted">Add a media folder in the server configuration, then restart Luma.</p></section> : idleSearch ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><Search className="size-12 text-muted" /><h2 className="text-xl font-semibold">Search your media</h2><p className="text-sm leading-relaxed text-muted">Type a search or open filters to choose exactly what to show.</p></section> : home ? <div className="overflow-auto p-4 sm:p-6"><div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3">{libraries.data?.map(item => <section key={item.id} className="overflow-hidden rounded-2xl border border-line bg-surface"><button type="button" aria-label={`Open ${item.name}`} className="block w-full text-left" disabled={startScan.isPending} onClick={() => visitLibrary(item)}><CoverArt url={item.coverUrl} height="h-24 sm:h-32" fallback={<div className="flex h-full items-center justify-center gap-2 text-xs text-muted sm:text-sm"><Images className="size-5 sm:size-6" />{item.rootFolderId ? 'Preparing album cover' : 'No media indexed yet'}</div>} /><div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-5"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-canvas text-accent sm:size-11 sm:rounded-2xl"><FolderOpen className="size-4 sm:size-6" /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold sm:text-lg">{item.name}</h2><p className="text-xs text-muted sm:text-sm">{item.rootFolderId ? 'Browse library' : 'Start indexing'}</p></div></div></button><div className="border-t border-line p-4">{item.rootFolderId ? <RescanButton libraryId={item.id} name={item.name} /> : <p className="text-xs leading-relaxed text-muted">Indexing starts when you open this library. Other libraries stay idle.</p>}{item.rootFolderId && <details className="mt-3"><summary className="cursor-pointer text-xs text-muted">Indexing status</summary><ScanControls libraryId={item.id} /></details>}</div></section>)}</div></div> : <>{section === 'reels' ? <Reels key={`${queryString(filters)}:${refresh}:${reelsStart ?? ''}`} filters={filters} startId={reelsStart} viewerOpen={!!active} onFilters={() => setFilterOpen(true)} onOpenViewer={item => { triggerId.current = item.id; setActive(item) }} /> : <Gallery key={`${section}:${queryString(galleryFilters)}:${refresh}`} filters={galleryFilters} selected={selected} selecting={selecting} onSelect={select} onOpen={item => openViewer(item)} scrollerRef={scroll} leadingContent={folderCards} />}</>}
           {libraries.isError && <p role="alert" className="p-5 text-danger">{errorMessage(libraries.error)}</p>}{folders.isError && <p role="alert" className="px-4 text-sm text-danger">{errorMessage(folders.error)}</p>}
         </>}
       </main></div>
     <BottomNavigation items={navItems} active={section} onChange={id => navigateSection(id as Section)} />
     <Modal open={filterOpen} onOpenChange={setFilterOpen} title="Filters and sorting" description="Narrow the current media view." sheet><FilterForm value={filters} onApply={value => apply(value, section === 'library' || section === 'search' || section === 'reels' ? section : 'search')} /></Modal>
     <Modal open={bulkOpen} onOpenChange={setBulkOpen} title={`Tag ${selected.size} items`} description="Add or remove a tag on every selected item." sheet><div className="overflow-auto p-5"><TagEditor mediaIds={[...selected]} bulk /><div className="mt-6"><MetadataExchange mediaIds={[...selected]} /></div></div></Modal>
-    {active && <Viewer active={active} filters={galleryFilters} onChange={setActive} onClose={() => { setActive(null); requestAnimationFrame(restoreViewerPosition) }} restoreFocus={restoreViewerPosition} />}
+    {active && <Viewer active={active} filters={galleryFilters} startSlideshow={slideshowStart} onChange={setActive} onWatchReels={watchOnReels} onClose={() => { setActive(null); setSlideshowStart(false); requestAnimationFrame(restoreViewerPosition) }} restoreFocus={restoreViewerPosition} />}
   </div>
 }

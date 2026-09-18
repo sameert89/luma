@@ -95,6 +95,9 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         await using var lookup = await database.OpenAsync(ct);
         var relativeFolder = scan.FolderId is { } folderId
             ? await lookup.QuerySingleAsync<string>(new CommandDefinition("SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId", new { folderId, scan.LibraryId }, cancellationToken: ct)) : "";
+        // Hidden folders are excluded from indexing: their entry is still seen, but not descended into.
+        var hidden = (await lookup.QueryAsync<string>(new CommandDefinition("SELECT PathKey FROM Folders WHERE LibraryId=@LibraryId AND Hidden=1",
+            scan, cancellationToken: ct))).ToHashSet(StringComparer.Ordinal);
         var channel = Channel.CreateBounded<DiscoveredEntry>(new BoundedChannelOptions(options.QueueCapacity)
         { SingleWriter = true, SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -106,7 +109,8 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 // Access errors are not ignored: any traversal error prohibits missing reconciliation.
                 var directoryPath = relativeFolder.Length == 0 ? root.Path : SourcePaths.Resolve(root, relativeFolder);
                 await channel.Writer.WriteAsync(new DiscoveredEntry(relativeFolder, true, 0, ""), linked.Token);
-                foreach (var entry in SourceTraversal.Enumerate(directoryPath, recursive: scan.FolderId is null))
+                foreach (var entry in SourceTraversal.Enumerate(directoryPath, recursive: scan.FolderId is null, skipDirectory: hidden.Count == 0 ? null
+                    : path => hidden.Contains(root.Key(Path.GetRelativePath(root.Path, path).Replace(Path.DirectorySeparatorChar, '/')))))
                 {
                     linked.Token.ThrowIfCancellationRequested();
                     var relative = Path.GetRelativePath(root.Path, entry.FullName).Replace(Path.DirectorySeparatorChar, '/');
@@ -149,7 +153,8 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             if (owned == 1)
                 await db.ExecuteAsync(new CommandDefinition("""
                     UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND LastSeenScanId<>@Id
-                      AND (@FolderId IS NULL OR FolderId=@FolderId);
+                      AND (@FolderId IS NULL OR FolderId=@FolderId)
+                      AND FolderId NOT IN (SELECT a.DescendantId FROM Folders h JOIN FolderAncestry a ON a.AncestorId=h.Id WHERE h.LibraryId=@LibraryId AND h.Hidden=1);
                     UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
                       (SELECT Id FROM Media WHERE LibraryId=@LibraryId AND Availability='missing');
                     UPDATE Libraries SET Availability='available' WHERE Id=@LibraryId;

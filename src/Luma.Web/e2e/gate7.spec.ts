@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { viewerAction } from './helpers'
 
 test('requested themes persist across cached gallery search viewer and photo reels', async ({ page }) => {
   for (const theme of ['obsidian', 'light', 'catppuccin', 'ember', 'crimson']) {
@@ -11,7 +12,7 @@ test('requested themes persist across cached gallery search viewer and photo ree
     const viewer = page.getByRole('dialog')
     await expect(viewer.getByRole('img')).toBeVisible()
     await expect.poll(() => viewer.getByRole('img').evaluate(image => image.naturalWidth)).toBeGreaterThan(0)
-    await viewer.getByRole('button', { name: 'Close viewer' }).click()
+    await viewer.getByRole('button', { name: 'Close viewer', exact: true }).click()
     await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
     const reels = page.getByRole('region', { name: 'Reels', exact: true })
     await reels.getByRole('button', { name: 'Reels menu' }).click()
@@ -31,17 +32,18 @@ test('pages through direct child folders with a bounded card count', async ({ pa
   })
   await page.goto('/?libraryId=1&folderId=1')
   const folders = page.getByRole('region', { name: 'Folders', exact: true })
-  await expect(folders.getByRole('heading')).toHaveCount(48)
+  // Each card is opened by its cover button, labelled with the folder name.
+  const cards = folders.getByRole('button', { name: /^Open Album \d+$/ })
+  await expect(cards).toHaveCount(48)
   await folders.getByRole('button', { name: 'Next folders' }).click()
-  await expect(folders.getByRole('heading')).toHaveCount(3)
-  await expect(folders.getByRole('heading', { name: 'Album 51' })).toBeVisible()
+  await expect(cards).toHaveCount(3)
+  await expect(folders.getByRole('button', { name: 'Open Album 51', exact: true })).toBeVisible()
   await folders.getByRole('button', { name: 'Previous folders' }).click()
-  await expect(folders.getByRole('heading')).toHaveCount(48)
+  await expect(cards).toHaveCount(48)
 })
 
 test('scopes a search and exposes all advanced sort and filter choices on mobile and desktop', async ({ page }) => {
   await page.goto('/?q=photo')
-  await expect(page.getByRole('combobox', { name: 'Sort media' })).toBeVisible()
   await page.getByRole('button', { name: 'Filters', exact: true }).click()
   await page.getByRole('combobox', { name: 'Library', exact: true }).selectOption('1')
   await page.getByRole('combobox', { name: 'Sort by' }).selectOption('name')
@@ -87,8 +89,7 @@ test('collections provide tags and favourites, with tag rename and delete', asyn
   const original = `Typo-${testInfo.project.name}-${Date.now()}`
   await page.goto('/?libraryId=1&folderId=1')
   await page.getByTestId('media-cell').first().click()
-  const viewer = page.getByRole('dialog')
-  await viewer.getByRole('button', { name: 'Media details' }).click()
+  await (await viewerAction(page, 'Media details')).click()
   const details = page.getByRole('dialog', { name: 'Media details' })
   await details.getByRole('combobox', { name: 'Tag name' }).fill(original)
   await details.getByRole('button', { name: 'Add tag' }).click()
@@ -121,15 +122,20 @@ test('collections provide tags and favourites, with tag rename and delete', asyn
   await expect(page.getByRole('button', { name: fixed, exact: true })).toHaveCount(0)
 })
 
-test('custom covers can be selected and reset from the viewer', async ({ page }) => {
+test('custom covers can be selected from the viewer details', async ({ page }) => {
   await page.goto('/?mediaType=image&limit=60')
   await page.getByTestId('media-cell').first().click()
-  await page.getByRole('button', { name: 'Media details' }).click()
+  await (await viewerAction(page, 'Media details')).click()
   const details = page.getByRole('dialog', { name: 'Media details' })
-  await details.getByRole('button', { name: 'Use as library cover' }).click()
-  await expect(details.getByRole('status')).toContainText('Cover saved')
-  await details.getByRole('button', { name: 'Automatic library cover' }).click()
-  await expect(details.getByRole('status')).toContainText('Cover saved')
+  try {
+    await details.getByRole('button', { name: 'Use as library cover' }).click()
+    await expect(details.getByRole('status')).toContainText('Cover saved')
+    await details.getByRole('button', { name: 'Use as folder cover' }).click()
+    await expect(details.getByRole('status')).toContainText('Cover saved')
+  } finally {
+    // Covers are chosen explicitly in the UI; the API reset keeps later tests on automatic covers.
+    for (const folder of [1, 2]) await page.request.put(`/api/folders/${folder}/cover`, { data: { mediaId: null } })
+  }
 })
 
 test('direct shuffle links create one persistent seed for pagination and viewer navigation', async ({ page }) => {
@@ -139,8 +145,9 @@ test('direct shuffle links create one persistent seed for pagination and viewer 
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
   await page.getByTestId('media-cell').first().click()
   const viewer = page.getByRole('dialog')
-  await expect(viewer.getByRole('button', { name: 'Next item' })).toBeEnabled()
-  await viewer.getByRole('button', { name: 'Next item' }).click()
+  const next = await viewerAction(page, 'Next item')
+  await expect(next).toBeEnabled()
+  await next.click()
   expect(new URL(page.url()).searchParams.get('seed')).toBe(seed)
   await expect(viewer.getByRole('alert')).toHaveCount(0)
 })

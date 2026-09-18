@@ -13,6 +13,10 @@
   --font-sans: "Inter Variable", system-ui, sans-serif;
 }
 
+/* Phones held upright: the only layout where video controls stack into two rows.
+   Landscape phones, tablets and desktop keep the single-row player. */
+@custom-variant phone-portrait (@media (orientation: portrait) and (max-width: 639px));
+
 @layer base {
   html, body, #root { height: 100%; }
   body { @apply m-0 min-w-80 overflow-hidden bg-canvas font-sans text-ink antialiased; }
@@ -73,6 +77,29 @@
   .search-reveal[data-open='true'] { transition-delay: 0s; }
   .motion-drop { transition: grid-template-rows 180ms ease, opacity 150ms ease, visibility 0s linear 180ms; }
   .motion-drop[data-open='true'] { transition-delay: 0s; }
+}
+
+/* Video seek track: played, buffered and remaining segments come from --played and
+   --loaded (percentages set by the player), like the scrubbers of streaming players. */
+.seek { appearance: none; background: transparent; cursor: pointer; --seek-track: .25rem; --seek-thumb: .875rem; }
+.seek::-webkit-slider-runnable-track { height: var(--seek-track); border-radius: 9999px;
+  background: linear-gradient(to right, var(--color-accent) var(--played, 0%), color-mix(in srgb, var(--color-ink) 50%, transparent) var(--played, 0%) var(--loaded, 0%), color-mix(in srgb, var(--color-ink) 22%, transparent) var(--loaded, 0%)); }
+.seek::-moz-range-track { height: var(--seek-track); border-radius: 9999px;
+  background: linear-gradient(to right, var(--color-accent) var(--played, 0%), color-mix(in srgb, var(--color-ink) 50%, transparent) var(--played, 0%) var(--loaded, 0%), color-mix(in srgb, var(--color-ink) 22%, transparent) var(--loaded, 0%)); }
+.seek::-webkit-slider-thumb { appearance: none; width: var(--seek-thumb); height: var(--seek-thumb); margin-top: calc((var(--seek-track) - var(--seek-thumb)) / 2); border: 0; border-radius: 9999px; background: var(--color-accent); }
+.seek::-moz-range-thumb { width: var(--seek-thumb); height: var(--seek-thumb); border: 0; border-radius: 9999px; background: var(--color-accent); }
+.seek:hover, .seek:focus-visible, .seek:active { --seek-track: .375rem; }
+@media (orientation: portrait) and (max-width: 639px) {
+  /* Much larger touch scrubber when the phone is upright. */
+  .seek, .seek:hover, .seek:focus-visible { --seek-track: .5rem; --seek-thumb: 1.25rem; }
+  .seek:active { --seek-track: .625rem; }
+}
+
+@keyframes luma-flash { 0% { opacity: 0; transform: scale(.8); } 30% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.1); } }
+/* Short-lived player feedback (play/pause, skip, speed): gone before it gets in the way. */
+.motion-flash { animation: luma-flash 500ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .motion-flash { animation: luma-fade-out 500ms ease-out both; }
 }
 
 /* Brief confirmation for the double-tap like; it removes itself when the animation ends,

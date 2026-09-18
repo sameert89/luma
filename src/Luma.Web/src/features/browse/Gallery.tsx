@@ -4,7 +4,7 @@ import { Check, Film, Heart, Images, LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Checkbox, QuietButton } from '../../components/ui/Controls'
-import { errorMessage, mediaPage, type Filters, type Media } from './api'
+import { errorMessage, isGif, mediaPage, type Filters, type Media } from './api'
 import { useFolderIndexing } from './useFolderIndexing'
 import { usePreviewPriority } from './usePreviewPriority'
 
@@ -98,6 +98,7 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
               <span className="block truncate px-1 py-2 text-xs text-muted">{item.fileName}</span>
             </button>
             {item.mediaType === 'video' && <span className="pointer-events-none absolute bottom-10 right-2 flex items-center gap-1 rounded bg-canvas/90 px-2 py-1 text-xs"><Film className="size-3" aria-hidden="true" />Video</span>}
+            {isGif(item) && <span className="pointer-events-none absolute bottom-10 right-2 rounded bg-canvas/90 px-2 py-1 text-xs font-semibold">GIF</span>}
             {item.preference === 'liked' && <Heart className="pointer-events-none absolute right-2 top-2 size-4 fill-accent text-accent" aria-label="Liked" />}
             {selecting && <span className="absolute left-2 top-2 flex size-11 items-center justify-center rounded-lg bg-canvas/90">
               <Checkbox aria-label={`Select ${item.fileName}`} checked={selected.has(item.id)} onChange={() => onSelect(item.id)} />

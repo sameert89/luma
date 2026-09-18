@@ -149,3 +149,55 @@ it('consolidates view options and closes tags with the cross, outside click and 
 
   } finally { vi.restoreAllMocks(); client.clear() }
 })
+
+it('keeps like and dislike on the stage beside a bottom menu, loops by default and warms only the next reel', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  const load = vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const items = [1, 2].map(clip)
+  const fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    if (init?.method === 'PUT') return Promise.resolve(new Response(null, { status: 204 }))
+    const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
+    const data = url.includes('/neighbors?') ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+      : /media\/\d+$/.test(url) ? items[id - 1] : { items: [items[0]] }
+    return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+  })
+  vi.stubGlobal('fetch', fetch)
+  const warmed: HTMLVideoElement[] = []
+  const create = document.createElement.bind(document)
+  vi.spyOn(document, 'createElement').mockImplementation(((name: string, options?: ElementCreationOptions) => {
+    const element = create(name, options)
+    if (name === 'video') warmed.push(element as HTMLVideoElement)
+    return element
+  }) as typeof document.createElement)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  try {
+    const { unmount } = render(<QueryClientProvider client={client}><Reels filters={{ mediaType: 'motion' }} onFilters={vi.fn()} onOpenViewer={vi.fn()} /></QueryClientProvider>)
+    const video = await screen.findByLabelText('1.mp4')
+    expect(video).toHaveProperty('loop', true)
+    // Rating is always one tap away; the menu toggle sits beside it rather than at the top.
+    const like = screen.getByRole('button', { name: 'Like' })
+    const dislike = screen.getByRole('button', { name: 'Dislike' })
+    const menu = screen.getByRole('button', { name: 'Reels menu' })
+    expect(like.closest('[inert]')).toBeNull()
+    expect(dislike.parentElement).toBe(menu.parentElement)
+    expect(like.parentElement).toBe(menu.parentElement)
+    await userEvent.click(dislike)
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/media/1/preference', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ preference: 'disliked' }) })))
+
+    await waitFor(() => expect(warmed.find(element => element.getAttribute('src') === '/api/media/2/original')).toBeDefined())
+    const warm = warmed.find(element => element.getAttribute('src') === '/api/media/2/original')!
+    expect(warm.preload).toBe('metadata')
+    expect(document.querySelectorAll('video')).toHaveLength(1)
+
+    // Auto-scroll turns looping off so the reel can end and advance.
+    await userEvent.click(menu)
+    await userEvent.click(screen.getByRole('button', { name: 'Auto-scroll' }))
+    expect(video).toHaveProperty('loop', false)
+    unmount()
+    expect(warm.hasAttribute('src')).toBe(false)
+    expect(load).toHaveBeenCalled()
+  } finally { vi.restoreAllMocks(); vi.useRealTimers(); client.clear() }
+})
+

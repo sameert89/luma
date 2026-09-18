@@ -38,6 +38,58 @@ Build and run natively on the Pi for actual acceptance. Preserve the image diges
 Git revision, configuration and measurement results. Never infer codec support
 on real Android/iOS clients from Chromium device emulation.
 
+## HTTPS and installing Luma as an app
+
+Browsers only allow installing Luma (PWA), its service worker and some media features
+on a secure origin: HTTPS, or `localhost` itself. Plain HTTP on the LAN keeps working as
+an ordinary website. HTTPS also enables HTTP/2, which multiplexes video range requests
+and thumbnails over one connection instead of queueing behind HTTP/1.1's six-connection
+limit, noticeably reducing seek and reel-switch stalls.
+
+Either terminate TLS in Luma itself or put it behind a reverse proxy.
+
+**TLS in Luma (Kestrel).** Mount a certificate and key (PEM) and add an HTTPS URL. With
+Compose, add to the `luma` service:
+
+```yaml
+    ports:
+      - "5443:5443"
+    environment:
+      ASPNETCORE_URLS: "https://+:5443;http://+:5080"
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /certs/luma.crt
+      ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /certs/luma.key
+      # Optional: send plain-HTTP visitors to HTTPS.
+      Luma__Https__RedirectHttp: "true"
+    volumes:
+      - /path/to/certs:/certs:ro
+```
+
+The certificate must be trusted by every device that opens Luma (for example from a
+private CA such as `mkcert`, or a public certificate for a DNS name you control); phones
+will not install an app from a site with a certificate warning. A `.pfx` file works too:
+set `Path` to it and `ASPNETCORE_Kestrel__Certificates__Default__Password` instead of
+`KeyPath`.
+
+**Reverse proxy (Caddy, nginx, Traefik).** Keep Luma on HTTP port 5080 and let the proxy
+terminate TLS. Set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` so Luma honours
+`X-Forwarded-Proto`/`X-Forwarded-For`, and leave `Luma__Https__RedirectHttp` unset (the
+proxy owns redirects). The proxy must pass `Range`, `If-Range` and `If-None-Match`
+request headers through unchanged and must not buffer `/api/media/*/original`
+responses (for nginx: `proxy_buffering off;` on that location). For example, Caddy:
+
+```text
+luma.example.lan {
+  reverse_proxy 127.0.0.1:5080
+}
+```
+
+Once served over HTTPS, use the browser's **Install app** / **Add to Home Screen**. The
+installed app opens standalone, uses the Luma icon and follows the chosen theme colour.
+Its service worker only caches the app shell for offline start; media and API requests
+always go to the server. Video keeps playing with the screen off or in another app where
+the platform allows it, and exposes lock-screen/headset controls through Media Session;
+picture-in-picture is offered where the browser supports it.
+
 ## Upgrade and consistent cold backup
 
 Make a backup before upgrading. Stop Luma before copying SQLite; a live copy of

@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ComponentProps, CSSProperties, ReactNode } from 'react'
 import { Check } from 'lucide-react'
 
 export function Checkbox({ className = '', ...props }: Omit<ComponentProps<'input'>, 'type'>) {
@@ -10,6 +10,12 @@ export function Checkbox({ className = '', ...props }: Omit<ComponentProps<'inpu
 
 export function Range({ className = '', ...props }: Omit<ComponentProps<'input'>, 'type'>) {
   return <input {...props} type="range" className={`h-11 min-w-0 accent-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${className}`} />
+}
+
+// A video scrubber; `played` and `loaded` are percentages of the duration.
+export function SeekRange({ played, loaded, className = '', style, ...props }: Omit<ComponentProps<'input'>, 'type'> & { played: number; loaded: number }) {
+  return <input {...props} type="range" style={{ ...style, '--played': `${played}%`, '--loaded': `${loaded}%` } as CSSProperties}
+    className={`seek h-11 min-w-0 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${className}`} />
 }
 
 export function Input({ className = '', shape = 'field', ...props }: ComponentProps<'input'> & { shape?: 'field' | 'pill' }) {

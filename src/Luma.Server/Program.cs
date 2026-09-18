@@ -65,6 +65,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 64 * 1024);
 var app = builder.Build();
 app.UseExceptionHandler();
+// Opt-in for deployments that terminate TLS in Kestrel (see docs/DEPLOYMENT.md). Proxies that
+// terminate TLS themselves should set ASPNETCORE_FORWARDEDHEADERS_ENABLED=true instead.
+if (app.Configuration.GetValue<bool>("Luma:Https:RedirectHttp")) app.UseHttpsRedirection();
 app.UseStatusCodePages(async context =>
 {
     var status = context.HttpContext.Response.StatusCode;
@@ -88,8 +91,17 @@ app.Use(async (context, next) =>
 });
 if (Directory.Exists(app.Environment.WebRootPath))
 {
+    var contentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+    contentTypes.Mappings[".webmanifest"] = "application/manifest+json";
     app.UseDefaultFiles();
-    app.UseStaticFiles();
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        ContentTypeProvider = contentTypes,
+        // Vite fingerprints /assets; the shell, manifest and service worker must revalidate so
+        // installed apps pick up new releases.
+        OnPrepareResponse = file => file.Context.Response.Headers.CacheControl =
+            file.Context.Request.Path.StartsWithSegments("/assets") ? "public, max-age=31536000, immutable" : "no-cache"
+    });
 }
 
 // Build-time OpenAPI extraction must not create or migrate a database.

@@ -311,6 +311,9 @@
           "206": {
             "description": "Partial Content"
           },
+          "304": {
+            "description": "Not Modified"
+          },
           "416": {
             "description": "Range Not Satisfiable"
           },
@@ -759,6 +762,83 @@
         "responses": {
           "204": {
             "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/hidden": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetFolderHidden",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderVisibilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/hidden": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetHiddenFolders",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HiddenFolderSummary"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1942,6 +2022,42 @@
           "coverUrl": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "FolderVisibilityRequest": {
+        "required": [
+          "hidden"
+        ],
+        "type": "object",
+        "properties": {
+          "hidden": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HiddenFolderSummary": {
+        "required": [
+          "id",
+          "libraryId",
+          "libraryName",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryName": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
           }
         }
       },

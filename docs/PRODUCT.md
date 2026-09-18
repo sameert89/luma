@@ -80,7 +80,7 @@ Initial modes:
 - Gallery
 - Reels
 
-Gallery and Reels use the same filter definitions and server query semantics, but their selected filters and sorting are mode-specific state. Modes are not synchronized in either direction: the gallery's query never becomes the Reels query, and nothing chosen while browsing Reels — its library/folder scope, sort, or any other filter — changes the folder or query that Library and Search return to. Reels keeps the filters and sort last chosen in Reels and restores them on return, including after a restart; its first ever visit clears the gallery library/folder location and defaults to videos. Each mode's viewer navigation must follow that mode's active query.
+Gallery and Reels use the same filter definitions and server query semantics, but their selected filters and sorting are mode-specific state. Modes are not synchronized in either direction: the gallery's query never becomes the Reels query, and nothing chosen while browsing Reels — its library/folder scope, sort, or any other filter — changes the folder or query that Library and Search return to. Reels keeps the filters and sort last chosen in Reels and restores them on return, including after a restart; its first ever visit clears the gallery library/folder location and defaults to videos and animated GIFs (`mediaType=motion`). The exception is the viewer's explicit **Watch on Reels** action for a video or GIF: it opens Reels at that item within the viewer's current scope and filters, limited to media that moves. Each mode's viewer navigation must follow that mode's active query.
 
 ## Gallery mode
 
@@ -109,21 +109,31 @@ Reels mode provides full-screen or near-full-screen sequential browsing optimize
 Requirements:
 
 - vertical navigation between media
-- active videos may autoplay according to browser/platform restrictions.
+- active videos may autoplay according to browser/platform restrictions, and loop continuously until the person moves on (auto-scroll instead advances when a video ends).
 - auto-scroll as a simple on/off toggle; enabled videos advance when playback ends and photos advance after a fixed dwell time (3 seconds), with no configurable timing requirement. The active reel is restored after navigating away and back to the same filters/sort; mute and auto-scroll preferences are retained. Changing the feed resets its position. Playback and auto-scroll pause while sheets or the media viewer cover Reels; opening the viewer pauses the underlying stream first, and only previously playing reels resume when it closes
-- secondary controls (filters, like, mute, auto-scroll, tags, view options, media information, previous/next) collapse behind one toggle so the viewport stays clear until they are wanted; the toggle becomes an X when open. View options uses a settings icon within that menu, with no separate bottom options button. Tags, media information and view options use accessible sheets with explicit close buttons, outside-click dismissal and Escape support. Navigation and playback still work without opening the menu
-- only the current and nearby media should be mounted/preloaded
-- images and videos are both supported with option to choose them
+- Reels uses the standard media action row (see below): Like, Dislike and the menu toggle at the bottom right, sitting just above the seek strip. Filters, mute, auto-scroll, tags, view options, media information and previous/next (up/down chevrons) live in the menu, which opens upward; the toggle becomes an X when open. View options uses a settings icon within that menu, with no separate bottom options button. Tags, media information and view options use accessible sheets with explicit close buttons, outside-click dismissal and Escape support. Navigation and playback still work without opening the menu
+- only the current and nearby media should be mounted/preloaded; the next video fetches only its metadata and first bytes, never the whole file
+- images, animated GIFs and videos are all supported with option to choose them
 - the same applicable filter and sort capabilities as gallery, with independent mode state rather than a synchronized query
 - tags must remain accessible and nicely rendered like reels captions if user wishes to see it
 - dedicated mute button and auto scroll button
-- tapping the media pauses or resumes a video, and double tapping it likes the item
+- tapping the media pauses or resumes a video; double tapping its centre likes the item and triple tapping it dislikes the item (the like from the first two taps is not sent when a third follows); double tapping the left or right third of a video skips 10 seconds, and pressing and holding plays it at 2× until release
 - playback progress stays out of the way: it appears when its strip is tapped or focused and fades out again
 - loading a large result set must not create thousands of DOM elements
 
 The first implementation should prioritize smooth navigation over elaborate animations.
 
 Reels does not require the normal video player's full control set or browser-native control chrome. Its required controls are navigation, mute, auto-scroll, like, filters, and accessible tags. Any seek or other optional playback control that is provided must remain keyboard-accessible, and controls that hide themselves must reappear on keyboard focus. Touch gestures are shortcuts for controls that also exist as buttons, never the only way to reach a behaviour. The full playback control requirements below apply to the normal video viewer.
+
+## Standard media action row
+
+Every media surface — the photo viewer, the video viewer and Reels — uses one action row with the same contents, order and placement, so controls never move between modes:
+
+- Like, Dislike and a three-dot menu toggle, side by side at the right end of a single row near the bottom of the stage.
+- The row sits directly above the player bar where one exists (the video controls, or the Reels seek strip) and stays at that same height for photos, so moving between photos and videos never shifts it.
+- The menu opens upward from the toggle and holds every secondary action. In the viewer: view options, media details, Watch on Reels (videos and GIFs), and previous/next item using ‹ › chevrons — there are no separate arrow buttons on the stage. Keyboard arrows and swipes still navigate. In Reels: filters, mute, auto-scroll, tags, view options, media information and previous/next.
+- Like and Dislike are toggle buttons (`aria-pressed`) with constant names. Liked shows a filled heart; disliked shows an outlined broken heart in the danger colour, never a filled shape, so it cannot be mistaken for a like.
+- A running slideshow fades the row with the rest of the viewer chrome; faded controls do not receive clicks.
 
 ## Likes/Dislikes and existence of dislike export
 - The user should be able to like/favourite a piece of media and then filter based on the likes if they wish to do so.
@@ -169,6 +179,23 @@ Required controls in the normal video viewer (not Reels):
 - basic metadata display
 
 Luma must not implement its own decoding engine.
+
+Playback should feel like a streaming service's player:
+
+- the scrubber moves smoothly, shows played and buffered ranges, and dragging it previews the position at once while throttling actual seeks
+- a buffering indicator appears when playback genuinely stalls
+- double tapping the left/right of the video skips 10 seconds; pressing and holding plays at 2× and restores the chosen speed on release; J/K/L and M are keyboard shortcuts
+- picture-in-picture where the browser supports it, background playback, and lock-screen/headset controls through Media Session
+- in fullscreen, controls hide after a few seconds of inactivity during playback, return on any interaction, and a visible exit-fullscreen control is always offered
+- on upright phones the scrubber gets its own full-width, larger row and secondary controls compact into the row below (volume is left to the hardware keys); landscape phones, tablets and desktop keep the single-row player
+
+## Slideshow
+
+The viewer can run the active query as a slideshow, started from the viewer (button or S) or from the gallery toolbar. Photos and GIFs advance after a chosen dwell time (3, 5, 10 or 20 seconds, remembered per device), videos play through and advance when they end, and the next slide is decoded ahead of time. Viewer chrome fades while the pointer rests. The slideshow stops at the end of the results rather than wrapping.
+
+## Hidden folders
+
+A folder (never a library root) can be hidden from its folder actions. The folder and everything beneath it disappear from Library, Search, Reels, slideshows and covers and are no longer indexed; nothing on disk changes. Settings lists hidden folders and shows them again instantly.
 
 The normal video viewer must expose the complete playback control set above using the browser's native playback capabilities. Controls may use Luma's themed interface; displaying browser-default control chrome is not required.
 
