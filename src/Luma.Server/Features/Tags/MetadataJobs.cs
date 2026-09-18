@@ -19,7 +19,7 @@ public sealed record MetadataJobStatus(long Id,string Kind,string State,string C
 
 // One durable queue, one worker. Imports are capped at 500 selected items and exports
 // stream 100-row batches from one SQLite read snapshot without loading the whole result.
-public sealed class MetadataJobs(Database database,IndexingOptions options) : BackgroundService
+public sealed class MetadataJobs(Database database,IndexingOptions options,ILogger<MetadataJobs>? logger = null) : BackgroundService
 {
     private const long Quota=1024L*1024*1024;
     private string JobDirectory => Path.Combine(Path.GetDirectoryName(database.Path)!,"exports");
@@ -75,6 +75,26 @@ public sealed class MetadataJobs(Database database,IndexingOptions options) : Ba
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         Directory.CreateDirectory(JobDirectory);
+        var recovered=false;
+        while(!ct.IsCancellationRequested) {
+            try {
+                if(!recovered) { await RecoverAsync(ct); recovered=true; }
+                if(!await RunNextAsync(ct)) await Task.Delay(1000,ct);
+            }
+            catch(OperationCanceledException) when(ct.IsCancellationRequested) { return; }
+            // Never let an exception leave this loop: the host stops on an unhandled background
+            // failure, and every restart interrupts scans and preview generation. A busy database
+            // (other writers hold the lock past the busy timeout) simply waits and retries.
+            catch(SqliteException error) when(error.SqliteErrorCode is 5 or 6) { await Task.Delay(5000,ct); }
+            catch(Exception error) {
+                logger?.LogError(error,"Metadata jobs paused; queued work will be retried");
+                await Task.Delay(5000,ct);
+            }
+        }
+    }
+
+    private async Task RecoverAsync(CancellationToken ct)
+    {
         await using(var db=await database.OpenAsync(ct)) {
             var interrupted=await db.QueryAsync<Job>(new CommandDefinition("SELECT * FROM MetadataJobs WHERE State='running' OR FailureCode='interrupted'",cancellationToken:ct));
             foreach(var job in interrupted) {
@@ -83,23 +103,31 @@ public sealed class MetadataJobs(Database database,IndexingOptions options) : Ba
             }
             await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State='failed',FailureCode='interrupted',ContentBytes=0,FinishedAt=@now WHERE State='running'",new{now=DateTimeOffset.UtcNow.ToString("O")},cancellationToken:ct));
         }
-        while(!ct.IsCancellationRequested) {
-            await CleanupAsync(ct);
-            Job? job;
-            await using(var db=await database.OpenAsync(ct)) job=await db.QuerySingleOrDefaultAsync<Job>(new CommandDefinition("UPDATE MetadataJobs SET State='running' WHERE Id=(SELECT Id FROM MetadataJobs WHERE State='queued' ORDER BY Id LIMIT 1) RETURNING *",cancellationToken:ct));
-            if(job is null) { await Task.Delay(1000,ct); continue; }
-            try {
-                var request=JsonSerializer.Deserialize<MetadataJobRequest>(job.Request)!;
-                if(job.Kind=="import") await ImportAsync(job,request,ct);
-                else await ExportAsync(job,request,ct);
-                await FinishAsync(job.Id,"completed",null,job.Kind=="import"?0:new FileInfo(ContentPath(job.Id,job.Kind)).Length,ct);
-            } catch(OperationCanceledException) when(ct.IsCancellationRequested) { return; }
-            catch(Exception error) {
-                File.Delete(ContentPath(job.Id,job.Kind));
-                File.Delete(ContentPath(job.Id,job.Kind)+".tmp");
-                await FinishAsync(job.Id,"failed",error is JobQuotaException?"job_quota_exceeded":"metadata_job_failed",0,ct);
-            }
+    }
+
+    // Runs one queued job; false when the queue is empty.
+    private async Task<bool> RunNextAsync(CancellationToken ct)
+    {
+        await CleanupAsync(ct);
+        Job? job;
+        await using(var db=await database.OpenAsync(ct)) job=await db.QuerySingleOrDefaultAsync<Job>(new CommandDefinition("UPDATE MetadataJobs SET State='running' WHERE Id=(SELECT Id FROM MetadataJobs WHERE State='queued' ORDER BY Id LIMIT 1) RETURNING *",cancellationToken:ct));
+        if(job is null) return false;
+        var (state,code,bytes)=("completed",(string?)null,0L);
+        try {
+            var request=JsonSerializer.Deserialize<MetadataJobRequest>(job.Request)!;
+            if(job.Kind=="import") await ImportAsync(job,request,ct);
+            else await ExportAsync(job,request,ct);
+            bytes=job.Kind=="import"?0:new FileInfo(ContentPath(job.Id,job.Kind)).Length;
+        } catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
+        catch(Exception error) {
+            File.Delete(ContentPath(job.Id,job.Kind));
+            File.Delete(ContentPath(job.Id,job.Kind)+".tmp");
+            (state,code)=("failed",error is JobQuotaException?"job_quota_exceeded":"metadata_job_failed");
         }
+        // Recorded outside the job's own error handling, so a busy database while saving the
+        // outcome cannot turn a finished export into a failed one.
+        await FinishAsync(job.Id,state,code,bytes,ct);
+        return true;
     }
 
     private async Task CleanupAsync(CancellationToken ct)
@@ -256,8 +284,13 @@ public sealed class MetadataJobs(Database database,IndexingOptions options) : Ba
         await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET Processed=Processed+@processed,Failed=Failed+@failed WHERE Id=@id",new{id,processed,failed},cancellationToken:ct));
     }
     private async Task FinishAsync(long id,string state,string? code,long bytes,CancellationToken ct) {
-        await using var db=await database.OpenAsync(ct);
-        await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State=@state,FailureCode=@code,ContentBytes=@bytes,FinishedAt=@now WHERE Id=@id",new{id,state,code,bytes,now=DateTimeOffset.UtcNow.ToString("O")},cancellationToken:ct));
+        for(var attempt=1;;attempt++) {
+            try {
+                await using var db=await database.OpenAsync(ct);
+                await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State=@state,FailureCode=@code,ContentBytes=@bytes,FinishedAt=@now WHERE Id=@id",new{id,state,code,bytes,now=DateTimeOffset.UtcNow.ToString("O")},cancellationToken:ct));
+                return;
+            } catch(SqliteException error) when(error.SqliteErrorCode is 5 or 6 && attempt<12) { await Task.Delay(5000,ct); }
+        }
     }
     public const string MergeInstructions="Luma exported standalone XMP only; originals were not changed. paths.jsonl maps media IDs to library-relative paths. Back up existing metadata and originals. With external software, union dc:subject keywords after trimming, Unicode NFC and invariant case normalization. Preserve unrelated XMP properties and existing spelling, review conflicts, then write with your external tool. Do not blindly replace existing sidecars or embedded metadata. Exports use a SQLite snapshot at processing start (SnapshotAt); later edits require another export.";
     private sealed class JobQuotaException : Exception;

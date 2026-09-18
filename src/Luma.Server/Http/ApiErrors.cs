@@ -27,6 +27,16 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
                 extensions: new Dictionary<string, object?> { ["code"] = request.Code, ["traceId"] = context.TraceIdentifier }).ExecuteAsync(context);
             return true;
         }
+        // Another writer held SQLite's write lock past the busy timeout. That is transient
+        // contention, not a fault: ask the client to retry instead of logging a stack trace.
+        if (exception is SqliteException { SqliteErrorCode: 5 or 6 })
+        {
+            logger.LogWarning("Database busy for {Method} {Path} (trace {TraceId})", context.Request.Method, context.Request.Path, context.TraceIdentifier);
+            context.Response.Headers.RetryAfter = "1";
+            await Results.Problem(statusCode: 503, title: "Luma is busy. Please try again.",
+                extensions: new Dictionary<string, object?> { ["code"] = "database_busy", ["traceId"] = context.TraceIdentifier }).ExecuteAsync(context);
+            return true;
+        }
         logger.LogError(exception, "Request failed with trace {TraceId}", context.TraceIdentifier);
         var status = exception switch
         {

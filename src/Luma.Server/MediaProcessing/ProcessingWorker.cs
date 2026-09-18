@@ -50,16 +50,25 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
                         SELECT EXISTS(SELECT 1 FROM ProcessingJobs INDEXED BY IX_Jobs_Ready
                           WHERE State='pending' AND MediaType=@type AND NextAttemptAt<=@now AND EncoderVersion=@version)
                         """, new { type, now = DateTimeOffset.UtcNow.ToString("O"), version = IndexingOptions.EncoderVersion }, cancellationToken: ct));
-                    var job = !available ? null : await db.QuerySingleOrDefaultAsync<ProcessingJob>(new CommandDefinition("""
-                        UPDATE ProcessingJobs SET State='running',Claim=@claim,LeaseUntil=@lease WHERE rowid=(
-                          SELECT j.rowid FROM ProcessingJobs j INDEXED BY IX_Jobs_Ready
-                          WHERE j.State='pending' AND j.NextAttemptAt<=@now AND j.MediaType=@type AND j.EncoderVersion=@version
-                            AND EXISTS (SELECT 1 FROM Media m JOIN Libraries l ON l.Id=m.LibraryId JOIN Scans s ON s.Id=j.ScanId
-                              WHERE m.Id=j.MediaId AND m.SourceRevision=j.SourceRevision AND m.Availability='present'
-                                AND l.Enabled=1 AND s.State IN ('running','completed'))
-                          ORDER BY j.NextAttemptAt,j.MediaId LIMIT 1) RETURNING *
-                        """, new { type, version = IndexingOptions.EncoderVersion, claim = Guid.NewGuid().ToString("N"),
-                            now = DateTimeOffset.UtcNow.ToString("O"), lease = DateTimeOffset.UtcNow.AddMinutes(2).ToString("O") }, cancellationToken: ct));
+                    // Find the candidate with a plain read, then claim it by rowid. Searching inside the
+                    // UPDATE held SQLite's single write lock for the whole scan, which on large queues
+                    // (many jobs owned by an interrupted scan) starved every other writer past its busy
+                    // timeout. The guarded claim keeps two workers from taking the same job.
+                    var now = DateTimeOffset.UtcNow.ToString("O");
+                    var candidate = !available ? null : await db.ExecuteScalarAsync<long?>(new CommandDefinition("""
+                        SELECT j.rowid FROM ProcessingJobs j INDEXED BY IX_Jobs_Ready
+                        WHERE j.State='pending' AND j.NextAttemptAt<=@now AND j.MediaType=@type AND j.EncoderVersion=@version
+                          AND EXISTS (SELECT 1 FROM Media m JOIN Libraries l ON l.Id=m.LibraryId JOIN Scans s ON s.Id=j.ScanId
+                            WHERE m.Id=j.MediaId AND m.SourceRevision=j.SourceRevision AND m.Availability='present'
+                              AND l.Enabled=1 AND s.State IN ('running','completed'))
+                        ORDER BY j.NextAttemptAt,j.MediaId LIMIT 1
+                        """, new { type, version = IndexingOptions.EncoderVersion, now }, cancellationToken: ct));
+                    var job = candidate is null ? null : await db.QuerySingleOrDefaultAsync<ProcessingJob>(new CommandDefinition("""
+                        UPDATE ProcessingJobs SET State='running',Claim=@claim,LeaseUntil=@lease
+                        WHERE rowid=@candidate AND State='pending' AND NextAttemptAt<=@now RETURNING *
+                        """, new { candidate, now, claim = Guid.NewGuid().ToString("N"), lease = DateTimeOffset.UtcNow.AddMinutes(2).ToString("O") }, cancellationToken: ct));
+                    // Lost a race for this candidate: look again at once rather than idling.
+                    if (candidate is not null && job is null) continue;
                     if (job is not null)
                     {
                         foundWork = true;

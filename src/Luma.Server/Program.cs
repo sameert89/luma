@@ -108,6 +108,14 @@ if (Directory.Exists(app.Environment.WebRootPath))
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
     await app.Services.GetRequiredService<MigrationRunner>().ApplyAsync(app.Lifetime.ApplicationStopping);
+    // Browsing depends on WAL: without it every read blocks writers (and vice versa), and
+    // requests fail with "database is locked" under indexing load.
+    await using (var db = await app.Services.GetRequiredService<Database>().OpenAsync(app.Lifetime.ApplicationStopping))
+    {
+        var mode = await Dapper.SqlMapper.ExecuteScalarAsync<string>(db, "PRAGMA journal_mode;");
+        if (!string.Equals(mode, "wal", StringComparison.OrdinalIgnoreCase))
+            app.Logger.LogWarning("SQLite is using journal mode {Mode} instead of WAL; keep /data on local storage (not a network share) to avoid lock contention", mode);
+    }
     await app.Services.GetRequiredService<CursorSigner>().InitializeAsync(app.Lifetime.ApplicationStopping);
     await app.Services.GetRequiredService<IndexingSetup>().InitializeAsync(app.Lifetime.ApplicationStopping);
 }

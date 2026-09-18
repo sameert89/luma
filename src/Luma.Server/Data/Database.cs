@@ -18,6 +18,13 @@ public sealed class Database(IConfiguration configuration, IHostEnvironment envi
         try
         {
             await connection.OpenAsync(cancellationToken);
+            // WAL makes NORMAL durable against corruption; skipping the per-commit fsync keeps
+            // each write transaction (and so SQLite's single write lock) short on slow storage.
+            await using (var pragma = connection.CreateCommand())
+            {
+                pragma.CommandText = "PRAGMA synchronous=NORMAL;";
+                await pragma.ExecuteNonQueryAsync(cancellationToken);
+            }
             connection.CreateFunction<string, string>("luma_key", SearchText.Key, isDeterministic: true);
             connection.CreateFunction<string, string>("luma_reverse", SearchText.Reverse, isDeterministic: true);
             connection.CreateFunction<string, long>("luma_ticks", SearchText.Ticks, isDeterministic: true);
