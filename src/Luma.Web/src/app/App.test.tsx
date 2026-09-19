@@ -191,8 +191,30 @@ describe('browsing shell', () => {
       : { libraries: [] }), { headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetch)
     renderApp()
-    expect(await screen.findByRole('heading', { name: 'Photos' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: 'Open Photos' })).toBeVisible()
     expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/media'))).toBe(false)
+  })
+  it('caps sparse album cards and keeps indexing status in the libraries header', async () => {
+    const fetch = vi.fn().mockImplementation((url: string) => {
+      const data = url === '/api/tasks' ? [] : url === '/api/libraries' ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+        : url.startsWith('/api/folders?') ? { current: { id: 1, libraryId: 1, name: 'Photos' }, ancestors: [], items: [{ id: 2, libraryId: 1, name: 'Trips' }] }
+          : url.startsWith('/api/indexing') ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
+            : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderApp()
+    const library = await screen.findByRole('button', { name: 'Open Photos' })
+    expect(library.closest('article')).toHaveClass('max-w-sm')
+    expect(library.closest('article')?.innerHTML).toContain('bg-linear-to-t')
+    const status = screen.getByRole('button', { name: 'Indexing status' })
+    expect(status).toHaveTextContent('Indexing status')
+    await userEvent.click(status)
+    expect(screen.getByRole('dialog', { name: 'Indexing status' })).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await userEvent.click(library)
+    const folder = await screen.findByRole('button', { name: 'Open Trips' })
+    expect(folder.closest('article')).toHaveClass('max-w-sm')
   })
   it('explains how to connect an empty library', async () => {
     emptyApi(); renderApp()
@@ -370,7 +392,7 @@ describe('browsing shell', () => {
     })
     vi.stubGlobal('fetch', fetch)
     renderApp()
-    await screen.findByRole('heading', { name: 'Photos' })
+    await screen.findByRole('button', { name: 'Open Photos' })
     await userEvent.click((await screen.findAllByRole('button', { name: 'Search' })).find(button => button.textContent?.includes('Search'))!)
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
     expect(screen.queryByTestId('gallery-scroll')).not.toBeInTheDocument()
@@ -400,10 +422,12 @@ it('organizes settings under consistent headings without an installation panel',
   emptyApi()
   renderApp()
   await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
-  for (const name of ['Theme & appearance', 'Random media URL', 'Metadata exchange', 'Hidden folders', 'Help']) {
+  for (const name of ['Theme & appearance', 'Random media URL', 'Metadata exchange', 'Hidden folders', 'Help', 'About']) {
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
   }
   expect(screen.getAllByRole('heading', { name: 'Metadata exchange' })).toHaveLength(1)
+  expect(screen.getByRole('heading', { name: 'About' }).closest('section')).toHaveTextContent('Luma v1.0.2')
+  expect(screen.getByRole('link', { name: 'github.com/sameert89/luma' })).toHaveAttribute('href', 'https://github.com/sameert89/luma')
   expect(screen.queryByText('Install Luma')).not.toBeInTheDocument()
 })
 
@@ -424,7 +448,7 @@ describe('help', () => {
   it('opens from a labeled button beside Your libraries and returns home', async () => {
     libraryApi()
     renderApp()
-    await screen.findByRole('heading', { name: 'Photos' })
+    await screen.findByRole('button', { name: 'Open Photos' })
     const navigation = navigationSize()
     const entry = screen.getByRole('button', { name: 'Help' })
     expect(entry).toHaveTextContent('Help')

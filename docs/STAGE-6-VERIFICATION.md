@@ -30,7 +30,7 @@ Backend regression coverage verifies original bytes, partial-range bytes and len
 
 Intermediate checks found an outdated image-only browser assertion, a captions lint rule requiring a documented exception for personal media without caption assets, and missing SQLite helper registration in the Node browser-fixture setup. A later playback check exposed an autoplay rejection overwriting a codec failure; the failure state now preserves the external-player guidance. The retained-state test also caught a TypeScript-only test selector mismatch during the production build; it was corrected. These issues were corrected; no required build, unit-test, lint or browser failures remain.
 
-`git diff --check` reports pre-existing whitespace in `USER_FEEDBACK.md` (lines 328 and 344); that unrelated feedback history was preserved. Desktop/video and mobile/reels screenshots were visually inspected.
+`git diff --check` passed. Desktop/video and mobile/reels screenshots were visually inspected.
 
 ## Outstanding acceptance gates
 

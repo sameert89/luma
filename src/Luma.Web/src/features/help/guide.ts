@@ -27,8 +27,8 @@ export const guideSections: GuideSection[] = [
       ] },
       { title: 'Indexing', entries: [
         { label: 'Start indexing', name: 'Initial indexing', where: 'Opens when you choose a library that has not been indexed yet', what: 'Starts the first scan. Choose Index only, Index + embedded metadata, or Index + embedded metadata + XMP to decide which tags are read while indexing.' },
-        { icons: [RefreshCw], name: 'Rescan / View scan progress', where: 'On each library card, and in the header of an open library', what: 'Opens Background tasks with the queue and a Start rescan option. The icon spins while any task runs.' },
-        { label: 'Indexing status', name: 'Indexing status', where: 'Under each indexed library card', what: 'Expands to show files found, previews prepared, items waiting or failed, and Scan controls.' },
+        { icons: [RefreshCw], name: 'Rescan / View scan progress', where: 'In the header of an open library', what: 'Opens Background tasks with the queue and a Start rescan option. The icon spins while any task runs.' },
+        { label: 'Indexing status', name: 'Indexing status', where: 'Beside Help on Your libraries', what: 'Opens files found, previews prepared, items waiting or failed, and scan controls for each indexed library.' },
       ] },
       { title: 'Folder and gallery menus', entries: [
         { icons: [EllipsisVertical], name: 'Folder actions', where: 'On every folder card, and in the header of the open folder', what: 'Opens the folder menu. In the header it also holds the gallery actions below.' },
@@ -195,6 +195,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Export XMP', name: 'Export XMP / Export disliked paths', where: 'Settings → Metadata exchange', what: 'Prepares downloads of your tags as XMP, or a list of disliked file paths. Download export appears when ready.' },
         { icons: [Eye], name: 'Show', where: 'Settings → Hidden folders', what: 'Brings a hidden folder back into browsing and indexing.' },
         { icons: [CircleHelp], name: 'Help', where: 'Settings, and beside Your libraries', what: 'Opens this guide.' },
+        { label: 'About', name: 'About', where: 'End of Settings', what: 'Shows the installed Luma version, project link and creator credit. The version also appears in the bottom-right corner on wider screens.' },
       ] },
     ],
     notes: ['Metadata imports are started from a folder (Folder actions → Import folder metadata) or from a single file (Media details → Import metadata tags), not from Settings.'],

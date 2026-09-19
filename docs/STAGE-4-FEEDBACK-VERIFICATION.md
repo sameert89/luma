@@ -1,6 +1,6 @@
 # Stage 4 feedback follow-up
 
-Implemented and verified locally on 2026-09-16. This follows the real-library feedback in `USER_FEEDBACK.md` without changing stage 6's video/reels scope.
+Implemented and verified locally on 2026-09-16. This follows the reported real-library findings without changing stage 6's video/reels scope.
 
 ## Changes
 

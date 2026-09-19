@@ -2,7 +2,7 @@
 
 ## Gate and current behavior
 
-The user accepted the stages 4–5 UI gate on 2026-09-17 after reviewing the motion, themes, album covers, scan controls, selection and preference fixes. Original feedback files remain the review history; do not discard them or unrelated worktree changes.
+The user accepted the stages 4–5 UI gate on 2026-09-17 after reviewing the motion, themes, album covers, scan controls, selection and preference fixes. Gate and verification records retain the relevant review history.
 
 The subsequent idle-folder issue is addressed by background direct-folder discovery. Opening an unindexed/partially indexed folder queues its direct files and child-folder entries; processing continues after discovery stops. Already-completed folders skip discovery unless pending jobs have no runnable owner. Full rescans remain explicit. Entirely unknown filesystem folders first require discovery of their parent. Subsequent additions to completed folders require a rescan.
 

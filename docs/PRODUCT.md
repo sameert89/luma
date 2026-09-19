@@ -28,7 +28,7 @@ When priorities conflict, earlier items generally win.
 
 Luma opens on a libraries-only home screen. The homepage must not fetch or display a combined media feed. Global search may return results across libraries; search inside a folder includes its descendants by default. Collections links such as Favourites may reuse search results without focusing the mobile search field or opening the keyboard; focus is requested only by an explicit search action.
 
-Initial indexing is an explicit, per-library choice. A configured library is idle until the user starts it from its library card (or an administrator explicitly enables startup scanning). Opening a ready library must use SQLite and generated cache files only. Album covers use prepared thumbnails, including media inside nested folders. Status and scan controls are available on demand so they never displace the media grid. Rescanning requires confirmation explaining its disk/CPU cost, and mobile browsing retains a visible scan/preparation indicator.
+Initial indexing is an explicit, per-library choice. A configured library is idle until the user starts it from its library card (or an administrator explicitly enables startup scanning). Opening a ready library must use SQLite and generated cache files only. Album covers use prepared thumbnails, including media inside nested folders. Library cards use the same cover-title treatment as subfolder cards, and album cards have a bounded desktop width so a sparse row does not stretch its cover across the viewport. The labeled Indexing status control beside Your libraries opens status and scan controls on demand so they never displace the media grid; open-library headers retain the compact icon-only control. Rescanning requires confirmation explaining its disk/CPU cost, and mobile browsing retains a visible scan/preparation indicator.
 
 The grid rendering will be done based on subfolders, the usual sorting by date modified, name, type etc. along with shuffle and group by should be available for the user
 
@@ -320,6 +320,8 @@ Mobile is a first-class client.
 The interface must not simply shrink the desktop layout.
 
 The primary mobile destinations are Library, Reels, Search, Collections and Settings. They use a fixed bottom navigation bar. Search, sort and filters stay compact; filters open as a one-column bottom sheet, and scan status stays collapsed until requested. The folder heading truncates within a single row alongside icon-only preparation and selection controls, plus a folder actions toggle. Preparation spins while busy; selection becomes an X while active. There is no separate sort pill. Each folder card also exposes its own three-dot actions toggle beside its truncated name; folder information and whole-folder metadata import live in that menu. Full names and location remain available in folder information. Controls must never consume the gallery's primary viewport or overflow it horizontally.
+
+Desktop layouts show the installed Luma version unobtrusively in the bottom-right corner. Settings ends with an About section containing the same version, the canonical project link and creator credit.
 
 Important mobile workflows:
 
