@@ -4,19 +4,26 @@ import { Check, Film, Heart, Images, LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Checkbox, QuietButton } from '../../components/ui/Controls'
+import { tagTone } from '../../components/ui/TagTone'
 import { errorMessage, isGif, mediaPage, type Filters, type Media } from './api'
 import { useFolderIndexing } from './useFolderIndexing'
 import { usePreviewPriority } from './usePreviewPriority'
 
-export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent, scopePending = false, scopeError }: {
-  filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode; scopePending?: boolean; scopeError?: Error | null
+const cellKey = (item: Media) => `${item.groupKey ?? ''}:${item.id}`
+
+export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent, scopePending = false, scopeError, restoreScrollTop = 0, onScrollPosition }: {
+  filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode; scopePending?: boolean; scopeError?: Error | null; restoreScrollTop?: number; onScrollPosition?: (value: number) => void
 }) {
   const indexing = useFolderIndexing(filters.folderId)
   const query = useInfiniteQuery({ queryKey: ['media', filters], queryFn: ({ pageParam, signal }) => mediaPage(filters, pageParam, signal),
     initialPageParam: undefined as string | undefined, getNextPageParam: page => page.nextCursor ?? undefined, getPreviousPageParam: page => page.previousCursor ?? undefined,
-    maxPages: 5, gcTime: 0, retry: 1,
+    // Retaining the five-page window briefly is what makes returning from a child folder or
+    // Reels able to restore a deep scroll position without refetching from the first cursor.
+    maxPages: 5, gcTime: 5 * 60_000, retry: 1,
     refetchInterval: state => indexing.waiting || state.state.data?.pages.some(page => page.items.some(item => !['ready', 'failed'].includes(item.thumbnail.status))) ? 3000 : false })
-  const items = [...new Map((query.data?.pages.flatMap(page => page.items) ?? []).map(item => [item.id, item])).values()]
+  // Tag grouping lists an item under each of its tags, so a cell is identified by its group and item,
+  // not by the item alone: pages that overlap still collapse, repeats under other headers stay.
+  const items = [...new Map((query.data?.pages.flatMap(page => page.items) ?? []).map(item => [cellKey(item), item])).values()]
   const gridRef = useRef<HTMLDivElement>(null)
   const leadingRef = useRef<HTMLDivElement>(null)
   const [leadingHeight, setLeadingHeight] = useState(0)
@@ -55,19 +62,19 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
     return () => observer.disconnect()
   }, [])
   useLayoutEffect(() => { virtual.measure() }, [columns, rowHeight, layoutKey, virtual])
-  const anchor = useRef<{ id: number; offset: number; data: typeof query.data } | null>(null)
+  const anchor = useRef<{ key: string; offset: number; data: typeof query.data } | null>(null)
   const loading = useRef(false)
   const load = useCallback(async (backward: boolean) => {
     if (loading.current || query.isFetching) return
     const top = scrollerRef.current?.scrollTop ?? 0
     const row = [...gridRows].reverse().find(row => row.offset <= top - leadingHeight) ?? gridRows[0]
-    if (row) anchor.current = { id: row.items[0].id, offset: top - leadingHeight - row.offset, data: query.data }
+    if (row) anchor.current = { key: cellKey(row.items[0]), offset: top - leadingHeight - row.offset, data: query.data }
     loading.current = true
     try { if (backward) await query.fetchPreviousPage(); else await query.fetchNextPage() } finally { loading.current = false }
   }, [query, gridRows, leadingHeight, scrollerRef])
   useLayoutEffect(() => {
     if (!anchor.current || !scrollerRef.current || query.data === anchor.current.data) return
-    const row = gridRows.find(row => row.items.some(item => item.id === anchor.current?.id))
+    const row = gridRows.find(row => row.items.some(item => cellKey(item) === anchor.current?.key))
     if (row) scrollerRef.current.scrollTop = leadingHeight + row.offset + anchor.current.offset
     anchor.current = null
   }, [query.data, gridRows, leadingHeight, scrollerRef])
@@ -78,8 +85,23 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
   useEffect(() => {
     if (items.length && last >= rows - 3 && query.hasNextPage && !query.isFetching) void load(false)
   }, [last, rows, query.hasNextPage, query.isFetching, items.length, load])
-  return <div ref={scrollerRef} tabIndex={-1} className="min-h-0 flex-1 overflow-auto p-4 focus-visible:outline-2 focus-visible:outline-accent" data-testid="gallery-scroll"
-    onScroll={event => { if (event.currentTarget.scrollTop < rowHeight && query.hasPreviousPage && !query.isFetching) void load(true) }}>
+  const restored = useRef(false)
+  const restoringScroll = useRef(restoreScrollTop > 0)
+  useLayoutEffect(() => {
+    if (restored.current || query.isPending || !scrollerRef.current) return
+    const element = scrollerRef.current
+    element.scrollTop = restoreScrollTop
+    restored.current = true
+    const frame = requestAnimationFrame(() => {
+      // Virtualizer measurement and cached-page rendering can adjust the scroll container
+      // during the same commit. Land once more after both have settled.
+      element.scrollTop = restoreScrollTop
+      restoringScroll.current = false
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [query.isPending, restoreScrollTop, scrollerRef])
+  return <div ref={scrollerRef} tabIndex={-1} className="min-h-0 flex-1 overflow-auto p-4 focus-visible:outline-2 focus-visible:outline-accent" data-testid="gallery-scroll" data-scroll-restore
+    onScroll={event => { if (!restoringScroll.current) onScrollPosition?.(event.currentTarget.scrollTop); if (event.currentTarget.scrollTop < rowHeight && query.hasPreviousPage && !query.isFetching) void load(true) }}>
     <div ref={gridRef} className="w-full">
       <div ref={leadingRef}>{leadingContent}</div>
       {indexing.waiting && <p role="status" className="flex items-center gap-2 pb-3 text-sm text-muted"><LoaderCircle className="size-4 motion-safe:animate-spin" />Checking this folder and preparing previews…</p>}
@@ -91,9 +113,9 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
       {query.hasPreviousPage && <QuietButton className="sr-only focus:not-sr-only focus:absolute focus:z-10" onClick={() => void load(true)} disabled={query.isFetching}>Load earlier items</QuietButton>}
       <div className="relative" style={{ height: virtual.getTotalSize() }} data-testid="gallery-grid" data-retained-items={items.length}>
         {visible.map(row => <div key={row.index} className="absolute left-0 top-0 w-full pb-3" style={{ height: row.size, transform: `translateY(${row.start - leadingHeight}px)` }}>
-          {gridRows[row.index].header && <h2 className="flex h-9 items-center text-sm font-semibold">{gridRows[row.index].header}</h2>}
+          {gridRows[row.index].header && <h2 className="flex h-9 items-center text-sm font-semibold">{filters.groupBy === 'tag' ? <span className="tag-tone rounded-full border px-3 py-1" style={tagTone(gridRows[row.index].header!)}>{gridRows[row.index].header}</span> : gridRows[row.index].header}</h2>}
           <div className="grid w-full gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-          {gridRows[row.index].items.map(item => <article key={item.id} className={`relative min-w-0 overflow-hidden rounded-md border ${selected.has(item.id) ? 'border-accent' : 'border-transparent'}`} data-testid="media-cell">
+          {gridRows[row.index].items.map(item => <article key={cellKey(item)} className={`relative min-w-0 overflow-hidden rounded-md border ${selected.has(item.id) ? 'border-accent' : 'border-transparent'}`} data-testid="media-cell">
             <button data-media-id={item.id} className="block w-full text-left" aria-label={`Open ${item.fileName}`} onClick={() => onOpen(item)}>
               <CachedImage key={`${item.thumbnail.url}:${item.thumbnail.status}`} url={item.thumbnail.url} status={item.thumbnail.status} alt="" className="aspect-square w-full bg-surface object-cover" />
               <span className="block truncate px-1 py-2 text-xs text-muted">{item.fileName}</span>

@@ -16,10 +16,11 @@ const retryLimit = 3
 export function usePreviewPriority(items: readonly (Media | null | undefined)[], previews = false) {
   const requested = useRef('')
   const [attempt, setAttempt] = useState(0)
-  const signature = items
+  // Grouping can show one item under several headers at once, and the endpoint takes each ID once.
+  const signature = [...new Set(items
     .filter(item => item && (item.thumbnail.status === 'pending'
       || previews && item.mediaType === 'image' && item.preview.status !== 'ready' && item.preview.status !== 'failed'))
-    .slice(0, batchLimit).map(item => item!.id).join(',')
+    .map(item => item!.id))].slice(0, batchLimit).join(',')
   useEffect(() => {
     if (!signature || signature === requested.current) return
     // Scrolling re-orders the batch on every frame; send the settled order only.

@@ -73,7 +73,6 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
 
     public async Task<MediaPage> ListAsync(MediaQuery query,CancellationToken ct)
     {
-        if(query.GroupBy=="tag") throw ApiRequestException.Invalid("Browse tag collections using /api/collections/tag-groups, then select a tag.");
         await using var db=await database.OpenAsync(ct);
         using var deadline=CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(2));
@@ -107,11 +106,9 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
                 {
                     if(grouped && (!firstGroup || group is null)) {
                         var (groupPredicate,groupParameters)=query.Predicate();
-                        if(group is not null) {
-                            groupPredicate += $" AND {ordering.GroupExpression} {(backward?"<":">")} @group";
-                            groupParameters.Add("group",group);
-                        }
-                        group=await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition($"SELECT {ordering.GroupExpression} FROM Media m WHERE {groupPredicate} ORDER BY {ordering.GroupExpression} {direction} LIMIT 1",groupParameters,tx,cancellationToken:deadline.Token));
+                        var seeking=group is not null;
+                        if(seeking) groupParameters.Add("group",group);
+                        group=await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(ordering.NextGroup(groupPredicate,seeking,backward),groupParameters,tx,cancellationToken:deadline.Token));
                         if(group is null) break;
                         segment=backward?1:0;
                     }
@@ -121,13 +118,13 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
                         parameters.Add("pivot",ordering.Pivot);
                         parameters.Add("limit",query.Limit.Value+1-rows.Count);
                         basePredicate += part==0 ? " AND m.RandomKey>=@pivot" : " AND m.RandomKey<@pivot";
-                        if(grouped) {basePredicate+=$" AND {ordering.GroupExpression}=@group";parameters.Add("group",group);}
+                        if(grouped) {basePredicate+=" AND "+ordering.GroupFilter;parameters.Add("group",group);}
                         if(position is not null && firstGroup && part==segment) {
                             parameters.Add("key",long.Parse(tuple![segmentIndex+1],System.Globalization.CultureInfo.InvariantCulture));
                             parameters.Add("id",position.Id);
                             basePredicate += $" AND (m.RandomKey,m.Id) {(backward?"<":">")} (@key,@id)";
                         }
-                        rows.AddRange(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {basePredicate} ORDER BY m.RandomKey {direction},m.Id {direction} LIMIT @limit",parameters,tx,cancellationToken:deadline.Token)));
+                        rows.AddRange(Stamped(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {basePredicate} ORDER BY m.RandomKey {direction},m.Id {direction} LIMIT @limit",parameters,tx,cancellationToken:deadline.Token)),grouped?group:null));
                     }
                     if(!grouped) break;
                     firstGroup=false;
@@ -141,16 +138,17 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
                 while(rows.Count<query.Limit.Value+1) {
                     if(!firstGroup || group is null) {
                         var (groupPredicate,groupParameters)=query.Predicate();
-                        if(group is not null) {groupPredicate+=$" AND {ordering.GroupExpression} {(backward?"<":">")} @group";groupParameters.Add("group",group);}
-                        group=await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition($"SELECT {ordering.GroupExpression} FROM Media m WHERE {groupPredicate} ORDER BY {ordering.GroupExpression} {(backward?"DESC":"ASC")} LIMIT 1",groupParameters,tx,cancellationToken:deadline.Token));
+                        var seeking=group is not null;
+                        if(seeking) groupParameters.Add("group",group);
+                        group=await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(ordering.NextGroup(groupPredicate,seeking,backward),groupParameters,tx,cancellationToken:deadline.Token));
                         if(group is null) break;
                     }
                     var (withinPredicate,parameters)=query.Predicate();
-                    withinPredicate+=$" AND {ordering.GroupExpression}=@group";
+                    withinPredicate+=" AND "+ordering.GroupFilter;
                     parameters.Add("group",group);
                     parameters.Add("limit",query.Limit.Value+1-rows.Count);
                     if(query.Sort=="type") {
-                        rows.AddRange(await TypeRowsAsync(db,tx,query,withinPredicate,parameters,firstGroup?position:null,backward,query.Limit.Value+1-rows.Count,deadline.Token));
+                        rows.AddRange(Stamped(await TypeRowsAsync(db,tx,query,withinPredicate,parameters,firstGroup?position:null,backward,query.Limit.Value+1-rows.Count,deadline.Token),group));
                         firstGroup=false;
                         continue;
                     }
@@ -161,7 +159,7 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
                         withinPredicate+=$" AND ({ordering.KeyExpression},m.Id) {(ascending?">":"<")} (@key,@id)";
                     }
                     var direction=ascending?"ASC":"DESC";
-                    rows.AddRange(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {withinPredicate} ORDER BY {ordering.KeyExpression} {direction},m.Id {direction} LIMIT @limit",parameters,tx,cancellationToken:deadline.Token)));
+                    rows.AddRange(Stamped(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {withinPredicate} ORDER BY {ordering.KeyExpression} {direction},m.Id {direction} LIMIT @limit",parameters,tx,cancellationToken:deadline.Token)),group));
                     firstGroup=false;
                 }
             }
@@ -178,9 +176,11 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
             var more=rows.Count>query.Limit;
             if(more) rows.RemoveAt(rows.Count-1);
             if(backward) rows.Reverse();
-            var folderLabels=query.GroupBy=="folder" ? (await db.QueryAsync<GroupFolder>(new CommandDefinition("SELECT f.Id,CASE WHEN f.RelativePath='' THEN l.Name ELSE l.Name||' / '||f.RelativePath END Name FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId WHERE f.Id IN (SELECT value FROM json_each(@ids))",new{ids=JsonSerializer.Serialize(rows.Select(x=>x.FolderId).Distinct())},tx,cancellationToken:deadline.Token))).ToDictionary(x=>x.Id,x=>x.Name) : [];
+            var folderLabels=query.GroupBy=="folder" ? (await db.QueryAsync<GroupName>(new CommandDefinition("SELECT f.Id,CASE WHEN f.RelativePath='' THEN l.Name ELSE l.Name||' / '||f.RelativePath END Name FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId WHERE f.Id IN (SELECT value FROM json_each(@ids))",new{ids=JsonSerializer.Serialize(rows.Select(x=>x.FolderId).Distinct())},tx,cancellationToken:deadline.Token))).ToDictionary(x=>x.Id,x=>x.Name) : [];
+            var tagLabels=query.GroupBy=="tag" ? (await db.QueryAsync<GroupName>(new CommandDefinition("SELECT t.Id,t.Name FROM Tags t WHERE t.Id IN (SELECT value FROM json_each(@ids))",new{ids=JsonSerializer.Serialize(rows.Select(x=>x.GroupValue).Distinct())},tx,cancellationToken:deadline.Token))).ToDictionary(x=>x.Id,x=>x.Name) : [];
             var items=(await SummariesAsync(db,tx,rows,deadline.Token)).Select((item,i)=>item with {
-                GroupKey=ordering.GroupKey(rows[i]),GroupLabel=query.GroupBy switch {"folder"=>folderLabels.GetValueOrDefault(item.FolderId),"type"=>item.MediaType=="image"?"Photos":"Videos","date"=>ordering.GroupKey(rows[i]),_=>null} }).ToArray();
+                GroupKey=ordering.GroupKey(rows[i]),GroupLabel=query.GroupBy switch {"folder"=>folderLabels.GetValueOrDefault(item.FolderId),"type"=>item.MediaType=="image"?"Photos":"Videos","date"=>ordering.GroupKey(rows[i]),
+                    "tag"=>rows[i].GroupValue is { } tag?tagLabels.GetValueOrDefault(tag):null,_=>null} }).ToArray();
             tx.Commit();
             if(rows.Count==0) return new(items,null,null,query.Seed);
             return new(items,
@@ -229,6 +229,13 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
         await using var db=await database.OpenAsync(ct);
         var row=await db.QuerySingleOrDefaultAsync<MediaRow>(new CommandDefinition("SELECT * FROM Media WHERE Id=@id",new{id},cancellationToken:ct)) ?? throw ApiRequestException.Missing();
         var ordering=new MediaOrdering(query);
+        // A tagged item sits in as many groups as it has tags; the viewer follows the first of them.
+        // An untagged item is in none of them, so it has no neighbors to move to.
+        if(ordering.ByTag) {
+            row.GroupValue=await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(
+                "SELECT t.Id FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE mt.MediaId=@id ORDER BY t.NormalizedKey,t.Id LIMIT 1",new{id},cancellationToken:ct));
+            if(row.GroupValue is null) return new(null,null);
+        }
         var previous=await ListAsync(query with {Limit=1,Cursor=cursors.Encode(query.Fingerprint(),ordering.Tuple(row),id,true)},ct);
         var next=await ListAsync(query with {Limit=1,Cursor=cursors.Encode(query.Fingerprint(),ordering.Tuple(row),id,false)},ct);
         return new(previous.Items.FirstOrDefault(),next.Items.FirstOrDefault());
@@ -258,7 +265,12 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
                 tags[row.Id].Select(x=>new TagSummary(x.Id,x.Name)).ToArray(),WatchProgress:progress.GetValueOrDefault(row.Id));
         }).ToArray();
     }
-    private sealed record GroupFolder(long Id,string Name);
+    // Tag grouping lists a row once per tag, so a row remembers the group it was listed under.
+    private static IEnumerable<MediaRow> Stamped(IEnumerable<MediaRow> rows,long? group)
+    {
+        foreach(var row in rows) { row.GroupValue=group; yield return row; }
+    }
+    private sealed record GroupName(long Id,string Name);
     private sealed class TagRow {public long MediaId{get;set;} public long Id{get;set;} public string Name{get;set;}="";}
     private sealed class CacheRow {public long MediaId{get;set;} public string Variant{get;set;}=""; public string State{get;set;}=""; public int Width{get;set;} public int Height{get;set;}}
 }

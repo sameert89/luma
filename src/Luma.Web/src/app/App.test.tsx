@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
@@ -333,6 +333,66 @@ describe('browsing shell', () => {
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/media?') && String(url).includes('mediaType=motion') && String(url).includes('folderId=2') && String(url).includes('libraryId=1'))).toBe(true))
     expect(window.location.search).toContain('mediaType=motion')
     expect(window.location.search).toContain('folderId=2')
+  })
+  it('restores each folder scroll position when revisiting it', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+    const photos = Array.from({ length: 80 }, (_, index) => ({ id: index + 1, libraryId: 1, folderId: 2, fileName: `image-${index + 1}.jpg`, mediaType: 'image', extension: '.jpg', sizeBytes: 1, modifiedAt: '2026-01-01T00:00:00Z', preference: 'neutral', preview: { status: 'ready', url: `/preview-${index}` }, thumbnail: { status: 'ready', url: `/thumb-${index}` }, tags: [] }))
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}) } as DOMRect)
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const child = new URL(text, window.location.href).searchParams.get('parentId') === '3'
+      const data = text === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+        : text.startsWith('/api/folders?') ? child
+          ? { current: { id: 3, libraryId: 1, parentId: 2, name: 'Beach' }, ancestors: [{ id: 2, libraryId: 1, parentId: 1, name: 'Trips' }], items: [] }
+          : { current: { id: 2, libraryId: 1, parentId: 1, name: 'Trips' }, ancestors: [], items: [{ id: 3, libraryId: 1, parentId: 2, name: 'Beach' }] }
+        : text.startsWith('/api/indexing') || text === '/api/tasks' ? text === '/api/tasks' ? [] : { libraries: [] }
+          : { items: photos, nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    }))
+    localStorage.clear()
+    try {
+      render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+      const openChild = await screen.findByRole('button', { name: 'Open Beach' })
+      await waitFor(() => expect(screen.getByTestId('gallery-grid')).toHaveAttribute('data-retained-items', '80'))
+      const parent = screen.getByTestId('gallery-scroll')
+      parent.scrollTop = 420; fireEvent.scroll(parent)
+      await userEvent.click(openChild)
+      expect(await screen.findByRole('heading', { name: 'Beach' })).toBeVisible()
+      act(() => window.history.back())
+      await waitFor(() => expect(screen.getByTestId('gallery-scroll').scrollTop).toBe(420))
+    } finally { rect.mockRestore() }
+  })
+  it('returns from Watch on Reels to the same viewer and gallery position', async () => {
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+    const clip = { id: 10, libraryId: 1, folderId: 2, fileName: 'clip.mp4', mediaType: 'video', extension: '.mp4', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preference: 'neutral', preview: { status: 'ready', url: '/poster.jpg' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
+    const media = [clip, ...Array.from({ length: 79 }, (_, index) => ({ ...clip, id: index + 11, fileName: `clip-${index + 11}.mp4` }))]
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}) } as DOMRect)
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      const text = String(url)
+      const data = text === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+        : text.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, parentId: 1, name: 'Trips' }, ancestors: [], items: [] }
+        : text.startsWith('/api/indexing') || text === '/api/tasks' ? text === '/api/tasks' ? [] : { libraries: [] }
+          : text.includes('/neighbors?') ? { previous: null, next: null }
+            : /\/api\/media\/\d+$/.test(text) ? clip : { items: media, nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    }))
+    localStorage.clear()
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+    try {
+      render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+      const folderActions = await screen.findByRole('button', { name: 'Folder actions for Trips' })
+      const gallery = screen.getByTestId('gallery-scroll')
+      gallery.scrollTop = 360; fireEvent.scroll(gallery)
+      await userEvent.click(folderActions)
+      await userEvent.click(screen.getByRole('button', { name: 'Start slideshow' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Watch on Reels' }))
+      expect(await screen.findByRole('region', { name: 'Reels' })).toBeVisible()
+      act(() => window.history.back())
+      expect(await screen.findByRole('dialog', { name: 'clip.mp4' })).toBeVisible()
+      expect(screen.getByTestId('gallery-scroll').scrollTop).toBe(360)
+    } finally { rect.mockRestore(); vi.restoreAllMocks() }
   })
   it('keeps the visible reels media filter when opening search, until explicitly cleared', async () => {
     const fetch = vi.fn().mockImplementation((url: string) => {

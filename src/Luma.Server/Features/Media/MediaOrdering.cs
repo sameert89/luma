@@ -12,6 +12,22 @@ public sealed class MediaOrdering(MediaQuery query)
     public long Pivot { get; } = BitConverter.ToInt64(SHA256.HashData(Encoding.UTF8.GetBytes(query.Seed ?? "")),0) & long.MaxValue;
     public string GroupExpression => query.GroupBy switch {
         "folder" => "m.FolderId", "date" => "m.DateDay", "type" => "m.TypeKey", _ => "0" };
+    // Tag grouping is the one grouping whose key is not a value on the media row: an item appears
+    // under each of its tags, so the groups come from Tags in name order and rows carry the tag they
+    // were listed under. Every other grouping keeps reading its key straight off the row.
+    public bool ByTag => query.GroupBy == "tag";
+    public string GroupFilter => ByTag ? "m.Id IN (SELECT mt.MediaId FROM MediaTags mt WHERE mt.TagId=@group)" : GroupExpression+"=@group";
+    public string NextGroup(string predicate,bool afterGroup,bool backward)
+    {
+        var direction=backward?"DESC":"ASC";
+        if(ByTag)
+            return $"SELECT t.Id FROM Tags t WHERE EXISTS(SELECT 1 FROM MediaTags mt JOIN Media m ON m.Id=mt.MediaId WHERE mt.TagId=t.Id AND {predicate})"
+                +(afterGroup?$" AND (t.NormalizedKey,t.Id) {(backward?"<":">")} (SELECT NormalizedKey,Id FROM Tags WHERE Id=@group)":"")
+                +$" ORDER BY t.NormalizedKey {direction},t.Id {direction} LIMIT 1";
+        return $"SELECT {GroupExpression} FROM Media m WHERE {predicate}"
+            +(afterGroup?$" AND {GroupExpression} {(backward?"<":">")} @group":"")
+            +$" ORDER BY {GroupExpression} {direction} LIMIT 1";
+    }
     public string KeyExpression => query.Sort switch {
         "captured" => "m.EffectiveTicks", "name" => "m.NameKey", "type" => "m.MediaType", "size" => "m.SizeBytes", "shuffle" => "m.RandomKey", _ => "m.ModifiedTicks" };
     private (string Sql, bool Ascending, bool Text)[] Terms =>
@@ -36,12 +52,13 @@ public sealed class MediaOrdering(MediaQuery query)
     public string[] Tuple(MediaRow row)
     {
         var values=new List<object>();
-        if(query.GroupBy != "none") values.Add(query.GroupBy switch { "folder"=>row.FolderId,"date"=>row.EffectiveTicks/864000000000,"type"=>row.MediaType=="image"?0L:1L,_=>0L });
+        if(query.GroupBy != "none") values.Add(query.GroupBy switch { "folder"=>row.FolderId,"date"=>row.EffectiveTicks/864000000000,"type"=>row.MediaType=="image"?0L:1L,"tag"=>row.GroupValue ?? 0L,_=>0L });
         if(query.Sort == "shuffle") values.Add(row.RandomKey>=Pivot?0L:1L);
         values.Add(query.Sort switch { "captured" => row.EffectiveTicks, "name" => row.NameKey, "type" => row.MediaType, "size" => row.SizeBytes, "shuffle" => row.RandomKey, _ => (object)row.ModifiedTicks });
         values.Add(row.Id);
         return values.Select(x=>Convert.ToString(x,CultureInfo.InvariantCulture)!).ToArray();
     }
     public string? GroupKey(MediaRow row) => query.GroupBy switch {
-        "folder" => "folder:"+row.FolderId, "date"=>row.EffectiveDate[..10], "type"=>row.MediaType, _=>null };
+        "folder" => "folder:"+row.FolderId, "date"=>row.EffectiveDate[..10], "type"=>row.MediaType,
+        "tag"=>row.GroupValue is { } tag?"tag:"+tag:null, _=>null };
 }

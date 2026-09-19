@@ -18,4 +18,7 @@ public sealed class MediaRow
     public long EffectiveTicks {get;set;} public string NameKey {get;set;}=""; public long RandomKey {get;set;}
     public long SourceRevision {get;set;}
     public string ProcessingStatus {get;set;}="";
+    // The group a row was listed under when the group is not one of its own columns: tag grouping
+    // repeats a row under each of its tags, so the listing stamps the tag it came from.
+    public long? GroupValue {get;set;}
 }

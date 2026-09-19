@@ -456,7 +456,7 @@ it('offers persisted resume and start-over choices only for a partially watched 
   vi.restoreAllMocks()
 })
 
-it('keeps right-side vertical swipes available for Reels navigation without changing volume', () => {
+it('uses the right-side volume lane in Reels while vertical swipes elsewhere still navigate', () => {
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -466,10 +466,14 @@ it('keeps right-side vertical swipes available for Reels navigation without chan
   stage.setPointerCapture = () => {}
   vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400, height: 800, right: 400, bottom: 800, x: 0, y: 0, toJSON: () => ({}) })
   fireEvent.pointerDown(stage, { pointerId: 1, button: 0, clientX: 350, clientY: 500 })
-  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 350, clientY: 300 })
-  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 350, clientY: 300 })
-  expect(container.querySelector('video')!.volume).toBe(1)
-  expect(screen.queryByText(/Volume \d+%/)).not.toBeInTheDocument()
+  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 350, clientY: 660 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 350, clientY: 660 })
+  expect(container.querySelector('video')!.volume).toBe(0)
+  expect(screen.getByRole('status')).toHaveTextContent('Volume 0%')
+  expect(navigate).not.toHaveBeenCalled()
+  fireEvent.pointerDown(stage, { pointerId: 2, button: 0, clientX: 150, clientY: 500 })
+  fireEvent.pointerMove(stage, { pointerId: 2, clientX: 150, clientY: 300 })
+  fireEvent.pointerUp(stage, { pointerId: 2, clientX: 150, clientY: 300 })
   expect(navigate).toHaveBeenCalledWith('next')
   vi.restoreAllMocks()
 })

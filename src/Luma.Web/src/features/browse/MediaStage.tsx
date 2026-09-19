@@ -344,7 +344,9 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         chromeWasHidden.current = chromeHidden
         event.currentTarget.setPointerCapture(event.pointerId); pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); gesture.current = { x: event.clientX, y: event.clientY, distance: 0 }
         const bounds = event.currentTarget.getBoundingClientRect()
-        if (isVideo && !reels && pointers.current.size === 1 && event.clientX > bounds.left + bounds.width * 0.75 && event.clientY < bounds.bottom - seekStripHeight) volumeSwipe.current = { y: event.clientY, volume, active: false }
+        // The right quarter is the volume lane in both players. Reels keeps vertical
+        // previous/next swipes everywhere else, so the gestures remain unambiguous.
+        if (isVideo && pointers.current.size === 1 && event.clientX > bounds.left + bounds.width * 0.75 && event.clientY < bounds.bottom - seekStripHeight) volumeSwipe.current = { y: event.clientY, volume, active: false }
         if (zoomable && pointers.current.size === 2) {
           const points = [...pointers.current.values()]
           pinch.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), zoom: zoomRef.current, x: (points[0].x + points[1].x) / 2 - bounds.left - bounds.width / 2, y: (points[0].y + points[1].y) / 2 - bounds.top - bounds.height / 2, pan: panRef.current }

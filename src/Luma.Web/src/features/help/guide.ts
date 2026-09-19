@@ -49,7 +49,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Clear all filters', name: 'Clear all filters', where: 'End of the active-filter row, and the folder or gallery actions menu', what: 'Removes every filter, including library and folder scope, so results widen to everything.' },
         { label: 'Sort by', name: 'Sort by and Sort direction', where: 'Filters and sorting → Order and grouping', what: 'Orders media by modified date, captured date, name, type, size or shuffle, ascending or descending.' },
         { label: 'Reshuffle', name: 'Reshuffle', where: 'Filters and sorting, when Sort by is Shuffle', what: 'Picks a new random order. The same shuffle stays stable while you browse.' },
-        { label: 'Group by', name: 'Group by', where: 'Filters and sorting → Order and grouping', what: 'Groups results under folder, date or type headings. Tags shows one card per tag; Browse opens that tag’s items.' },
+        { label: 'Group by', name: 'Group by', where: 'Filters and sorting → Order and grouping', what: 'Groups results under tag, folder, date or type headings, in the same gallery. Tags lists an item under each of its tags and leaves untagged items out.' },
         { label: 'Clear folder scope', name: 'Clear folder scope / Include subfolders', where: 'Filters and sorting → Location and name', what: 'Drops the folder limit, or includes everything below the folder instead of only its own files.' },
         { label: 'Reset filters', name: 'Apply filters / Reset filters', where: 'Bottom of Filters and sorting', what: 'Apply uses your changes; Reset removes every filter at once.' },
       ] },

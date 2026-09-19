@@ -72,6 +72,53 @@ public sealed class Gate7Tests
     }
 
     [Fact]
+    public async Task Tag_grouping_pages_tags_in_name_order_and_lists_an_item_under_each_of_its_tags()
+    {
+        await using var f=await PipelineFixture.CreateAsync();
+        await BrowsingTests.SeedAsync(f,6);
+        // Created out of alphabetical order: the groups follow the tag name, not the tag ID.
+        var tags=new TagService(f.Database);
+        var sunset=(await tags.CreateAsync("Sunset",default)).Tag;
+        var alps=(await tags.CreateAsync("Alps",default)).Tag;
+        var beach=(await tags.CreateAsync("Beach",default)).Tag;
+        await tags.BulkAsync(new([1,2],[beach.Id],[]),default);
+        await tags.BulkAsync(new([2,3],[sunset.Id],[]),default);
+        await tags.BulkAsync(new([4],[alps.Id],[]),default);
+        var browser=await BrowsingTests.BrowserAsync(f);
+        var query=new MediaQuery{Limit=2,GroupBy="tag"}.Normalize();
+        // Ties on the modified sort fall back to ID descending; 5 and 6 carry no tag and no group.
+        var expected=new[]{"Alps 4","Beach 2","Beach 1","Sunset 3","Sunset 2"};
+        var listed=new List<string>();
+        var page=await browser.ListAsync(query,default);
+        Assert.Equal($"tag:{alps.Id}",page.Items[0].GroupKey);
+        while(true) {
+            listed.AddRange(page.Items.Select(x=>$"{x.GroupLabel} {x.Id}"));
+            if(page.NextCursor is null) break;
+            var next=await browser.ListAsync(query with {Cursor=page.NextCursor},default);
+            var previous=await browser.ListAsync(query with {Cursor=next.PreviousCursor},default);
+            Assert.Equal(page.Items.Select(x=>x.Id),previous.Items.Select(x=>x.Id));
+            page=next;
+        }
+        Assert.Equal(expected,listed);
+        // The viewer follows the first of an item's tags, so its neighbors are that group's.
+        var neighbors=await browser.NeighborsAsync(2,query,default);
+        Assert.Equal(4,neighbors.Previous!.Id); Assert.Equal(1,neighbors.Next!.Id);
+        Assert.Null((await browser.NeighborsAsync(5,query,default)).Next);
+        // Shuffle rotates within each group and still traverses every group exactly once.
+        var shuffle=new MediaQuery{Limit=2,GroupBy="tag",Sort="shuffle",Seed="release-fixture"}.Normalize();
+        var all=await browser.ListAsync(shuffle with {Limit=50},default);
+        var shuffled=new List<string>();
+        page=await browser.ListAsync(shuffle,default);
+        while(true) {
+            shuffled.AddRange(page.Items.Select(x=>$"{x.GroupLabel} {x.Id}"));
+            if(page.NextCursor is null) break;
+            page=await browser.ListAsync(shuffle with {Cursor=page.NextCursor},default);
+        }
+        Assert.Equal(all.Items.Select(x=>$"{x.GroupLabel} {x.Id}"),shuffled);
+        Assert.Equal(expected.Order(StringComparer.Ordinal),shuffled.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task Cover_candidates_are_automatic_until_overridden_and_reset_returns_to_them()
     {
         await using var f=await PipelineFixture.CreateAsync();

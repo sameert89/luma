@@ -17,7 +17,6 @@ import { Collections } from '../features/browse/Collections'
 import { GalleryActions } from '../features/browse/GalleryActions'
 import { ActiveFilters } from '../features/browse/ActiveFilters'
 import { RandomUrls } from '../features/browse/RandomUrls'
-import { TagGroups } from '../features/browse/TagGroups'
 import { Gallery } from '../features/browse/Gallery'
 import { Reels } from '../features/browse/Reels'
 import { Viewer } from '../features/browse/Viewer'
@@ -34,9 +33,14 @@ type Section = 'library' | 'reels' | 'search' | 'collections' | 'settings' | 'he
 // Help is opened from another destination and returns to it; `from` keeps that across a refresh.
 type HelpOrigin = Exclude<Section, 'help'>
 const helpOrigins: HelpOrigin[] = ['library', 'reels', 'search', 'collections', 'settings']
+type HistorySnapshot = { filters?: Filters; section?: Section; helpOrigin?: HelpOrigin; scrollTop?: number; mediaId?: number; returnToViewer?: boolean; lumaModal?: string }
 
 // Reels play everything that moves: videos and animated GIFs.
 const reelsMediaType = 'motion'
+
+// Tag grouping repeats an item under each of its tags, which reads as a repeat in Reels and the
+// slideshow because they play one item after another. Both browse those filters ungrouped instead.
+const ungroupTags = (value: Filters): Filters => value.groupBy === 'tag' ? { ...value, groupBy: 'none' } : value
 
 function readFilters(): Filters {
   const params = new URLSearchParams(window.location.search)
@@ -79,6 +83,8 @@ export function App() {
   const [selected, setSelected] = useState(new Set<number>())
   const [selectionError, setSelectionError] = useState('')
   const [active, setActive] = useState<Media | null>(null)
+  const activeRef = useRef<Media | null>(null)
+  activeRef.current = active
   const [restoreId] = useState(() => { const id = Number(new URLSearchParams(window.location.search).get('media')); return Number.isSafeInteger(id) && id > 0 ? id : null })
   const [restoreViewer] = useState(() => new URLSearchParams(window.location.search).get('view') !== 'reels')
   const restored = useQuery({ queryKey: ['restore-media', restoreId], queryFn: ({ signal }) => request<Media>(`/api/media/${restoreId}`, signal), enabled: !!restoreId && restoreViewer, gcTime: 0 })
@@ -93,6 +99,8 @@ export function App() {
   const [refresh, setRefresh] = useState(0)
   const [theme, setTheme] = useState<Theme>(() => themes.find(theme => theme.id === localStorage.getItem('luma-theme'))?.id ?? 'obsidian')
   const scroll = useRef<HTMLDivElement>(null)
+  const scrollPositions = useRef(new Map<string, number>())
+  const [restoreScrollTop, setRestoreScrollTop] = useState(() => typeof window.history.state?.scrollTop === 'number' ? window.history.state.scrollTop : 0)
   const libraryMemory = useRef<Filters>(filters.q ? {} : filters)
   const searchOrigin = useRef<'library' | 'search'>('search')
   const triggerId = useRef<number | null>(null)
@@ -113,25 +121,80 @@ export function App() {
     if (canvas) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas)
   }, [theme])
   useEffect(() => { if (section === 'library' && !filters.q) libraryMemory.current = filters }, [section, filters])
-  useEffect(() => { const params = new URLSearchParams(queryString(filters)); if (active) params.set('media', String(active.id)); else if (section === 'reels' && reelId) params.set('media', String(reelId)); else if (restoreId && !restoredOnce.current) params.set('media', String(restoreId)); if (section === 'reels') params.set('view', 'reels'); if (section === 'help') { params.set('view', 'help'); params.set('from', helpOrigin) }; window.history.replaceState(window.history.state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`) }, [filters, active?.id, section, restoreId, reelId, helpOrigin])
+  const scrollKey = (target: Section, value: Filters) => `${target}:${queryString(value)}`
+  function visibleScroller() { return scroll.current ?? document.querySelector<HTMLElement>('[data-scroll-restore]') }
+  function rememberScroll() {
+    const top = visibleScroller()?.scrollTop ?? scrollPositions.current.get(scrollKey(section, filters)) ?? 0
+    scrollPositions.current.set(scrollKey(section, filters), top)
+    window.history.replaceState({ ...(window.history.state as HistorySnapshot | null), filters, section, helpOrigin, scrollTop: top }, '', window.location.href)
+    return top
+  }
+  function destinationScroll(target: Section, value: Filters, saved?: number) {
+    const top = typeof saved === 'number' ? saved : scrollPositions.current.get(scrollKey(target, value)) ?? 0
+    scrollPositions.current.set(scrollKey(target, value), top)
+    setRestoreScrollTop(top)
+  }
+  function recordScroll(top: number) {
+    scrollPositions.current.set(scrollKey(section, filters), top)
+    window.history.replaceState({ ...(window.history.state as HistorySnapshot | null), filters, section, helpOrigin, scrollTop: top }, '', window.location.href)
+  }
   useEffect(() => {
-    if (!window.history.state) window.history.replaceState({ filters: readFilters(), section: readSection() }, '', window.location.href)
+    const params = new URLSearchParams(queryString(filters))
+    const mediaId = active?.id ?? (section === 'reels' ? reelId : null) ?? (restoreId && !restoredOnce.current ? restoreId : null)
+    if (mediaId) params.set('media', String(mediaId))
+    if (section === 'reels') params.set('view', 'reels')
+    if (section === 'help') { params.set('view', 'help'); params.set('from', helpOrigin) }
+    const current = window.history.state as HistorySnapshot | null
+    const state = { ...current, filters, section, ...(current?.helpOrigin ? { helpOrigin } : {}), ...(mediaId ? { mediaId } : {}) }
+    if (!mediaId) delete state.mediaId
+    window.history.replaceState(state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
+  }, [filters, active?.id, section, restoreId, reelId, helpOrigin])
+  useEffect(() => {
+    if (!window.history.state) window.history.replaceState({ filters: readFilters(), section: readSection(), scrollTop: 0 }, '', window.location.href)
     function back(event: PopStateEvent) {
-      if (event.state?.lumaModal) return
+      // Modal owns this traversal. Handling it here as page navigation would reopen a
+      // viewer whose URL still contains its media marker while the close is settling.
+      if (event.state?.lumaModal || activeRef.current) return
       const value = event.state?.filters ?? readFilters()
-      setFilters(value); setSearch(value.q ?? ''); setSection(event.state?.section ?? 'library'); setFolderCursor(undefined); setReelsStart(null)
+      const target: Section = event.state?.section ?? readSection()
+      const urlId = Number(new URLSearchParams(window.location.search).get('media'))
+      const mediaId = Number.isSafeInteger(event.state?.mediaId) && event.state.mediaId > 0 ? event.state.mediaId : Number.isSafeInteger(urlId) && urlId > 0 ? urlId : null
+      destinationScroll(target, value, event.state?.scrollTop)
+      setFilters(value); setSearch(value.q ?? ''); setSection(target); setFolderCursor(undefined)
+      if (target === 'reels') { setActive(null); setReelsStart(mediaId); setReelId(mediaId) }
+      else {
+        setReelsStart(null); setReelId(null)
+        if (mediaId && event.state?.returnToViewer) {
+          // Consume the return marker before reopening the modal. Closing that modal must
+          // reveal the gallery entry, not see the marker and immediately reopen it.
+          const params = new URLSearchParams(window.location.search); params.delete('media')
+          const state = { ...(event.state as HistorySnapshot), mediaId: undefined, returnToViewer: undefined }
+          delete state.mediaId; delete state.returnToViewer
+          window.history.replaceState(state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
+          triggerId.current = mediaId
+          void request<Media>(`/api/media/${mediaId}`).then(item => setActive(item)).catch(() => setActive(null))
+        } else {
+          if (mediaId) {
+            const params = new URLSearchParams(window.location.search); params.delete('media')
+            const state = { ...(event.state as HistorySnapshot), mediaId: undefined }
+            delete state.mediaId
+            window.history.replaceState(state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
+          }
+          setActive(null)
+        }
+      }
       if (event.state?.helpOrigin) setHelpOrigin(event.state.helpOrigin)
     }
     window.addEventListener('popstate', back)
     return () => window.removeEventListener('popstate', back)
   }, [])
-  function apply(value: Filters, target: Section = 'library', reelStart: number | null = null) { setReelsStart(reelStart); setReelId(reelStart); window.history[window.history.state?.lumaModal ? 'replaceState' : 'pushState']({ filters: value, section: target }, '', `${window.location.pathname}${queryString(value) ? `?${queryString(value)}` : ''}`); setFilters(value); setSearch(value.q ?? ''); setSelected(new Set()); setFolderCursor(undefined); setFilterOpen(false); setSection(target) }
+  function apply(value: Filters, target: Section = 'library', reelStart: number | null = null) { rememberScroll(); destinationScroll(target, value); setReelsStart(reelStart); setReelId(reelStart); window.history[window.history.state?.lumaModal ? 'replaceState' : 'pushState']({ filters: value, section: target, scrollTop: scrollPositions.current.get(scrollKey(target, value)) ?? 0, ...(reelStart ? { mediaId: reelStart } : {}) }, '', `${window.location.pathname}${queryString(value) ? `?${queryString(value)}` : ''}`); setFilters(value); setSearch(value.q ?? ''); setSelected(new Set()); setFolderCursor(undefined); setFilterOpen(false); setSection(target) }
   function visitLibrary(item: Library) { if (!item.rootFolderId) { setInitialLibrary(item); return }; apply({ libraryId: item.id, folderId: item.rootFolderId }) }
   function navigateSection(target: Section) {
     setSearchFocusRequested(target === 'search')
     if (target === 'search' && section !== 'search') searchOrigin.current = 'search'
     if (target === 'collections') apply({}, target)
-    else if (target === 'reels') apply({ ...filters, mediaType: filters.mediaType ?? reelsMediaType, groupBy: filters.groupBy === 'tag' ? 'none' : filters.groupBy }, target)
+    else if (target === 'reels') apply(ungroupTags({ ...filters, mediaType: filters.mediaType ?? reelsMediaType }), target)
     else if (target === 'library') apply(filters, target)
     else if (target === 'search') apply(filters, target)
     else { window.history.pushState({ filters, section: target }, '', window.location.href); setSection(target) }
@@ -141,25 +204,32 @@ export function App() {
   // pops to it so its section, filters and folder come back exactly as they were.
   function openHelp() {
     if (section === 'help') return
-    const scroller = document.querySelector<HTMLElement>('[data-scroll-restore]')
-    window.history.replaceState({ ...window.history.state, scrollTop: scroller?.scrollTop ?? 0 }, '')
+    rememberScroll()
+    destinationScroll('help', filters)
     window.history.pushState({ filters, section: 'help', helpOrigin: section }, '', window.location.href)
     setHelpOrigin(section); setSection('help')
   }
   function closeHelp() {
     // Opened directly from a link there is no origin entry to pop, so leave for `from` in place.
     if (window.history.state?.helpOrigin) window.history.back()
-    else { window.history.replaceState({ filters, section: helpOrigin }, '', window.location.href); setSection(helpOrigin) }
+    else {
+      const value = { libraryId: filters.libraryId, folderId: filters.folderId }
+      destinationScroll(helpOrigin, value)
+      window.history.replaceState({ filters: value, section: helpOrigin }, '', window.location.href)
+      setFilters(value); setSearch(''); setSection(helpOrigin)
+    }
   }
   const previousSection = useRef(section)
   useLayoutEffect(() => {
     const leftHelp = previousSection.current === 'help' && section !== 'help'
     previousSection.current = section
-    if (!leftHelp) return
-    const scroller = document.querySelector<HTMLElement>('[data-scroll-restore]')
-    if (scroller && typeof window.history.state?.scrollTop === 'number') scroller.scrollTop = window.history.state.scrollTop
-    document.querySelector<HTMLElement>('[data-help-entry]')?.focus({ preventScroll: true })
-  }, [section])
+    const frame = requestAnimationFrame(() => {
+      const scroller = visibleScroller()
+      if (scroller) scroller.scrollTop = restoreScrollTop
+      if (leftHelp) document.querySelector<HTMLElement>('[data-help-entry]')?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [section, queryString(filters), restoreScrollTop])
   const helpParams = new URLSearchParams(queryString(filters))
   helpParams.set('view', 'help'); helpParams.set('from', section === 'help' ? helpOrigin : section)
   function submitSearch() {
@@ -181,11 +251,11 @@ export function App() {
     else apply({}, 'search')
   }
   function select(id: number) { setSelected(old => { const next = new Set(old); if (next.has(id)) next.delete(id); else if (next.size < 500) next.add(id); else { setSelectionError('Select at most 500 items at a time.'); return old }; return next }) }
-  function openViewer(item: Media, slideshow = false) { triggerId.current = item.id; viewerScrollTop.current = scroll.current?.scrollTop ?? 0; setSlideshowStart(slideshow); setActive(item) }
+  function openViewer(item: Media, slideshow = false) { triggerId.current = item.id; viewerScrollTop.current = rememberScroll(); setSlideshowStart(slideshow); setActive(item) }
   async function startSlideshow() {
     setSelectionError('')
     try {
-      const scope = { ...galleryFilters, groupBy: galleryFilters.groupBy === 'tag' ? 'none' : galleryFilters.groupBy }
+      const scope = ungroupTags(galleryFilters)
       const first = (value: Filters) => request<MediaPage>(`/api/media?${queryString({ ...value, limit: 1 })}`).then(page => page.items[0])
       let item = await first(scope)
       let nested: Filters | null = null
@@ -198,8 +268,17 @@ export function App() {
   // Continues the viewer's current place in Reels: same scope and filters, limited to
   // media that moves, starting at this item.
   function watchOnReels(item: Media) {
-    setActive(null); setSlideshowStart(false)
-    apply({ ...filters, groupBy: filters.groupBy === 'tag' ? 'none' : filters.groupBy }, 'reels', item.id)
+    const value = ungroupTags(filters)
+    const top = viewerScrollTop.current
+    scrollPositions.current.set(scrollKey(section, filters), top)
+    const returnParams = new URLSearchParams(queryString(filters)); returnParams.set('media', String(item.id))
+    const reelParams = new URLSearchParams(queryString(value)); reelParams.set('media', String(item.id)); reelParams.set('view', 'reels')
+    // Turn the viewer's modal entry into a real return destination, then put Reels after it.
+    // This is why browser Back can reopen the same item over the same gallery position.
+    window.history.replaceState({ filters, section, scrollTop: top, mediaId: item.id, returnToViewer: true }, '', `${window.location.pathname}?${returnParams}`)
+    window.history.pushState({ filters: value, section: 'reels', scrollTop: 0, mediaId: item.id }, '', `${window.location.pathname}?${reelParams}`)
+    destinationScroll('reels', value, 0)
+    setActive(null); setSlideshowStart(false); setSlideshowFilters(null); setReelsStart(item.id); setReelId(item.id); setFilters(value); setSearch(value.q ?? ''); setSelected(new Set()); setFolderCursor(undefined); setFilterOpen(false); setSection('reels')
   }
   function restoreViewerPosition() { if (scroll.current) scroll.current.scrollTop = viewerScrollTop.current; const button = document.querySelector<HTMLButtonElement>(`button[data-media-id="${triggerId.current}"]`); if (button) button.focus({ preventScroll: true }); else scroll.current?.focus({ preventScroll: true }) }
   const hasViewOptions = Object.entries(filters).some(([key, val]) => !['q', 'cursor', 'limit'].includes(key) && val !== undefined && val !== '' && !(Array.isArray(val) && !val.length))
@@ -225,7 +304,12 @@ export function App() {
     </article>)}
     {(folders.data.previousCursor || folders.data.nextCursor) && <nav aria-label="Folder pages" className="col-span-full flex items-center justify-center gap-3"><QuietButton disabled={!folders.data.previousCursor} onClick={() => setFolderCursor(folders.data?.previousCursor ?? undefined)}>Previous folders</QuietButton><QuietButton disabled={!folders.data.nextCursor} onClick={() => setFolderCursor(folders.data?.nextCursor ?? undefined)}>Next folders</QuietButton></nav>}
   </section> : undefined
-  return <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas text-ink">
+  return <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas text-ink" onScrollCapture={event => {
+    const target = event.target
+    // Gallery suppresses virtualizer-driven scroll events while it restores itself;
+    // every simpler scroll surface can be recorded directly here.
+    if (target instanceof HTMLElement && target.matches('[data-scroll-restore]') && target.dataset.testid !== 'gallery-scroll') recordScroll(target.scrollTop)
+  }}>
     <a href="#collection" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-accent focus:p-3 focus:text-on-accent">Skip to collection</a>
     {restored.isError && <p role="alert" className="p-3 text-danger">Could not restore the open item: {errorMessage(restored.error)}</p>}
     {section !== 'reels' && <SearchHeader value={search} onChange={setSearch} onHome={() => apply({})} onFilters={() => setFilterOpen(true)} onSearch={submitSearch} onSuggestion={chooseSuggestion} onClear={clearSearch} searchRequested={searchFocusRequested} />}
@@ -243,7 +327,7 @@ export function App() {
           {section === 'library' && folders.data && <>{folders.data.ancestors.length > 0 && <nav aria-label="Folder breadcrumb" className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm text-muted">{[...folders.data.ancestors, folders.data.current].map((folder, index) => <span key={folder.id} className="flex shrink-0 items-center gap-1"><button type="button" className="rounded-full px-2 py-1 hover:bg-surface hover:text-ink" onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}>{folder.name}</button>{index < folders.data.ancestors.length && <ChevronRight className="size-3" />}</span>)}</nav>}</>}
           {selected.size > 0 && <div className="flex items-center gap-3 rounded-2xl bg-surface p-3"><p className="text-sm">{selected.size} selected</p><Button className="min-h-10" onClick={() => setBulkOpen(true)}><Tag className="mr-2 size-4" />Edit tags</Button><IconButton label="Clear selection" onClick={() => setSelected(new Set())}><X className="size-4" /></IconButton></div>}{selectionError && <p role="alert" className="text-sm text-danger">{selectionError}</p>}
           </div>}
-          {section === 'collections' ? <Collections onChoose={value => apply(value, 'search')} /> : libraries.data?.length === 0 ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><FolderOpen className="size-12 text-accent" /><h2 className="text-xl font-semibold">Connect your first library</h2><p className="leading-relaxed text-muted">Add a media folder in the server configuration, then restart Luma.</p></section> : idleSearch ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><Search className="size-12 text-muted" /><h2 className="text-xl font-semibold">Search your media</h2><p className="text-sm leading-relaxed text-muted">Type a search or open filters to choose exactly what to show.</p></section> : home ? <div className="overflow-auto p-4 sm:p-6" data-scroll-restore><div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,24rem))] gap-3">{libraries.data?.map(item => <article key={item.id} className="relative w-full max-w-sm overflow-hidden rounded-xl border border-line bg-surface hover:border-accent"><button type="button" aria-label={`Open ${item.name}`} title={item.name} className="relative block w-full text-left focus-visible:ring-inset" onClick={() => visitLibrary(item)}><AlbumCover images={item.coverImages} override={item.coverOverride} height="h-32 sm:h-36" fallback={<div className="flex h-full items-center justify-center pb-6 text-muted"><Images className="size-8 sm:size-10" /></div>} /><span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end gap-1.5 bg-linear-to-t from-black/85 via-black/50 to-transparent px-3 pt-8 pb-2.5 text-white"><FolderOpen className="mb-0.5 size-3.5 shrink-0 opacity-80" /><span className="min-w-0"><span className="block truncate text-sm font-semibold [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">{item.name}</span>{!item.rootFolderId && <span className="block text-xs text-white/80">Start indexing</span>}</span></span></button>{item.rootFolderId && <div className="absolute top-1.5 right-1.5"><FolderActions folder={{ id: item.rootFolderId, libraryId: item.id, parentId: null, name: item.name, coverUrl: item.coverUrl, coverOverride: item.coverOverride, coverImages: item.coverImages }} libraryName={item.name} tone="overlay" /></div>}</article>)}</div></div> : <>{section === 'reels' ? <Reels key={`${queryString(filters)}:${refresh}:${reelsStart ?? ''}`} filters={filters} startId={reelsStart} viewerOpen={!!active} filtersVisible={reelsFiltersVisible} onToggleFilters={toggleReelsFilters} onItemChange={setReelId} onFilters={() => setFilterOpen(true)} onOpenViewer={item => { triggerId.current = item.id; setActive(item) }} /> : filters.groupBy === 'tag' ? <TagGroups filters={filters} onChoose={value => apply(value, section)} /> : <Gallery key={`${section}:${queryString(galleryFilters)}:${refresh}`} filters={galleryFilters} selected={selected} selecting={selecting} onSelect={select} onOpen={item => openViewer(item)} scrollerRef={scroll} leadingContent={folderCards} scopePending={section === 'library' && (libraries.isPending || !!(filters.folderId || library?.rootFolderId) && (folders.isPending || folders.isFetching))} scopeError={section === 'library' ? folders.error : null} />}</>}
+          {section === 'collections' ? <Collections onChoose={value => apply(value, 'search')} /> : libraries.data?.length === 0 ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><FolderOpen className="size-12 text-accent" /><h2 className="text-xl font-semibold">Connect your first library</h2><p className="leading-relaxed text-muted">Add a media folder in the server configuration, then restart Luma.</p></section> : idleSearch ? <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center"><Search className="size-12 text-muted" /><h2 className="text-xl font-semibold">Search your media</h2><p className="text-sm leading-relaxed text-muted">Type a search or open filters to choose exactly what to show.</p></section> : home ? <div className="overflow-auto p-4 sm:p-6" data-scroll-restore><div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,24rem))] gap-3">{libraries.data?.map(item => <article key={item.id} className="relative w-full max-w-sm overflow-hidden rounded-xl border border-line bg-surface hover:border-accent"><button type="button" aria-label={`Open ${item.name}`} title={item.name} className="relative block w-full text-left focus-visible:ring-inset" onClick={() => visitLibrary(item)}><AlbumCover images={item.coverImages} override={item.coverOverride} height="h-32 sm:h-36" fallback={<div className="flex h-full items-center justify-center pb-6 text-muted"><Images className="size-8 sm:size-10" /></div>} /><span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end gap-1.5 bg-linear-to-t from-black/85 via-black/50 to-transparent px-3 pt-8 pb-2.5 text-white"><FolderOpen className="mb-0.5 size-3.5 shrink-0 opacity-80" /><span className="min-w-0"><span className="block truncate text-sm font-semibold [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">{item.name}</span>{!item.rootFolderId && <span className="block text-xs text-white/80">Start indexing</span>}</span></span></button>{item.rootFolderId && <div className="absolute top-1.5 right-1.5"><FolderActions folder={{ id: item.rootFolderId, libraryId: item.id, parentId: null, name: item.name, coverUrl: item.coverUrl, coverOverride: item.coverOverride, coverImages: item.coverImages }} libraryName={item.name} tone="overlay" /></div>}</article>)}</div></div> : <>{section === 'reels' ? <Reels key={`${queryString(filters)}:${refresh}:${reelsStart ?? ''}`} filters={filters} startId={reelsStart} viewerOpen={!!active} filtersVisible={reelsFiltersVisible} onToggleFilters={toggleReelsFilters} onItemChange={setReelId} onFilters={() => setFilterOpen(true)} onOpenViewer={item => { triggerId.current = item.id; setActive(item) }} /> : <Gallery key={`${section}:${queryString(galleryFilters)}:${refresh}`} filters={galleryFilters} selected={selected} selecting={selecting} onSelect={select} onOpen={item => openViewer(item)} scrollerRef={scroll} leadingContent={folderCards} scopePending={section === 'library' && (libraries.isPending || !!(filters.folderId || library?.rootFolderId) && (folders.isPending || folders.isFetching))} scopeError={section === 'library' ? folders.error : null} restoreScrollTop={restoreScrollTop} onScrollPosition={recordScroll} />}</>}
           {libraries.isError && <p role="alert" className="p-5 text-danger">{errorMessage(libraries.error)}</p>}{folders.isError && <p role="alert" className="px-4 text-sm text-danger">{errorMessage(folders.error)}</p>}
         </>}
       </main></div>
