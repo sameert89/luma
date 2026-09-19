@@ -40,7 +40,7 @@ export function TaskQueue() {
   const finished = tasks.data?.filter(task => !isActive(task)).length ?? 0
   const running = (tasks.data?.length ?? 0) - finished
   return <section aria-label="Task queue" className="space-y-3">
-    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-canvas py-2">
+    <div className="flex items-center justify-between gap-3 py-2">
       <p className="text-sm font-semibold">Jobs{running > 0 && <span className="font-normal text-muted"> · {running} active</span>}</p>
       <QuietButton disabled={!finished || clear.isPending} onClick={() => clear.mutate()}>{clear.isPending ? 'Clearing…' : 'Clear finished'}</QuietButton>
     </div>

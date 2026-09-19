@@ -1,6 +1,6 @@
 import { SettingsSection } from '../components/ui/SettingsSection'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, ChevronRight, CircleHelp, Clapperboard, FolderOpen, GitFork, Images, Search, Settings, Tag, X } from 'lucide-react'
+import { Bookmark, Check, ChevronRight, CircleHelp, Clapperboard, FolderOpen, GitFork, Images, ListChecks, LoaderCircle, MousePointer2, Search, Settings, Tag, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
@@ -80,6 +80,7 @@ export function App() {
   const filterRowVisible = section === 'reels' ? reelsFiltersVisible : filtersVisible
   const [bulkOpen, setBulkOpen] = useState(false)
   const [selecting, setSelecting] = useState(false)
+  const [selectingAll, setSelectingAll] = useState(false)
   const [selected, setSelected] = useState(new Set<number>())
   const [selectionError, setSelectionError] = useState('')
   const [active, setActive] = useState<Media | null>(null)
@@ -251,6 +252,23 @@ export function App() {
     else apply({}, 'search')
   }
   function select(id: number) { setSelected(old => { const next = new Set(old); if (next.has(id)) next.delete(id); else if (next.size < 500) next.add(id); else { setSelectionError('Select at most 500 items at a time.'); return old }; return next }) }
+  async function selectAll() {
+    setSelectionError(''); setSelectingAll(true)
+    try {
+      const ids = new Set<number>()
+      let cursor: string | undefined
+      let more = false
+      do {
+        const page = await request<MediaPage>(`/api/media?${queryString({ ...galleryFilters, limit: Math.min(200, 500 - ids.size), cursor })}`)
+        for (const item of page.items) { ids.add(item.id); if (ids.size === 500) break }
+        cursor = page.nextCursor ?? undefined
+        more = !!cursor
+      } while (cursor && ids.size < 500)
+      setSelected(ids)
+      if (ids.size === 500 && more) setSelectionError('Selected the first 500 matching items; bulk operations support up to 500.')
+    } catch (error) { setSelectionError(errorMessage(error)) }
+    finally { setSelectingAll(false) }
+  }
   function openViewer(item: Media, slideshow = false) { triggerId.current = item.id; viewerScrollTop.current = rememberScroll(); setSlideshowStart(slideshow); setActive(item) }
   async function startSlideshow() {
     setSelectionError('')
@@ -289,6 +307,7 @@ export function App() {
   const showAllMedia = section === 'search' || !home && !filters.libraryId
   const galleryTitle = section === 'reels' ? 'Reels' : section === 'collections' ? 'Collections' : filters.q ? `Results for “${filters.q}”` : folders.data?.current.name ?? library?.name ?? (showAllMedia ? 'All media' : 'Library')
   const showGallery = section !== 'collections' && (section === 'reels' || (!home && !idleSearch))
+  const showBackgroundJobs = section === 'library' && (home ? !!libraries.data?.some(item => item.rootFolderId) : showGallery)
   // auto-fit/minmax has no equivalent in the fixed column-count scale. Cards still
   // need an explicit maximum so a sparse album row remains easy to scan on desktop.
   const folderCards = section === 'library' && folders.data?.items.length ? <section aria-label="Folders" className="grid grid-cols-[repeat(auto-fill,minmax(9rem,24rem))] gap-3 pb-4">
@@ -319,9 +338,10 @@ export function App() {
         {section === 'settings' ? <div className="overflow-auto" data-scroll-restore><ThemePicker value={theme} onChange={setTheme} /><AlbumCoverSettings /><SettingsSection title="Random media URL" description="Generate a reusable random-media link using your current browsing filters."><RandomUrls filters={filters} /></SettingsSection><SettingsSection title="Metadata exchange" description="Download metadata and disliked paths from your library."><MetadataExchange dislikes heading={false} /></SettingsSection><LibrarySettings /><HiddenFolders /><SourceVerificationSettings /><SettingsSection title="Help" description="See what each button, gesture and keyboard shortcut does."><QuietLink data-help-entry href={`?${helpParams}`} className="w-fit" onClick={event => { event.preventDefault(); openHelp() }}><CircleHelp className="size-4" aria-hidden="true" />Open the Help guide</QuietLink></SettingsSection><SettingsSection title="About" description="Version and project information for this Luma installation."><div className="flex flex-col items-start gap-2 text-sm"><p><span className="font-medium">Luma</span> <span className="text-muted">v{packageJson.version}</span></p><p className="text-muted">Created by Sameer Trivedi.</p><QuietLink href="https://github.com/sameert89/luma" target="_blank" rel="noreferrer"><GitFork className="size-4" aria-hidden="true" />GitHub</QuietLink></div></SettingsSection></div> : section === 'help' ? <Help onBack={closeHelp} /> : <>
           {section !== 'reels' && <div className="shrink-0 space-y-2 px-4 pb-2 pt-3 sm:px-6 sm:pb-3 sm:pt-4"><div className="flex min-w-0 items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">{section === 'library' && filters.folderId && <FolderOpen className="size-5 shrink-0 text-accent" />}<h1 className="min-w-0 truncate text-xl font-semibold sm:text-2xl" title={home ? 'Your libraries' : galleryTitle}>{home ? 'Your libraries' : galleryTitle}</h1></div>
-            <div className="flex shrink-0 items-center gap-2">{home && <>{libraries.data?.some(item => item.rootFolderId) && <BackgroundJobsButton variant="text" />}<QuietButton data-help-entry onClick={openHelp}><CircleHelp className="size-4" aria-hidden="true" />Help</QuietButton></>}{showGallery && <>
-              {section === 'library' && <BackgroundJobsButton libraryId={filters.libraryId} />}
-              <GalleryActions folder={section === 'library' ? folders.data?.current : undefined} libraryName={library?.name} ancestors={folders.data?.ancestors} onHidden={() => apply({ ...filters, folderId: folders.data?.current.parentId ?? undefined })} selecting={selecting} onSelect={() => { setSelecting(!selecting); if (selecting) setSelected(new Set()) }} onSlideshow={() => void startSlideshow()} onRefresh={() => { void client.invalidateQueries({ queryKey: ['media'] }); void client.invalidateQueries({ queryKey: ['folders'] }); setRefresh(x => x + 1) }} filtersVisible={filtersVisible} onToggleFilters={toggleFilters} onFilters={() => setFilterOpen(true)} onClearFilters={() => apply({}, section)} />
+            <div className="flex shrink-0 items-center gap-2">{home && <QuietButton data-help-entry onClick={openHelp}><CircleHelp className="size-4" aria-hidden="true" />Help</QuietButton>}{showGallery && <>
+              <IconButton label={selecting ? 'Done selecting' : 'Select media'} onClick={() => { setSelecting(!selecting); setSelectionError(''); if (selecting) setSelected(new Set()) }}>{selecting ? <Check className="size-4" /> : <MousePointer2 className="size-4" />}</IconButton>
+              {selecting && <IconButton label="Select all" disabled={selectingAll} onClick={() => void selectAll()}>{selectingAll ? <LoaderCircle className="size-4 motion-safe:animate-spin" /> : <ListChecks className="size-4" />}</IconButton>}
+              <GalleryActions folder={section === 'library' ? folders.data?.current : undefined} libraryName={library?.name} ancestors={folders.data?.ancestors} onHidden={() => apply({ ...filters, folderId: folders.data?.current.parentId ?? undefined })} onSlideshow={() => void startSlideshow()} onRefresh={() => { void client.invalidateQueries({ queryKey: ['media'] }); void client.invalidateQueries({ queryKey: ['folders'] }); setRefresh(x => x + 1) }} filtersVisible={filtersVisible} onToggleFilters={toggleFilters} onFilters={() => setFilterOpen(true)} onClearFilters={() => apply({}, section)} />
             </>}</div>
           </div>
           {section === 'library' && folders.data && <>{folders.data.ancestors.length > 0 && <nav aria-label="Folder breadcrumb" className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm text-muted">{[...folders.data.ancestors, folders.data.current].map((folder, index) => <span key={folder.id} className="flex shrink-0 items-center gap-1"><button type="button" className="rounded-full px-2 py-1 hover:bg-surface hover:text-ink" onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}>{folder.name}</button>{index < folders.data.ancestors.length && <ChevronRight className="size-3" />}</span>)}</nav>}</>}
@@ -332,6 +352,7 @@ export function App() {
         </>}
       </main></div>
     <BottomNavigation items={navItems} active={section} onChange={id => navigateSection(id as Section)} />
+    {showBackgroundJobs && !active && <div className="fixed bottom-20 right-4 z-30 sm:right-6 md:bottom-6"><BackgroundJobsButton libraryId={home ? undefined : filters.libraryId} /></div>}
     <LibrarySetup library={initialLibrary} onClose={() => setInitialLibrary(null)} onReady={(libraryId, rootFolderId) => { setInitialLibrary(null); apply({ libraryId, ...(rootFolderId ? { folderId: rootFolderId } : {}) }) }} />
     <Modal open={filterOpen} onOpenChange={setFilterOpen} title="Filters and sorting" description="Narrow the current media view." sheet><FilterForm value={filters} onApply={value => apply(value, section === 'library' || section === 'search' || section === 'reels' ? section : 'search')} /></Modal>
     <Modal open={bulkOpen} onOpenChange={setBulkOpen} title={`Tag ${selected.size} items`} description="Add or remove a tag on every selected item." sheet><div className="overflow-auto p-5"><TagEditor mediaIds={[...selected]} bulk /><div className="mt-6"><MetadataExchange mediaIds={[...selected]} /></div></div></Modal>

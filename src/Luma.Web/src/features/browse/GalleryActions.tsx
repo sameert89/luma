@@ -5,9 +5,9 @@ import { Modal } from '../../components/ui/Modal'
 import { FolderActions } from './FolderActions'
 import type { FolderPage } from './api'
 
-export function GalleryActions({ folder, libraryName, ancestors, onHidden, selecting, onSelect, onSlideshow, onRefresh, filtersVisible, onToggleFilters, onFilters, onClearFilters }: {
+export function GalleryActions({ folder, libraryName, ancestors, onHidden, onSlideshow, onRefresh, filtersVisible, onToggleFilters, onFilters, onClearFilters }: {
   folder?: FolderPage['current']; libraryName?: string; ancestors?: FolderPage['ancestors']; onHidden?: () => void
-  selecting: boolean; onSelect: () => void; onSlideshow: () => void; onRefresh: () => void
+  onSlideshow: () => void; onRefresh: () => void
   filtersVisible: boolean; onToggleFilters: () => void; onFilters: () => void; onClearFilters: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -15,7 +15,6 @@ export function GalleryActions({ folder, libraryName, ancestors, onHidden, selec
     function run(action: () => void) { close(); action() }
     return <>
       <QuietButton onClick={() => run(onSlideshow)}>Start slideshow</QuietButton>
-      <QuietButton onClick={() => run(onSelect)}>{selecting ? 'Done selecting' : 'Select media'}</QuietButton>
       <QuietButton onClick={() => run(onRefresh)}>Refresh collection</QuietButton>
       <QuietButton onClick={() => run(onFilters)}>Edit filters</QuietButton>
       <QuietButton onClick={() => run(onToggleFilters)}>{filtersVisible ? 'Hide filters' : 'Show filters'}</QuietButton>

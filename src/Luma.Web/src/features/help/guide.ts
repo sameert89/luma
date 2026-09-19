@@ -27,7 +27,7 @@ export const guideSections: GuideSection[] = [
       ] },
       { title: 'Indexing', entries: [
         { label: 'Index folders as I open them', name: 'Set up library', where: 'Opens when you choose a library that has not been indexed yet', what: 'Choose automatic tag import separately from initial discovery. Lazy setup indexes folders as opened; filesystem watching then keeps changed folders current by default. Index everything now performs the initial full scan.' },
-        { icons: [RefreshCw], name: 'Background jobs', where: 'Beside Help on Your libraries, and in the header of an open library', what: 'Opens the list of indexing, import and export jobs. The icon spins while any job runs.' },
+        { icons: [RefreshCw], name: 'Background jobs', where: 'Bottom-right of library screens', what: 'Opens the list of indexing, import and export jobs. The icon spins while any job runs.' },
       ] },
       { title: 'Folder and gallery menus', entries: [
         { icons: [EllipsisVertical], name: 'Folder actions', where: 'On every folder and library card, and in the header of the open folder', what: 'Opens the folder menu. A library is its top folder, so its card has the same menu. In the header it also holds the gallery actions below.' },
@@ -54,7 +54,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Reset filters', name: 'Apply filters / Reset filters', where: 'Bottom of Filters and sorting', what: 'Apply uses your changes; Reset removes every filter at once.' },
       ] },
       { title: 'Selecting media', entries: [
-        { label: 'Select media', name: 'Select media / Done selecting', where: 'Folder or gallery actions menu', what: 'Shows a checkbox on each thumbnail. Select up to 500 items at a time.' },
+        { label: 'Select media', name: 'Select media / Done selecting', where: 'Beside the folder or gallery actions button', what: 'Shows a checkbox on each thumbnail. Select up to 500 items at a time; use Select all to select the current results.' },
         { icons: [Tag], name: 'Edit tags', where: 'Selection bar, once items are selected', what: 'Adds or removes one tag on every selected item, or imports their embedded metadata.' },
         { icons: [X], name: 'Clear selection', where: 'Selection bar', what: 'Deselects everything.' },
       ] },
@@ -170,7 +170,7 @@ export const guideSections: GuideSection[] = [
     id: 'tasks', title: 'Background jobs', summary: 'Scans, metadata imports and exports',
     groups: [
       { title: 'Where to find the queue', entries: [
-        { icons: [RefreshCw], name: 'Background jobs', where: 'Beside Help on Your libraries, and in the header of an open library', what: 'Opens the jobs list. Start a rescan from a folder or library card’s Folder actions menu.' },
+        { icons: [RefreshCw], name: 'Background jobs', where: 'Bottom-right of library screens', what: 'Opens the jobs list. Start a rescan from a folder or library card’s Folder actions menu.' },
       ] },
       { title: 'Queue actions', entries: [
         { label: 'Cancel', name: 'Cancel / Cancel scan', where: 'On a queued or running task', what: 'Stops the task. Work already finished, such as prepared previews and imported tags, is kept. Indexing asks first: folders you open afterwards are finished then, including their tags if the library imports tags.' },
