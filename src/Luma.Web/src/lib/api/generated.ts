@@ -32,6 +32,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/libraries/{id}/refresh-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetLibraryRefreshSettings"];
+        put: operations["SetLibraryRefreshSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/folders/{id}/index": {
         parameters: {
             query?: never;
@@ -766,6 +782,27 @@ export interface components {
         LibraryMetadataMode: {
             metadataMode: string;
         };
+        LibraryRefreshSettings: {
+            /** @default watcher */
+            mode: string;
+            /** @default true */
+            refreshOnOpen: boolean;
+            /**
+             * Format: int32
+             * @default 60
+             */
+            periodicIntervalMinutes: number;
+            /**
+             * Format: int32
+             * @default 5
+             */
+            watcherDebounceSeconds: number;
+            /**
+             * Format: int32
+             * @default 10
+             */
+            fileStabilitySeconds: number;
+        };
         LibraryRoot: {
             /** Format: int64 */
             folderId: number;
@@ -1089,6 +1126,79 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetLibraryRefreshSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryRefreshSettings"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblem"];
+                };
+            };
+        };
+    };
+    SetLibraryRefreshSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryRefreshSettings"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblem"];
+                };
             };
         };
     };

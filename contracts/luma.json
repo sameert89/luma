@@ -76,6 +76,99 @@
         }
       }
     },
+    "/api/libraries/{id}/refresh-settings": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetLibraryRefreshSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryRefreshSettings"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetLibraryRefreshSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryRefreshSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/folders/{id}/index": {
       "post": {
         "tags": [
@@ -2973,6 +3066,34 @@
         "properties": {
           "metadataMode": {
             "type": "string"
+          }
+        }
+      },
+      "LibraryRefreshSettings": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "default": "watcher"
+          },
+          "refreshOnOpen": {
+            "type": "boolean",
+            "default": true
+          },
+          "periodicIntervalMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "default": 60
+          },
+          "watcherDebounceSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "default": 5
+          },
+          "fileStabilitySeconds": {
+            "type": "integer",
+            "format": "int32",
+            "default": 10
           }
         }
       },

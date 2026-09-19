@@ -56,7 +56,7 @@ export function FolderActions({ folder, libraryName, ancestors = [], onHidden, e
             ? 'Checks every folder in this library for new, changed or removed photos and videos. On a large library this can take a long time and use significant disk and CPU.'
             : `Checks “${folder.name}” and every folder inside it for new, changed or removed photos and videos.`}</p>
           <MetadataModeSelect value={metadataMode} onChange={setChosenMode} />
-          <p className="text-sm leading-relaxed text-muted">This also becomes the library’s tag import setting, which you can change in Settings.</p>
+          <p className="text-sm leading-relaxed text-muted">This controls tag import only and becomes the library’s automatic tag-import setting. Thumbnail, poster and preview behavior is unchanged.</p>
           <div className="flex flex-wrap gap-2">
             <Button disabled={rescan.isPending} onClick={() => rescan.mutate()}><RefreshCw className="mr-2 size-4" />{rescan.isPending ? 'Starting…' : 'Start rescan'}</Button>
             <QuietButton onClick={() => setPanel('actions')}>Cancel</QuietButton>

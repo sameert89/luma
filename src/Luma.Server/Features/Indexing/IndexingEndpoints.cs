@@ -38,16 +38,85 @@ public static class IndexingEndpoints
             return TypedResults.NoContent();
         }).WithName("SetSourceVerificationSetting");
 
+        app.MapGet("/api/libraries/{id:long}/refresh-settings", async Task<Results<Ok<LibraryRefreshSettings>, ProblemHttpResult>>
+            (long id, Database database, HttpContext context, CancellationToken ct) =>
+        {
+            await using var db = await database.OpenAsync(ct);
+            var row = await db.QuerySingleOrDefaultAsync<LibraryRefreshRow>(new CommandDefinition("""
+                SELECT RefreshMode,RefreshOnOpen,PeriodicIntervalMinutes,WatcherDebounceSeconds,FileStabilitySeconds
+                FROM Libraries WHERE Id=@id AND Enabled=1
+                """, new { id }, cancellationToken: ct));
+            return row is null ? Problem(404, context) : TypedResults.Ok(row.Settings);
+        }).WithName("GetLibraryRefreshSettings").Produces<ApiProblem>(404, "application/problem+json");
+
+        app.MapPut("/api/libraries/{id:long}/refresh-settings", async Task<Results<NoContent, ProblemHttpResult>>
+            (long id, LibraryRefreshSettings request, Database database, AutomaticLibraryRefresh refresh,
+             HttpContext context, CancellationToken ct) =>
+        {
+            if (request.Mode is not ("off" or "watcher" or "periodic")
+                || request.PeriodicIntervalMinutes is < 5 or > 10_080
+                || request.WatcherDebounceSeconds is < 1 or > 300
+                || request.FileStabilitySeconds is < 1 or > 3600)
+                return Problem(400, context);
+            await using var db = await database.OpenAsync(ct);
+            using var tx = db.BeginTransaction();
+            var changed = await db.ExecuteAsync(new CommandDefinition("""
+                UPDATE Libraries SET RefreshMode=@Mode,RefreshOnOpen=@RefreshOnOpen,
+                  PeriodicIntervalMinutes=@PeriodicIntervalMinutes,WatcherDebounceSeconds=@WatcherDebounceSeconds,
+                  FileStabilitySeconds=@FileStabilitySeconds,
+                  LastPeriodicScanAt=CASE WHEN @Mode='periodic' AND RefreshMode<>'periodic' THEN @now ELSE LastPeriodicScanAt END
+                WHERE Id=@id AND Enabled=1
+                """, new { id, request.Mode, request.RefreshOnOpen, request.PeriodicIntervalMinutes,
+                    request.WatcherDebounceSeconds, request.FileStabilitySeconds, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+            if (changed == 0) return Problem(404, context);
+            if (request.Mode != "watcher")
+                await db.ExecuteAsync(new CommandDefinition("DELETE FROM DirtyFolders WHERE LibraryId=@id", new { id }, tx, cancellationToken: ct));
+            tx.Commit();
+            refresh.ApplySettings(id, request);
+            return TypedResults.NoContent();
+        }).WithName("SetLibraryRefreshSettings").Produces<ApiProblem>(400, "application/problem+json")
+            .Produces<ApiProblem>(404, "application/problem+json");
+
         app.MapPost("/api/folders/{id:long}/index", async Task<Results<Accepted<ScanAccepted>, NoContent, ProblemHttpResult>>
-            (long id, Database database, ScanWorker worker, HttpContext context, CancellationToken ct) =>
+            (long id, Database database, IndexingOptions options, ScanWorker worker, HttpContext context, CancellationToken ct) =>
         {
             await using var db = await database.OpenAsync(ct);
             using var tx = db.BeginTransaction();
             var folder = await db.QuerySingleOrDefaultAsync<FolderIndexRow>(new CommandDefinition("""
-                SELECT f.LibraryId,f.DirectIndexedAt,l.MetadataMode FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
+                SELECT f.LibraryId,f.RelativePath,f.DirectIndexedAt,f.SourceModifiedTicks,
+                  l.MetadataMode,l.RefreshOnOpen FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
                 WHERE f.Id=@id AND l.Enabled=1
                 """, new { id }, tx, cancellationToken: ct));
             if (folder is null) return Problem(404, context);
+            if (folder.DirectIndexedAt is not null && folder.RefreshOnOpen)
+            {
+                var root = options.Libraries.Find(x => x.Id == folder.LibraryId);
+                try
+                {
+                    var path = root is null ? null : folder.RelativePath.Length == 0 ? root.Path : SourcePaths.Resolve(root, folder.RelativePath);
+                    // Directory timestamps can be re-read with slightly different precision on
+                    // Windows and network filesystems. The watcher handles immediate changes;
+                    // refresh-on-open only needs to treat a material timestamp move as a fallback.
+                    var sourceTicks = path is null ? folder.SourceModifiedTicks : Directory.GetLastWriteTimeUtc(path).Ticks;
+                    if (path is not null && (folder.SourceModifiedTicks == 0 || Math.Abs(sourceTicks - folder.SourceModifiedTicks) >= TimeSpan.TicksPerSecond))
+                    {
+                        if (await db.ExecuteScalarAsync<bool>(new CommandDefinition(
+                            "SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))", folder, tx, cancellationToken: ct)))
+                        {
+                            worker.PrioritizeFolder(folder.LibraryId, id);
+                            return Problem(409, context);
+                        }
+                        var refreshScanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
+                            INSERT INTO Scans(LibraryId,FolderId,Recursive,State,StartedAt,MetadataMode,Priority)
+                            VALUES(@LibraryId,@id,0,'queued',@now,@MetadataMode,2) RETURNING Id
+                            """, new { folder.LibraryId, id, folder.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+                        await QueueMetadataAsync(db, tx, refreshScanId, folder.LibraryId, id, folder.MetadataMode, ct);
+                        tx.Commit();
+                        return TypedResults.Accepted($"/api/scans/{refreshScanId}", new ScanAccepted(refreshScanId));
+                    }
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            }
             if (folder.DirectIndexedAt is not null && !await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
                 SELECT EXISTS(SELECT 1 FROM Media m WHERE m.FolderId=@id AND m.Availability='present' AND m.ProcessingStatus='pending'
                   AND NOT EXISTS(SELECT 1 FROM ProcessingJobs j JOIN Scans s ON s.Id=j.ScanId
@@ -249,8 +318,21 @@ public static class IndexingEndpoints
     private sealed class FolderIndexRow
     {
         public long LibraryId { get; set; }
+        public string RelativePath { get; set; } = "";
         public string MetadataMode { get; set; } = "embedded";
         public string? DirectIndexedAt { get; set; }
+        public long SourceModifiedTicks { get; set; }
+        public bool RefreshOnOpen { get; set; }
+    }
+    private sealed class LibraryRefreshRow
+    {
+        public string RefreshMode { get; set; } = "watcher";
+        public bool RefreshOnOpen { get; set; }
+        public int PeriodicIntervalMinutes { get; set; }
+        public int WatcherDebounceSeconds { get; set; }
+        public int FileStabilitySeconds { get; set; }
+        public LibraryRefreshSettings Settings => new(RefreshMode, RefreshOnOpen, PeriodicIntervalMinutes,
+            WatcherDebounceSeconds, FileStabilitySeconds);
     }
     private sealed class LibraryRow
     {
@@ -271,6 +353,7 @@ public sealed class ScanRow
     public string MetadataMode { get; set; } = "none";
     public bool Force { get; set; }
     public bool RetryFailures { get; set; }
+    public int Priority { get; set; }
     public long Discovered { get; set; }
     public long Skipped { get; set; }
     public string StartedAt { get; set; } = "";

@@ -33,7 +33,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 await using var db = await database.OpenAsync(ct);
                 var scan = await db.QuerySingleOrDefaultAsync<ScanRow>(new CommandDefinition("""
                     UPDATE Scans SET State='running' WHERE Id=(SELECT s.Id FROM Scans s JOIN Libraries l ON l.Id=s.LibraryId
-                    WHERE s.State='queued' AND l.Enabled=1 ORDER BY s.Id LIMIT 1) AND State='queued' RETURNING *
+                    WHERE s.State='queued' AND l.Enabled=1 ORDER BY s.Priority DESC,s.Id LIMIT 1) AND State='queued' RETURNING *
                     """, cancellationToken: ct));
                 if (scan is null) { await Task.Delay(1000, ct); continue; }
                 using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -99,6 +99,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         await using var lookup = await database.OpenAsync(ct);
         var relativeFolder = scan.FolderId is { } folderId
             ? await lookup.QuerySingleAsync<string>(new CommandDefinition("SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId", new { folderId, scan.LibraryId }, cancellationToken: ct)) : "";
+        var directoryPath = relativeFolder.Length == 0 ? root.Path : SourcePaths.Resolve(root, relativeFolder);
         // Hidden folders are excluded from indexing: their entry is still seen, but not descended into.
         var hidden = (await lookup.QueryAsync<string>(new CommandDefinition("SELECT PathKey FROM Folders WHERE LibraryId=@LibraryId AND Hidden=1",
             scan, cancellationToken: ct))).ToHashSet(StringComparer.Ordinal);
@@ -111,7 +112,6 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             {
                 SourcePaths.Check(root, root.Path);
                 // Access errors are not ignored: any traversal error prohibits missing reconciliation.
-                var directoryPath = relativeFolder.Length == 0 ? root.Path : SourcePaths.Resolve(root, relativeFolder);
                 await channel.Writer.WriteAsync(new DiscoveredEntry(relativeFolder, true, 0, ""), linked.Token);
                 foreach (var entry in SourceTraversal.Enumerate(directoryPath, recursive: scan.FolderId is null || scan.Recursive, skipDirectory: hidden.Count == 0 ? null
                     : path => hidden.Contains(root.Key(Path.GetRelativePath(root.Path, path).Replace(Path.DirectorySeparatorChar, '/')))))
@@ -165,9 +165,12 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                     UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
                       (SELECT Id FROM Media WHERE LibraryId=@LibraryId AND Availability='missing');
                     UPDATE Libraries SET Availability='available' WHERE Id=@LibraryId;
-                    UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                    UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+                      SourceModifiedTicks=CASE WHEN Id=@FolderId OR (@FolderId IS NULL AND ParentId IS NULL)
+                        THEN @sourceModifiedTicks ELSE SourceModifiedTicks END
                       WHERE LibraryId=@LibraryId AND (((@FolderId IS NULL OR @Recursive) AND LastSeenScanId=@Id) OR Id=@FolderId);
-                    """, scan, tx, cancellationToken: ct));
+                    """, new { scan.Id, scan.LibraryId, scan.FolderId, scan.Recursive,
+                        sourceModifiedTicks = Directory.GetLastWriteTimeUtc(directoryPath).Ticks }, tx, cancellationToken: ct));
             tx.Commit();
         }
         finally
@@ -224,8 +227,9 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 await Task.Delay(1, ct);
             }
             SourcePaths.Check(root, path);
-            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE Id=@folderId",
-                new { folderId }, cancellationToken: ct));
+            await db.ExecuteAsync(new CommandDefinition("""
+                UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now'),SourceModifiedTicks=@ticks WHERE Id=@folderId
+                """, new { folderId, ticks = Directory.GetLastWriteTimeUtc(path).Ticks }, cancellationToken: ct));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
@@ -235,13 +239,14 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
 
     private static async Task PersistEntryAsync(SqliteConnection db, SqliteTransaction tx, Dictionary<string, long> folders, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct, bool priority = false)
     {
+        priority |= scan.Priority > 0;
         if (entry.Directory)
         {
             var folderId = await EnsureFolderAsync(db, tx, root, entry.RelativePath, scan.Id, ct, folders);
             // The traversal already listed the directory's time, so folders can sort by date
             // without browsing ever touching disk. The scan's starting folder carries none.
             if (entry.ModifiedAt.Length > 0)
-                await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET ModifiedTicks=@ticks WHERE Id=@folderId AND ModifiedTicks<>@ticks",
+                await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET ModifiedTicks=@ticks,SourceModifiedTicks=@ticks WHERE Id=@folderId AND (ModifiedTicks<>@ticks OR SourceModifiedTicks<>@ticks)",
                     new { folderId, ticks = Media.SearchText.Ticks(entry.ModifiedAt) }, tx, cancellationToken: ct));
         }
         else if (!MediaFormats.TryGet(entry.RelativePath, out var format))
@@ -319,6 +324,12 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
 
 public static class SourcePaths
 {
+    public static bool IsInside(LibraryOptions root, string path)
+    {
+        var relative = Path.GetRelativePath(root.Path, Path.GetFullPath(path));
+        return !Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar);
+    }
+
     public static string Resolve(LibraryOptions root, string relativePath)
     {
         var path = Path.GetFullPath(Path.Combine(root.Path, relativePath));

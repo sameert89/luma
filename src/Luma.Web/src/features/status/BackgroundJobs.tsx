@@ -1,7 +1,7 @@
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { IconButton, QuietButton } from '../../components/ui/Controls'
+import { IconButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { request, type IndexingStatus, type Scan } from '../browse/api'
 import type { components } from '../../lib/api/generated'
@@ -17,7 +17,7 @@ export function BackgroundJobsDialog({ open, onOpenChange }: { open: boolean; on
  * Opens Background jobs; the icon turns while any job runs. With a library open it also keeps the
  * gallery current as that library's latest scan finds media and prepares previews.
  */
-export function BackgroundJobsButton({ libraryId, variant = 'icon' }: { libraryId?: number; variant?: 'icon' | 'text' }) {
+export function BackgroundJobsButton({ libraryId }: { libraryId?: number }) {
   const [open, setOpen] = useState(false)
   const starting = useIsMutating({ predicate: mutation => mutation.options.mutationKey?.[0] === 'background-task' })
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: ({ signal }) => request<components['schemas']['BackgroundTask'][]>('/api/tasks', signal), refetchInterval: 3000 })
@@ -25,9 +25,7 @@ export function BackgroundJobsButton({ libraryId, variant = 'icon' }: { libraryI
   useScanRefresh(libraryId)
   const icon = <RefreshCw className={`size-4 ${busy ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
   return <>
-    {variant === 'text'
-      ? <QuietButton onClick={() => setOpen(true)}>{icon}Background jobs</QuietButton>
-      : <IconButton label={busy ? 'Background jobs, running' : 'Background jobs'} onClick={() => setOpen(true)}>{icon}</IconButton>}
+    <IconButton className="bg-canvas shadow-lg" label={busy ? 'Background jobs, running' : 'Background jobs'} onClick={() => setOpen(true)}>{icon}</IconButton>
     <BackgroundJobsDialog open={open} onOpenChange={setOpen} />
   </>
 }
