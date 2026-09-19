@@ -20,6 +20,40 @@ namespace Luma.Server.Tests;
 public sealed class IndexingTests
 {
     [Fact]
+    public async Task Watcher_hint_discovers_a_new_directory_then_scans_only_that_subtree()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.ScanAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "incoming", "nested"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "incoming", "nested", "new.jpg"), "bad");
+        using var refresh = new AutomaticLibraryRefresh(f.Database, f.Options, NullLogger<AutomaticLibraryRefresh>.Instance);
+        await refresh.QueueDirtyFolderAsync(1, "incoming", f.Root.Key("incoming"), recursive: true, priority: 1, default);
+
+        await refresh.ProcessPendingFolderAsync(default);
+        await RunQueuedScanAsync(f);
+        await using (var check = await f.Database.OpenAsync(default))
+        {
+            Assert.Equal(1, await check.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Folders WHERE RelativePath='incoming'"));
+            Assert.Equal(0, await check.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Media WHERE FileName='new.jpg'"));
+            Assert.Equal(1, await check.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM DirtyFolders"));
+        }
+
+        await refresh.ProcessPendingFolderAsync(default);
+        await RunQueuedScanAsync(f);
+        await using var final = await f.Database.OpenAsync(default);
+        Assert.Equal(1, await final.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Media WHERE FileName='new.jpg'"));
+        Assert.Equal(0, await final.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM DirtyFolders"));
+        Assert.Equal(1, await final.ExecuteScalarAsync<int>("SELECT Recursive FROM Scans ORDER BY Id DESC LIMIT 1"));
+    }
+
+    private static async Task RunQueuedScanAsync(PipelineFixture fixture)
+    {
+        await using var db = await fixture.Database.OpenAsync(default);
+        var scan = await db.QuerySingleAsync<ScanRow>("UPDATE Scans SET State='running' WHERE Id=(SELECT Id FROM Scans WHERE State='queued' ORDER BY Id LIMIT 1) RETURNING *");
+        await fixture.Scanner.ScanAsync(scan, fixture.Root, default);
+    }
+
+    [Fact]
     public async Task Active_library_scan_discovers_requested_folder_before_ordinary_media_without_double_forcing_revisions()
     {
         await using var f = await PipelineFixture.CreateAsync();

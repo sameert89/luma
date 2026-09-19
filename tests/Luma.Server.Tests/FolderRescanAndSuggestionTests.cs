@@ -13,6 +13,45 @@ namespace Luma.Server.Tests;
 public sealed class FolderRescanAndSuggestionTests
 {
     [Fact]
+    public async Task Library_refresh_settings_default_to_watcher_and_validate_updates()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await using var host = Host(f);
+        using var client = host.CreateClient();
+        var defaults = await client.GetFromJsonAsync<LibraryRefreshSettings>("/api/libraries/1/refresh-settings");
+        Assert.Equal(new LibraryRefreshSettings(), defaults);
+
+        var chosen = new LibraryRefreshSettings("periodic", false, 360, 12, 30);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PutAsJsonAsync("/api/libraries/1/refresh-settings", chosen)).StatusCode);
+        Assert.Equal(chosen, await client.GetFromJsonAsync<LibraryRefreshSettings>("/api/libraries/1/refresh-settings"));
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync("/api/libraries/1/refresh-settings", chosen with { WatcherDebounceSeconds = 0 })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Opening_a_changed_indexed_folder_queues_only_a_shallow_refresh()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.ScanAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "new.jpg"), "not-yet-decodable");
+        Directory.SetLastWriteTimeUtc(f.Root.Path, DateTime.UtcNow.AddSeconds(2));
+        long root;
+        await using (var db = await f.Database.OpenAsync(default))
+            root = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE ParentId IS NULL");
+
+        await using var host = Host(f);
+        using var client = host.CreateClient();
+        var response = await client.PostAsync($"/api/folders/{root}/index", null);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var scan = (await response.Content.ReadFromJsonAsync<ScanAccepted>())!;
+        await AwaitScanAsync(client, scan.Id);
+
+        await using var check = await f.Database.OpenAsync(default);
+        Assert.Equal(1, await check.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Media WHERE FileName='new.jpg'"));
+        Assert.Equal(0, await check.ExecuteScalarAsync<int>("SELECT Recursive FROM Scans WHERE Id=@Id", scan));
+        Assert.Equal(2, await check.ExecuteScalarAsync<int>("SELECT Priority FROM Scans WHERE Id=@Id", scan));
+    }
+
+    [Fact]
     public async Task Rescanning_a_folder_covers_everything_beneath_it_and_nothing_else()
     {
         await using var f = await PipelineFixture.CreateAsync();

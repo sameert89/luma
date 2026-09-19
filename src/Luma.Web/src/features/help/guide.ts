@@ -26,7 +26,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Load more', name: 'Load more', where: 'Bottom of a long gallery', what: 'Loads the next page of results; scrolling to the end does the same.' },
       ] },
       { title: 'Indexing', entries: [
-        { label: 'Index folders as I open them', name: 'Set up library', where: 'Opens when you choose a library that has not been indexed yet', what: 'Choose which tags to import (none, embedded metadata, or embedded metadata + XMP sidecars), then either index folders as you open them, which starts no background work, or index everything now with a full scan. The tag choice is remembered for the library; change it in Settings → Libraries.' },
+        { label: 'Index folders as I open them', name: 'Set up library', where: 'Opens when you choose a library that has not been indexed yet', what: 'Choose automatic tag import separately from initial discovery. Lazy setup indexes folders as opened; filesystem watching then keeps changed folders current by default. Index everything now performs the initial full scan.' },
         { icons: [RefreshCw], name: 'Background jobs', where: 'Beside Help on Your libraries, and in the header of an open library', what: 'Opens the list of indexing, import and export jobs. The icon spins while any job runs.' },
       ] },
       { title: 'Folder and gallery menus', entries: [
@@ -195,7 +195,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Album covers', name: 'Album covers', where: 'Settings', what: 'Smart covers show a mosaic for albums with three or more photos and fit single photos to the card; Cropped covers fill the card with one photo. Covers you picked yourself keep their photo either way.' },
         { icons: [Shuffle], name: 'Random media URL', where: 'Settings', what: 'Builds a reusable link that returns a random cached photo or GIF preview matching your current browsing filters. It does not serve random videos.' },
         { label: 'Export XMP', name: 'Export XMP / Export disliked paths', where: 'Settings → Metadata exchange', what: 'Prepares downloads of your tags as XMP, or a list of disliked file paths. Download export appears when ready.' },
-        { label: 'Libraries', name: 'Tag import', where: 'Settings → Libraries', what: 'Chooses which tags Luma imports for each library: none, embedded metadata, or embedded metadata + XMP sidecars. Opening a folder whose files were indexed without tags imports them in the background using this choice.' },
+        { label: 'Libraries', name: 'Automatic discovery and tag import', where: 'Settings → Libraries', what: 'Chooses watcher, periodic-scan or manual discovery per library, refresh-on-open behavior, debounce and stability timing, and the separate embedded/XMP tag-import mode. Tag choices do not affect thumbnails or previews.' },
         { icons: [Eye], name: 'Show', where: 'Settings → Hidden folders', what: 'Brings a hidden folder back into browsing and indexing.' },
         { label: 'Missing-file checks', name: 'Missing-file checks', where: 'Settings', what: 'Optionally checks known source paths in small background batches and hides files deleted from an available library. It is off by default; rescans still reconcile deletions.' },
         { icons: [CircleHelp], name: 'Help', where: 'Settings, and beside Your libraries', what: 'Opens this guide.' },
