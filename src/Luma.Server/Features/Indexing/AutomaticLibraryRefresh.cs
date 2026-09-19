@@ -212,7 +212,7 @@ public sealed class AutomaticLibraryRefresh(
         if (folderId is null) { tx.Commit(); return; }
 
         var mode = await db.ExecuteScalarAsync<string>(new CommandDefinition(
-            "SELECT MetadataMode FROM Libraries WHERE Id=@LibraryId", dirty, tx, cancellationToken: ct));
+            "SELECT MetadataMode FROM Libraries WHERE Id=@LibraryId", dirty, tx, cancellationToken: ct)) ?? "none";
         var scanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
             INSERT INTO Scans(LibraryId,FolderId,Recursive,State,StartedAt,MetadataMode,Priority)
             VALUES(@LibraryId,@folderId,@recursive,'queued',@now,@mode,@Priority) RETURNING Id

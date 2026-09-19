@@ -102,13 +102,13 @@ public static class IndexingEndpoints
                             worker.PrioritizeFolder(folder.LibraryId, id);
                             return Problem(409, context);
                         }
-                        var scanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
+                        var refreshScanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
                             INSERT INTO Scans(LibraryId,FolderId,Recursive,State,StartedAt,MetadataMode,Priority)
                             VALUES(@LibraryId,@id,0,'queued',@now,@MetadataMode,2) RETURNING Id
                             """, new { folder.LibraryId, id, folder.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
-                        await QueueMetadataAsync(db, tx, scanId, folder.LibraryId, id, folder.MetadataMode, ct);
+                        await QueueMetadataAsync(db, tx, refreshScanId, folder.LibraryId, id, folder.MetadataMode, ct);
                         tx.Commit();
-                        return TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId));
+                        return TypedResults.Accepted($"/api/scans/{refreshScanId}", new ScanAccepted(refreshScanId));
                     }
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
