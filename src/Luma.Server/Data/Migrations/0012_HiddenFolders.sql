@@ -1,2 +1,0 @@
-ALTER TABLE Folders ADD COLUMN Hidden INTEGER NOT NULL DEFAULT 0;
-CREATE INDEX IX_Folders_Hidden ON Folders(Id) WHERE Hidden=1;

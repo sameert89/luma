@@ -1,9 +1,0 @@
-# Folder priority during active library discovery
-
-Status: accepted, 2026-09-18. The user requested that opening a folder or media prepare visible photos without waiting for unrelated library traversal.
-
-The folder POST retains its existing response contracts and performs only database reads/writes and an advisory queue write. If a full-library scan owns the library, it passes the folder ID to that library's bounded in-process channel. Capacity is the configured discovery queue capacity; a full queue rejects advisory writes and the mounted client retries its existing 409 response. Requests are not durable: the owning full scan already guarantees traversal, and clients retry after interruption/restart.
-
-The owning discovery worker checks one request between ordinary discovery batches. It directly discovers that folder and immediate child-folder entries using the same scan ID and transactions of at most 32 entries. Source enumeration/stat calls happen before acquiring the batch transaction. It records completed direct discovery, avoids repeating completed requests, and does not reconcile missing media until the owning full traversal successfully completes. One active scan per library, bounded discovery channels and configured processing limits remain unchanged. Forced revision invalidation applies only once per media per scan even if advisory discovery and normal traversal both encounter it.
-
-Requested-folder processing precedes ordinary processing. Visible media requests have higher priority and newer visible batches precede older batches; the gallery submits only its virtualized viewport and overscan. Already running processing is allowed to finish, and cache pressure/retry/concurrency limits still apply. Browse/search GET requests remain SQLite/cache-only. No new infrastructure or schema is needed.
