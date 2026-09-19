@@ -787,15 +787,18 @@ export interface components {
             mode: string;
             /** @default true */
             refreshOnOpen: boolean;
-            /** Format: int32
+            /**
+             * Format: int32
              * @default 60
              */
             periodicIntervalMinutes: number;
-            /** Format: int32
+            /**
+             * Format: int32
              * @default 5
              */
             watcherDebounceSeconds: number;
-            /** Format: int32
+            /**
+             * Format: int32
              * @default 10
              */
             fileStabilitySeconds: number;
