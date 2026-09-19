@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><title>Luma</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#111319;}body{overscroll-behavior:none;-webkit-font-smoothing:antialiased;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-tint": "#bdc2ff", "error-container": "#93000a", "on-secondary-container": "#b0b2ff", "surface-dim": "#111319", "surface-bright": "#373940", "on-tertiary-container": "#182968", "on-error": "#690005", "secondary-fixed": "#e1e0ff", "on-background": "#e2e2eb", "primary": "#bdc2ff", "surface": "#111319", "primary-fixed": "#e0e0ff", "on-surface": "#e2e2eb", "surface-container-low": "#191b22", "surface-container-high": "#282a30", "tertiary-fixed-dim": "#b8c4ff", "surface-variant": "#33343b", "inverse-on-surface": "#2e3037", "secondary": "#c0c1ff", "background": "#111319", "surface-container": "#1e1f26", "on-tertiary": "#1a2b6a", "primary-container": "#818cf8", "outline-variant": "#454653", "on-secondary-fixed-variant": "#2f2ebe", "primary-fixed-dim": "#bdc2ff", "secondary-container": "#3131c0", "error": "#ffb4ab", "tertiary-fixed": "#dde1ff", "outline": "#908f9e", "on-primary-container": "#101b8a", "on-primary": "#131e8c", "on-tertiary-fixed": "#001354", "inverse-primary": "#4953bc", "surface-container-highest": "#33343b", "on-surface-variant": "#c6c5d5", "on-primary-fixed-variant": "#2f3aa3", "tertiary-container": "#8392d7", "surface-container-lowest": "#0c0e14", "on-error-container": "#ffdad6", "on-secondary": "#1000a9", "tertiary": "#b8c4ff", "on-primary-fixed": "#000767", "on-secondary-fixed": "#07006c", "on-tertiary-fixed-variant": "#334282", "inverse-surface": "#e2e2eb", "secondary-fixed-dim": "#c0c1ff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "gutter-desktop": "1.25rem", "space-md": "1rem", "space-sm": "0.5rem", "gutter": "0.75rem", "space-lg": "1.5rem", "margin-desktop": "2.5rem", "space-xl": "2.5rem", "margin": "1rem", "space-xs": "0.25rem" }, "fontFamily": { "headline-lg": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "display-lg-mobile": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"] }, "fontSize": { "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "headline-sm": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "26px", "letterSpacing": "-0.005em", "fontWeight": "400" }], "body-sm": ["12px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" }], "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.03em", "fontWeight": "700" }], "headline-lg-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" }], "display-lg-mobile": ["30px", { "lineHeight": "36px", "letterSpacing": "-0.025em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }] } } } };</script></head><body class="bg-surface text-on-surface flex flex-col min-h-screen selection:bg-primary-container selection:text-on-primary-container"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_4px_24px_rgba(0,0,0,0.4)]"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><img alt="Luma Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd2K1FAmMTPHyYOF0qBXSq8wNteR0jB9ykjr2sPVZe8OIpKrCkM0BQVEANKCX9Zu_3N0eDtxfwX6P46VZPDcka7jx6yXWTbAIFvteSlA06cgDbEmcI_RP5NSK2Z9FBfZSSplrdWlbRZxx_OECpg25vZACuPAJTxU4O6ceEh1q3nglC1yCaJjYjb1hVw1xqnwQm8tC7iW-NvzP848uAQ2QxOG0fuDnaHddBenwefNZA_G-du6E_CjHDtQ"/><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface font-semibold">luma.</span><div class="w-2 h-2 rounded-full bg-primary animate-pulse" title="Connected to self-hosted node"></div><button class="flex items-center gap-1 px-space-sm py-1 rounded-full bg-surface-container-high/60 backdrop-blur-md text-on-surface-variant hover:text-on-surface transition-colors min-h-[44px]"><span class="font-label-sm text-label-sm truncate max-w-[100px]">Main Library</span><span class="material-symbols-outlined text-[16px]">expand_more</span></button></div><div class="flex items-center gap-space-xs"><span class="sr-only">Collections</span><button class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[22px]">cast</span></button><button class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[22px]">cloud_done</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-1"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-28 bg-surface"><div class="flex flex-col w-full px-margin space-y-space-md text-on-surface">
+<!-- Header & Action Bar -->
+<div class="flex items-start justify-between gap-space-sm pt-space-xs">
+<div>
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-semibold tracking-tight text-on-surface">Libraries</span>
+<span class="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-label-sm text-label-sm">3 connected</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Self-hosted volumes &amp; external storage sources</p>
+</div>
+<button class="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-gradient-to-r from-primary-container to-secondary-container text-on-surface font-label-md text-label-md shadow-[0_4px_16px_rgba(129,140,248,0.35)] active:scale-95 transition-all" id="addSourceBtn">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>New Source</span>
+</button>
+</div>
+<!-- Non-destructive Reassurance Banner -->
+<div class="relative overflow-hidden rounded-2xl bg-surface-container/70 backdrop-blur-xl p-space-md shadow-lg">
+<div class="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-primary/10 blur-2xl pointer-events-none"></div>
+<div class="flex items-start gap-space-sm relative z-10">
+<div class="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center shrink-0 shadow-[0_0_16px_rgba(129,140,248,0.25)]">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center gap-1.5">
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Your originals stay 100% untouched</h4>
+<span class="material-symbols-outlined text-primary text-[14px]">lock</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 leading-relaxed">
+          Non-destructive indexing. All tags, facial recognition models, and smart albums live isolated inside your private Luma database.
+        </p>
+</div>
+</div>
+</div>
+<!-- Master View Mode Pill Card -->
+<div class="rounded-2xl bg-surface-container-low p-space-md flex items-center justify-between shadow-md">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">layers</span>
+</div>
+<div class="min-w-0">
+<p class="font-headline-sm text-headline-sm text-on-surface truncate">Unified Feed</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Aggregate all 3 mounts in gallery view</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer select-none">
+<input checked="" class="sr-only peer" id="combineSwitch" type="checkbox"/>
+<div class="w-12 h-6 bg-surface-variant rounded-full peer peer-checked:bg-primary-container transition-colors relative after:content-[''] after:absolute after:top-0.5 after:left-[3px] after:bg-on-surface after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-6 peer-checked:after:bg-on-primary-container shadow-inner"></div>
+</label>
+</div>
+<!-- Connected Libraries List -->
+<div class="space-y-space-sm">
+<div class="flex items-center justify-between px-1">
+<span class="font-label-md text-label-md tracking-wider uppercase text-on-surface-variant">Mounted Volumes</span>
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+        Node syncd
+      </span>
+</div>
+<!-- Library 1: Personal Archive (Primary) -->
+<div class="library-card group relative rounded-2xl bg-surface-container p-space-md shadow-md transition-all duration-200" data-library="primary">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex items-start gap-space-sm min-w-0">
+<button aria-label="Select Library" class="lib-selector mt-0.5 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0 transition-transform active:scale-90">
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</button>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">Personal Archive</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-bright text-on-surface-variant font-label-sm text-label-sm">Primary</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant font-mono mt-0.5 truncate">/mnt/storage/photos</p>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Synced
+          </span>
+<button class="context-btn w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" data-menu="menu-primary">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Metrics Row -->
+<div class="mt-space-md grid grid-cols-3 gap-space-xs pt-space-sm bg-surface-container-low rounded-xl p-2.5">
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Type</span>
+<span class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[15px] text-secondary">inventory_2</span>
+            Docker
+          </span>
+</div>
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Indexed</span>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-0.5">8,420</span>
+</div>
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Storage</span>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-0.5">142 GB</span>
+</div>
+</div>
+<!-- Context Drawer / Submenu (Collapsible) -->
+<div class="hidden mt-space-sm pt-space-sm space-y-1" id="menu-primary">
+<div class="grid grid-cols-2 gap-1.5">
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">sync</span>
+<span>Rescan Now</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">edit_note</span>
+<span>Edit Mount</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">pie_chart</span>
+<span>Breakdown</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">shield</span>
+<span>Permissions</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Library 2: GoPro & Drone Reels (Indexing) -->
+<div class="library-card group relative rounded-2xl bg-surface-container p-space-md shadow-md transition-all duration-200" data-library="reels">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex items-start gap-space-sm min-w-0">
+<button aria-label="Select Library" class="lib-selector mt-0.5 w-6 h-6 rounded-full bg-surface-container-high flex items-center justify-center text-outline shrink-0 transition-transform active:scale-90">
+<span class="material-symbols-outlined text-[16px]">radio_button_unchecked</span>
+</button>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">GoPro &amp; Drone Reels</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant font-mono mt-0.5 truncate">smb://truenas.local/media/action</p>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+            78% Indexing
+          </span>
+<button class="context-btn w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" data-menu="menu-reels">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Live Progress Bar -->
+<div class="mt-space-sm space-y-1">
+<div class="flex justify-between text-on-surface-variant font-label-sm text-label-sm">
+<span>Parsing geospatial EXIF &amp; generating low-res previews...</span>
+<span class="font-mono text-primary">873/1,120</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary-container via-primary to-primary-container rounded-full transition-all duration-300" style="width: 78%"></div>
+</div>
+</div>
+<!-- Metrics Row -->
+<div class="mt-space-md grid grid-cols-3 gap-space-xs pt-space-sm bg-surface-container-low rounded-xl p-2.5">
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Source</span>
+<span class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[15px] text-primary">animated_images</span>
+            SMB NAS
+          </span>
+</div>
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Videos</span>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-0.5">1,120</span>
+</div>
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Storage</span>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-0.5">94 GB</span>
+</div>
+</div>
+<!-- Context Drawer / Submenu (Collapsible) -->
+<div class="hidden mt-space-sm pt-space-sm space-y-1" id="menu-reels">
+<div class="grid grid-cols-2 gap-1.5">
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">pause</span>
+<span>Pause Scan</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">tune</span>
+<span>NAS Config</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">pie_chart</span>
+<span>Breakdown</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-error font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-error text-[18px]">link_off</span>
+<span>Unmount</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Library 3: Family Scans & 35mm Film -->
+<div class="library-card group relative rounded-2xl bg-surface-container p-space-md shadow-md transition-all duration-200" data-library="film">
+<div class="flex items-start justify-between gap-space-xs">
+<div class="flex items-start gap-space-sm min-w-0">
+<button aria-label="Select Library" class="lib-selector mt-0.5 w-6 h-6 rounded-full bg-surface-container-high flex items-center justify-center text-outline shrink-0 transition-transform active:scale-90">
+<span class="material-symbols-outlined text-[16px]">radio_button_unchecked</span>
+</button>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">Family Scans &amp; 35mm Film</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant font-mono mt-0.5 truncate">/Volumes/SSD/Scans</p>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+            Ready
+          </span>
+<button class="context-btn w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" data-menu="menu-film">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Metrics Row -->
+<div class="mt-space-md grid grid-cols-3 gap-space-xs pt-space-sm bg-surface-container-low rounded-xl p-2.5">
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Device</span>
+<span class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[15px] text-tertiary">hard_drive</span>
+            Local SSD
+          </span>
+</div>
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Scans</span>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-0.5">640</span>
+</div>
+<div class="flex flex-col items-center justify-center text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Storage</span>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-0.5">18 GB</span>
+</div>
+</div>
+<!-- Context Drawer / Submenu (Collapsible) -->
+<div class="hidden mt-space-sm pt-space-sm space-y-1" id="menu-film">
+<div class="grid grid-cols-2 gap-1.5">
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">sync</span>
+<span>Rescan Now</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">edit_location</span>
+<span>Change Path</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">pie_chart</span>
+<span>Breakdown</span>
+</button>
+<button class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-primary text-[18px]">security</span>
+<span>Permissions</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Empty / Discovery State Card -->
+<div class="rounded-2xl bg-surface-container-low p-space-md flex flex-col items-center text-center relative overflow-hidden shadow-inner">
+<div class="w-12 h-12 rounded-2xl bg-surface-container-high/80 flex items-center justify-center text-on-surface-variant mb-2 shadow-sm">
+<span class="material-symbols-outlined text-[26px]">cable</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-medium">Looking for additional shares?</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-xs mt-1">
+      No unmounted network drives found on your local subnet. Mount a Samba, NFS, or WebDAV share to expand your archive.
+    </p>
+<button class="mt-space-md inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-highest hover:bg-surface-bright text-on-surface font-label-md text-label-md transition-all active:scale-95">
+<span class="material-symbols-outlined text-[18px] text-primary">add_link</span>
+<span>Connect Network Volume</span>
+</button>
+</div>
+<!-- Micro Storage Summary Meter -->
+<div class="rounded-2xl bg-surface-container-lowest p-space-md space-y-2">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-on-surface-variant">
+<span>Total Luma Host Storage Used</span>
+<span class="font-mono text-on-surface font-medium">254 GB / 2.0 TB</span>
+</div>
+<div class="h-2 w-full rounded-full bg-surface-container-high flex overflow-hidden">
+<div class="h-full bg-primary" style="width: 56%" title="Personal Archive"></div>
+<div class="h-full bg-secondary" style="width: 37%" title="GoPro &amp; Drone Reels"></div>
+<div class="h-full bg-tertiary" style="width: 7%" title="Family Scans"></div>
+</div>
+<div class="flex items-center justify-between text-[11px] font-body-sm text-on-surface-variant pt-1">
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-primary"></span> Archive (142G)</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-secondary"></span> Reels (94G)</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-tertiary"></span> Scans (18G)</span>
+</div>
+</div>
+</div>
+<script>
+  // Toggle context dropdown menus for each library
+  document.querySelectorAll('.context-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const targetId = btn.getAttribute('data-menu');
+      const menu = document.getElementById(targetId);
+      if (menu) {
+        const isHidden = menu.classList.contains('hidden');
+        document.querySelectorAll('[id^="menu-"]').forEach(m => m.classList.add('hidden'));
+        if (isHidden) {
+          menu.classList.remove('hidden');
+        }
+      }
+    });
+  });
+
+  // Library exclusive selection toggle
+  document.querySelectorAll('.lib-selector').forEach(selector => {
+    selector.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const combineSwitch = document.getElementById('combineSwitch');
+      if (combineSwitch.checked) {
+        combineSwitch.checked = false;
+      }
+      document.querySelectorAll('.lib-selector').forEach(s => {
+        s.className = 'lib-selector mt-0.5 w-6 h-6 rounded-full bg-surface-container-high flex items-center justify-center text-outline shrink-0 transition-transform active:scale-90';
+        s.innerHTML = '<span class="material-symbols-outlined text-[16px]">radio_button_unchecked</span>';
+      });
+      selector.className = 'lib-selector mt-0.5 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0 transition-transform active:scale-90';
+      selector.innerHTML = '<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: \'FILL\' 1;">check_circle</span>';
+    });
+  });
+
+  // Combine switch behavior
+  const combineSwitch = document.getElementById('combineSwitch');
+  if (combineSwitch) {
+    combineSwitch.addEventListener('change', () => {
+      if (combineSwitch.checked) {
+        document.querySelectorAll('.lib-selector').forEach(s => {
+          s.className = 'lib-selector mt-0.5 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0 transition-transform active:scale-90';
+          s.innerHTML = '<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: \'FILL\' 1;">check_circle</span>';
+        });
+      }
+    });
+  }
+
+  // Quick interactive ripple for action button
+  const addBtn = document.getElementById('addSourceBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      alert('Source wizard: Ready to configure local mount path or network volume (SMB/NFS).');
+    });
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe px-margin pointer-events-none" data-active-classes="text-primary bg-primary-container/20 font-label-md"><div class="pointer-events-auto mx-auto max-w-md mb-3 rounded-full bg-surface-container/85 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] px-space-xs py-1.5 flex items-center justify-around"><a class="flex flex-col items-center justify-center w-14 h-12 rounded-full text-on-surface-variant transition-all" data-path="library" href="#"><span class="material-symbols-outlined text-[22px]">grid_view</span><span class="font-label-sm text-label-sm mt-0.5">Library</span></a><a class="flex flex-col items-center justify-center w-14 h-12 rounded-full text-on-surface-variant transition-all" data-path="reels" href="#"><span class="material-symbols-outlined text-[22px]">movie</span><span class="font-label-sm text-label-sm mt-0.5">Reels</span></a><a class="flex flex-col items-center justify-center w-14 h-12 rounded-full text-on-surface-variant transition-all" data-path="search" href="#"><span class="material-symbols-outlined text-[22px]">search</span><span class="font-label-sm text-label-sm mt-0.5">Search</span></a><a aria-current="page" class="flex flex-col items-center justify-center w-14 h-12 rounded-full transition-all text-primary bg-primary-container/20 font-label-md" data-path="collections" href="#"><span class="material-symbols-outlined text-[22px]">photo_library</span><span class="font-label-sm text-label-sm mt-0.5">Collections</span></a><a class="flex flex-col items-center justify-center w-14 h-12 rounded-full text-on-surface-variant transition-all" data-path="settings" href="#"><span class="material-symbols-outlined text-[22px]">tune</span><span class="font-label-sm text-label-sm mt-0.5">Settings</span></a></div></nav></body></html>

@@ -1,0 +1,40 @@
+{
+  "rows": 1000000,
+  "synthetic": true,
+  "environment": "Microsoft Windows 10.0.26200",
+  "reports": [],
+  "traversals": [
+    {
+      "sort": "modified",
+      "rows": 1000000,
+      "seconds": 50.3645928
+    },
+    {
+      "sort": "captured",
+      "rows": 1000000,
+      "seconds": 45.8850164
+    },
+    {
+      "sort": "name",
+      "rows": 1000000,
+      "seconds": 18.7233829
+    },
+    {
+      "sort": "type",
+      "rows": 1000000,
+      "seconds": 20.9354058
+    },
+    {
+      "sort": "size",
+      "rows": 1000000,
+      "seconds": 22.6021406
+    },
+    {
+      "sort": "shuffle",
+      "rows": 1000000,
+      "seconds": 266.3961372
+    }
+  ],
+  "randomReports": [],
+  "peakWorkingSetBytes": 145354752
+}

@@ -1,0 +1,123 @@
+{
+  "rows": 120000,
+  "environment": "Microsoft Windows 10.0.26200",
+  "measurements": [
+    {
+      "name": "gallery",
+      "p50": 0.8259,
+      "p95": 1.1416,
+      "p99": 1.499,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_Modified (Availability=?)"
+      ]
+    },
+    {
+      "name": "folder",
+      "p50": 0.833,
+      "p95": 1.1842,
+      "p99": 1.5121,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_FolderModified (FolderId=? AND Availability=?)"
+      ]
+    },
+    {
+      "name": "video",
+      "p50": 0.8626,
+      "p95": 1.8096,
+      "p99": 2.4748,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_TypeModified (MediaType=? AND Availability=?)"
+      ]
+    },
+    {
+      "name": "date",
+      "p50": 28.7615,
+      "p95": 36.6652,
+      "p99": 44.8264,
+      "plan": [
+        "SEARCH m USING INDEX IX_Media_Date (EffectiveTicks\u003E? AND EffectiveTicks\u003C?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "name": "tag",
+      "p50": 30.1376,
+      "p95": 35.2146,
+      "p99": 39.3551,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "USE TEMP B-TREE FOR GROUP BY",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "name": "twoTags",
+      "p50": 18.1068,
+      "p95": 23.6954,
+      "p99": 26.4702,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "USE TEMP B-TREE FOR GROUP BY",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "name": "keyword",
+      "p50": 1.178,
+      "p95": 1.7943,
+      "p99": 2.0367,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 1",
+        "SCAN MediaSearch VIRTUAL TABLE INDEX 0:M2",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "name": "liked",
+      "p50": 0.7239,
+      "p95": 1.1382,
+      "p99": 1.3731,
+      "plan": [
+        "SEARCH m USING COVERING INDEX IX_Media_PreferenceModified (Preference=? AND Availability=?)"
+      ]
+    },
+    {
+      "name": "combined",
+      "p50": 16.7976,
+      "p95": 19.9032,
+      "p99": 21.1833,
+      "plan": [
+        "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 2",
+        "SEARCH t USING COVERING INDEX sqlite_autoindex_Tags_1 (NormalizedKey=?)",
+        "LIST SUBQUERY 1",
+        "SCAN json_each VIRTUAL TABLE INDEX 1:",
+        "CREATE BLOOM FILTER",
+        "SEARCH mt USING COVERING INDEX IX_MediaTags_Tag (TagId=?)",
+        "USE TEMP B-TREE FOR GROUP BY",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    }
+  ],
+  "deepRows": 100000,
+  "deepTraversalSeconds": 1.6069491,
+  "bulk500Ms": 21.5898,
+  "peakWorkingSetBytes": 86016000
+}

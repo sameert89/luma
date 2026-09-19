@@ -1,0 +1,17 @@
+# Gate 7 staging handoff
+
+2026-09-17. The requested product implementation is delivered for staging. Gate 7 release acceptance remains open for the target hardware and real-library measurements listed in [verification](STAGE-7-VERIFICATION.md). Historical Stage 1–6 records remain historical evidence.
+
+The 2026-09-18 follow-up round is recorded in [Gate 7 feedback verification](GATE-7-FEEDBACK.md): preview preparation now follows the order shown and reaches media left by a cancelled scan, and Reels keeps its own query, hides its progress control until used, and supports tap-to-pause and double-tap-to-like. The outstanding million-row query benchmark is complete.
+
+A second same-day round, [Gate 7 feedback verification, round 2](GATE-7-FEEDBACK-2.md), restores circular icon buttons, lets a single library card fill its row, extends metadata import to video XMP and unbounded query scope, collapses Reels' secondary controls behind one toggle, fixes the like-animation flicker and color, tightens Reels' photo auto-scroll and unavailable-media messaging, stops Reels from changing the folder Library returns to, adds tag rename/delete, and drops Collections' redundant library-listing section. Release blockers below are unchanged.
+
+Build `luma:gate7-staging` with `docker build -t luma:gate7-staging .` and follow [deployment and recovery](DEPLOYMENT.md). The image contains the production frontend, .NET 10 server and ffmpeg/ffprobe. Keep original media read-only and `/data` persistent. No existing user container or volume was upgraded during implementation; deployment checks used disposable volumes.
+
+The database migrates from schema 7 to 11. Back up the stopped data volume before upgrading; an older application requires its matching database backup. Migration 8 adds persisted random keys, custom covers, grouping keys and indexes. Migration 9 adds metadata job records. Migration 10 refreshes Media query statistics after the new indexes are introduced. Migration 11 adds captured/name/type ordering indexes within date groups and refreshes statistics again.
+
+Staging review should exercise all six sorts with folder/date/type groups, shuffle reshuffling and next/previous navigation; advanced library/tag/availability filters; folder pagination; Collections; video volume/mute/seek; and photo/mixed Reels. Direct shuffle links receive a persistent seed. Group keys are ascending, with the chosen sort direction inside each group. Gallery pages and rendered cells remain bounded.
+
+Custom covers are selected/reset from viewer details. The random endpoint serves a generated JPEG and never generates media on demand. Explicit tag imports and exports are available in viewer/bulk controls and settings. Imports merge normalized tags without rewriting originals. Exports use a processing-start SQLite snapshot, media-ID XMP filenames and a relative-path manifest; disliked exports contain full paths, including missing records. One durable metadata worker processes a maximum of 16 queued/running jobs; import selections are capped at 500, outputs at a separate 1 GiB quota and downloads expire after 24 hours. Interrupted jobs report failure and can be retried explicitly.
+
+Release blockers: Raspberry Pi 5 / Debian 13 ARM64 deployment and recovery; representative 120k-library browsing during initial/incremental indexing; prescribed repeated latency/resource measurements; and real desktop/Android 30-minute frame, memory and codec checks. Local synthetic query and Chromium mobile-emulation results cannot replace those measurements.

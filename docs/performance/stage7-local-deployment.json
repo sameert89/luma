@@ -1,0 +1,351 @@
+{
+  "targetHardware": false,
+  "platform": "Docker Desktop Linux AMD64",
+  "checks": [
+    {
+      "name": "schema-7 baseline and cold backup",
+      "passed": true,
+      "scan": {
+        "id": 1,
+        "libraryId": 1,
+        "state": "completed",
+        "discovered": 31,
+        "skipped": 0,
+        "startedAt": "2026-09-17T17:06:02.0297623+00:00",
+        "finishedAt": "2026-09-17T17:06:02.4827495+00:00",
+        "failureCode": null,
+        "pending": 0,
+        "processing": 0,
+        "ready": 30,
+        "failed": 1,
+        "failures": [
+          {
+            "id": 1,
+            "mediaId": 29,
+            "code": "invalid_media",
+            "occurredAt": "2026-09-17T17:06:02.9539831+00:00"
+          }
+        ],
+        "nextFailureId": null
+      }
+    },
+    {
+      "name": "schema 7 to 10 upgrade, covers, random and XMP",
+      "passed": true
+    },
+    {
+      "name": "restart persistence",
+      "passed": true
+    },
+    {
+      "name": "cache loss and force-scan regeneration",
+      "passed": true
+    },
+    {
+      "name": "unavailable source cached browsing and path-only export",
+      "passed": true
+    },
+    {
+      "name": "consistent backup restored into fresh volume",
+      "passed": true
+    }
+  ],
+  "imageId": "sha256:c2f4810db55be77f71f616122dbefbb6549d720217add31adda0c9ff0654d984",
+  "passed": true,
+  "commands": [
+    [
+      "docker",
+      "volume",
+      "create",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "run",
+      "-d",
+      "--name",
+      "luma-gate7-test-989b6499a5",
+      "-p",
+      "127.0.0.1:5287:5080",
+      "-v",
+      "luma-gate7-test-989b6499a5:/data",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\browser-fixture-v2\\media:/media/collection:ro",
+      "-e",
+      "Luma__Indexing__Libraries__0__Id=1",
+      "-e",
+      "Luma__Indexing__Libraries__0__Name=Verification",
+      "-e",
+      "Luma__Indexing__Libraries__0__Path=/media/collection",
+      "-e",
+      "Luma__Indexing__Libraries__0__CaseSensitive=true",
+      "-e",
+      "Luma__Indexing__Libraries__0__ScanOnStartup=false",
+      "luma-luma:latest"
+    ],
+    [
+      "docker",
+      "stop",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "rm",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "run",
+      "--rm",
+      "-v",
+      "luma-gate7-test-989b6499a5:/data:ro",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\gate7-deployment:/backup",
+      "alpine",
+      "tar",
+      "-C",
+      "/data",
+      "-czf",
+      "/backup/pre-upgrade.tgz",
+      "."
+    ],
+    [
+      "docker",
+      "run",
+      "-d",
+      "--name",
+      "luma-gate7-test-989b6499a5",
+      "-p",
+      "127.0.0.1:5287:5080",
+      "-v",
+      "luma-gate7-test-989b6499a5:/data",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\browser-fixture-v2\\media:/media/collection:ro",
+      "-e",
+      "Luma__Indexing__Libraries__0__Id=1",
+      "-e",
+      "Luma__Indexing__Libraries__0__Name=Verification",
+      "-e",
+      "Luma__Indexing__Libraries__0__Path=/media/collection",
+      "-e",
+      "Luma__Indexing__Libraries__0__CaseSensitive=true",
+      "-e",
+      "Luma__Indexing__Libraries__0__ScanOnStartup=false",
+      "luma:gate7-staging"
+    ],
+    [
+      "docker",
+      "stop",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "rm",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "run",
+      "--rm",
+      "-v",
+      "luma-gate7-test-989b6499a5:/data:ro",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\gate7-deployment:/backup",
+      "alpine",
+      "tar",
+      "-C",
+      "/data",
+      "-czf",
+      "/backup/staging-backup.tgz",
+      "."
+    ],
+    [
+      "docker",
+      "run",
+      "-d",
+      "--name",
+      "luma-gate7-test-989b6499a5",
+      "-p",
+      "127.0.0.1:5287:5080",
+      "-v",
+      "luma-gate7-test-989b6499a5:/data",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\browser-fixture-v2\\media:/media/collection:ro",
+      "-e",
+      "Luma__Indexing__Libraries__0__Id=1",
+      "-e",
+      "Luma__Indexing__Libraries__0__Name=Verification",
+      "-e",
+      "Luma__Indexing__Libraries__0__Path=/media/collection",
+      "-e",
+      "Luma__Indexing__Libraries__0__CaseSensitive=true",
+      "-e",
+      "Luma__Indexing__Libraries__0__ScanOnStartup=false",
+      "luma:gate7-staging"
+    ],
+    [
+      "docker",
+      "stop",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "rm",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "run",
+      "--rm",
+      "-v",
+      "luma-gate7-test-989b6499a5:/data",
+      "alpine",
+      "sh",
+      "-c",
+      "test \"$(readlink -f /data/cache)\" = /data/cache && rm -rf /data/cache"
+    ],
+    [
+      "docker",
+      "run",
+      "-d",
+      "--name",
+      "luma-gate7-test-989b6499a5",
+      "-p",
+      "127.0.0.1:5287:5080",
+      "-v",
+      "luma-gate7-test-989b6499a5:/data",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\browser-fixture-v2\\media:/media/collection:ro",
+      "-e",
+      "Luma__Indexing__Libraries__0__Id=1",
+      "-e",
+      "Luma__Indexing__Libraries__0__Name=Verification",
+      "-e",
+      "Luma__Indexing__Libraries__0__Path=/media/collection",
+      "-e",
+      "Luma__Indexing__Libraries__0__CaseSensitive=true",
+      "-e",
+      "Luma__Indexing__Libraries__0__ScanOnStartup=false",
+      "luma:gate7-staging"
+    ],
+    [
+      "docker",
+      "stop",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "rm",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "run",
+      "-d",
+      "--name",
+      "luma-gate7-test-989b6499a5",
+      "-p",
+      "127.0.0.1:5287:5080",
+      "-v",
+      "luma-gate7-test-989b6499a5:/data",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\gate7-deployment\\empty-source:/media:ro",
+      "-e",
+      "Luma__Indexing__Libraries__0__Id=1",
+      "-e",
+      "Luma__Indexing__Libraries__0__Name=Verification",
+      "-e",
+      "Luma__Indexing__Libraries__0__Path=/media/collection",
+      "-e",
+      "Luma__Indexing__Libraries__0__CaseSensitive=true",
+      "-e",
+      "Luma__Indexing__Libraries__0__ScanOnStartup=false",
+      "luma:gate7-staging"
+    ],
+    [
+      "docker",
+      "stop",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "rm",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "volume",
+      "create",
+      "luma-gate7-test-989b6499a5-restored"
+    ],
+    [
+      "docker",
+      "run",
+      "--rm",
+      "-v",
+      "luma-gate7-test-989b6499a5-restored:/data",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\gate7-deployment:/backup:ro",
+      "alpine",
+      "tar",
+      "-xzf",
+      "/backup/staging-backup.tgz",
+      "-C",
+      "/data"
+    ],
+    [
+      "docker",
+      "run",
+      "-d",
+      "--name",
+      "luma-gate7-test-989b6499a5",
+      "-p",
+      "127.0.0.1:5287:5080",
+      "-v",
+      "luma-gate7-test-989b6499a5-restored:/data",
+      "-v",
+      "C:\\Users\\samee\\Documents\\Projects\\Luma\\.local\\browser-fixture-v2\\media:/media/collection:ro",
+      "-e",
+      "Luma__Indexing__Libraries__0__Id=1",
+      "-e",
+      "Luma__Indexing__Libraries__0__Name=Verification",
+      "-e",
+      "Luma__Indexing__Libraries__0__Path=/media/collection",
+      "-e",
+      "Luma__Indexing__Libraries__0__CaseSensitive=true",
+      "-e",
+      "Luma__Indexing__Libraries__0__ScanOnStartup=false",
+      "luma:gate7-staging"
+    ],
+    [
+      "docker",
+      "stop",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "rm",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "image",
+      "inspect",
+      "luma:gate7-staging",
+      "--format",
+      "{{.Id}}"
+    ],
+    [
+      "docker",
+      "volume",
+      "rm",
+      "luma-gate7-test-989b6499a5"
+    ],
+    [
+      "docker",
+      "volume",
+      "rm",
+      "luma-gate7-test-989b6499a5-restored"
+    ]
+  ]
+}

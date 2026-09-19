@@ -1,0 +1,3666 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Luma.Server | v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/status": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/source-verification": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetSourceVerificationSetting",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceVerificationSetting"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetSourceVerificationSetting",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceVerificationSetting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/index": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "IndexFolder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanAccepted"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/indexing": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetIndexingStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexingStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{id}/scans": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "StartScan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/scans": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "RescanFolder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetScan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "afterFailureId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanProgress"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CancelScan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanAccepted"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/{id}/original": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetOriginalMedia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "206": {
+            "description": "Partial Content"
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "416": {
+            "description": "Range Not Satisfiable"
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/imports/tags": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ImportTags",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exports/xmp": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ExportXmp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exports/dislikes": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ExportDislikes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetMetadataJob",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "afterMediaId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataJobStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{id}/content": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "DownloadMetadataJob",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/collections/tag-groups": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetTagGroups",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "libraryId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "collectionTag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagged",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "mediaType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "extension",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "maxSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "orientation",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minHeight",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "height",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "maxAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "preference",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "afterId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagGroupPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/random": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetRandomImage",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "libraryId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "collectionTag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagged",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "mediaType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "extension",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "maxSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "orientation",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minHeight",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "height",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "maxAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "preference",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/cover": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetFolderCover",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/folders/{id}/hidden": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetFolderHidden",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderVisibilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/hidden": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetHiddenFolders",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HiddenFolderSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetLibraries",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LibrarySummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFolders",
+        "parameters": [
+          {
+            "name": "libraryId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "parentId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetMedia",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "libraryId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "collectionTag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagged",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "mediaType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "extension",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "maxSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "orientation",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minHeight",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "height",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "maxAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "preference",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetMediaDetail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/{id}/neighbors": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetMediaNeighbors",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "libraryId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endsWith",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "collectionTag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagged",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "mediaType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "extension",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "maxSizeBytes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "orientation",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minHeight",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "height",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "minAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "maxAspectRatio",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "preference",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaNeighbors"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/priority": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "PrioritizeVisibleMedia",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaPriorityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/media/{id}/cache/{revision}/{variant}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetCachedMedia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collections/tags": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetCollectionTags",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionTagPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tags": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "FindTags",
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CreateTag",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagSummary"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tags/{id}": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "RenameTag",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "DeleteTag",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/tags": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "EditMediaTags",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/media/{id}/preference": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetPreference",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/media/{id}/progress": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetWatchProgress",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchState"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetWatchProgress",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatchUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/clear-finished": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ClearFinishedBackgroundTasks",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/clear": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ClearBackgroundTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CancelBackgroundTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/queue": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "QueueBackgroundTaskAgain",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetBackgroundTasks",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BackgroundTask"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search/suggestions": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetSearchSuggestions",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchSuggestion"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiProblem": {
+        "required": [
+          "code",
+          "traceId"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          },
+          "code": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        }
+      },
+      "BackgroundTask": {
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "createdAt",
+          "processed",
+          "failed",
+          "pending"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "processed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "BulkTagsRequest": {
+        "required": [
+          "mediaIds",
+          "addTagIds",
+          "removeTagIds"
+        ],
+        "type": "object",
+        "properties": {
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "addTagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "removeTagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "CacheRepresentation": {
+        "required": [
+          "url",
+          "status",
+          "width",
+          "height"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "CollectionTagPage": {
+        "required": [
+          "items",
+          "nextCursor",
+          "previousCursor"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagSummary"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "previousCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CoverImage": {
+        "required": [
+          "url",
+          "width",
+          "height"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CoverRequest": {
+        "required": [
+          "mediaId"
+        ],
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "CreateTagRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "FolderPage": {
+        "required": [
+          "current",
+          "ancestors",
+          "items",
+          "nextCursor",
+          "previousCursor"
+        ],
+        "type": "object",
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/FolderSummary"
+          },
+          "ancestors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderSummary"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderSummary"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "previousCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FolderSummary": {
+        "required": [
+          "id",
+          "libraryId",
+          "parentId",
+          "name",
+          "coverUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "parentId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverOverride": {
+            "type": "boolean",
+            "default": false
+          },
+          "coverImages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoverImage"
+            },
+            "nullable": true
+          }
+        }
+      },
+      "FolderVisibilityRequest": {
+        "required": [
+          "hidden"
+        ],
+        "type": "object",
+        "properties": {
+          "hidden": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HiddenFolderSummary": {
+        "required": [
+          "id",
+          "libraryId",
+          "libraryName",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryName": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "IndexingLibrary": {
+        "required": [
+          "id",
+          "name",
+          "availability",
+          "latestScanId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "string"
+          },
+          "latestScanId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "IndexingStatus": {
+        "required": [
+          "libraries",
+          "cachePressure",
+          "cacheBytes",
+          "discoveryWorkers",
+          "processingWorkers",
+          "imageWorkers",
+          "videoWorkers",
+          "queueCapacity"
+        ],
+        "type": "object",
+        "properties": {
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IndexingLibrary"
+            }
+          },
+          "cachePressure": {
+            "type": "boolean"
+          },
+          "cacheBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "discoveryWorkers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "processingWorkers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "imageWorkers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "videoWorkers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queueCapacity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "JobAccepted": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "JobItem": {
+        "required": [
+          "mediaId",
+          "code"
+        ],
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "LibrarySummary": {
+        "required": [
+          "id",
+          "name",
+          "availability",
+          "rootFolderId",
+          "coverUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "string"
+          },
+          "rootFolderId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverOverride": {
+            "type": "boolean",
+            "default": false
+          },
+          "coverImages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoverImage"
+            },
+            "nullable": true
+          }
+        }
+      },
+      "MediaNeighbors": {
+        "required": [
+          "previous",
+          "next"
+        ],
+        "type": "object",
+        "properties": {
+          "previous": {
+            "type": "object",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MediaSummary"
+              }
+            ],
+            "nullable": true
+          },
+          "next": {
+            "type": "object",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MediaSummary"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "MediaPage": {
+        "required": [
+          "items",
+          "nextCursor",
+          "previousCursor"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaSummary"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "previousCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "seed": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "MediaPriorityRequest": {
+        "required": [
+          "ids"
+        ],
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "previews": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "MediaQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "cursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "folderId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "recursive": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "q": {
+            "type": "string",
+            "nullable": true
+          },
+          "path": {
+            "type": "string",
+            "nullable": true
+          },
+          "startsWith": {
+            "type": "string",
+            "nullable": true
+          },
+          "endsWith": {
+            "type": "string",
+            "nullable": true
+          },
+          "tag": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "collectionTag": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagMode": {
+            "type": "string",
+            "nullable": true
+          },
+          "tagged": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "mediaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "extension": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "dateFrom": {
+            "type": "string",
+            "nullable": true
+          },
+          "dateTo": {
+            "type": "string",
+            "nullable": true
+          },
+          "minSizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "maxSizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "orientation": {
+            "type": "string",
+            "nullable": true
+          },
+          "minWidth": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "minHeight": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "minAspectRatio": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "maxAspectRatio": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "preference": {
+            "type": "string",
+            "nullable": true
+          },
+          "availability": {
+            "type": "string",
+            "nullable": true
+          },
+          "sort": {
+            "type": "string",
+            "nullable": true
+          },
+          "order": {
+            "type": "string",
+            "nullable": true
+          },
+          "seed": {
+            "type": "string",
+            "nullable": true
+          },
+          "groupBy": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "MediaSummary": {
+        "required": [
+          "id",
+          "libraryId",
+          "folderId",
+          "fileName",
+          "mediaType",
+          "extension",
+          "sizeBytes",
+          "width",
+          "height",
+          "durationMs",
+          "modifiedAt",
+          "effectiveDate",
+          "capturedAt",
+          "preference",
+          "availability",
+          "thumbnail",
+          "preview",
+          "tags"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "folderId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "extension": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "modifiedAt": {
+            "type": "string"
+          },
+          "effectiveDate": {
+            "type": "string"
+          },
+          "capturedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "preference": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "string"
+          },
+          "thumbnail": {
+            "$ref": "#/components/schemas/CacheRepresentation"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/CacheRepresentation"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagSummary"
+            }
+          },
+          "groupKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "groupLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "watchProgress": {
+            "type": "object",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WatchState"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "MetadataJobRequest": {
+        "type": "object",
+        "properties": {
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "nullable": true
+          },
+          "query": {
+            "type": "object",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MediaQuery"
+              }
+            ],
+            "nullable": true
+          },
+          "includeSidecars": {
+            "type": "boolean",
+            "default": false
+          },
+          "automatic": {
+            "type": "boolean",
+            "default": false
+          },
+          "scanId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "MetadataJobStatus": {
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "createdAt",
+          "snapshotAt",
+          "finishedAt",
+          "processed",
+          "failed",
+          "failureCode",
+          "items",
+          "nextMediaId",
+          "contentUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "snapshotAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "processed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobItem"
+            }
+          },
+          "nextMediaId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "contentUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "found": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          }
+        }
+      },
+      "PreferenceRequest": {
+        "required": [
+          "preference"
+        ],
+        "type": "object",
+        "properties": {
+          "preference": {
+            "type": "string"
+          }
+        }
+      },
+      "ScanAccepted": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ScanFailure": {
+        "required": [
+          "id",
+          "mediaId",
+          "code",
+          "occurredAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mediaId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "code": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          }
+        }
+      },
+      "ScanProgress": {
+        "required": [
+          "id",
+          "libraryId",
+          "state",
+          "discovered",
+          "skipped",
+          "startedAt",
+          "finishedAt",
+          "failureCode",
+          "pending",
+          "processing",
+          "ready",
+          "failed",
+          "failures",
+          "nextFailureId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          },
+          "discovered": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "processing": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ready": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScanFailure"
+            }
+          },
+          "nextFailureId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "SearchSuggestion": {
+        "required": [
+          "kind",
+          "label",
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "SourceVerificationSetting": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StartScanRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "default": false
+          },
+          "retryFailures": {
+            "type": "boolean",
+            "default": false
+          },
+          "metadataMode": {
+            "type": "string",
+            "default": "embedded"
+          }
+        }
+      },
+      "StatusResponse": {
+        "required": [
+          "status",
+          "schemaVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TagGroupPage": {
+        "required": [
+          "items",
+          "nextId"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagSummary"
+            }
+          },
+          "nextId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "TagSummary": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "WatchState": {
+        "required": [
+          "mediaId",
+          "positionSeconds",
+          "durationSeconds",
+          "watchedSeconds",
+          "state",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "positionSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "watchedSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "state": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "WatchUpdate": {
+        "required": [
+          "positionSeconds",
+          "durationSeconds",
+          "watchedSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "positionSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "watchedSeconds": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Luma.Server"
+    }
+  ]
+}
