@@ -94,7 +94,11 @@ public static class IndexingEndpoints
                 try
                 {
                     var path = root is null ? null : folder.RelativePath.Length == 0 ? root.Path : SourcePaths.Resolve(root, folder.RelativePath);
-                    if (path is not null && Directory.GetLastWriteTimeUtc(path).Ticks != folder.SourceModifiedTicks)
+                    // Directory timestamps can be re-read with slightly different precision on
+                    // Windows and network filesystems. The watcher handles immediate changes;
+                    // refresh-on-open only needs to treat a material timestamp move as a fallback.
+                    var sourceTicks = path is null ? folder.SourceModifiedTicks : Directory.GetLastWriteTimeUtc(path).Ticks;
+                    if (path is not null && (folder.SourceModifiedTicks == 0 || Math.Abs(sourceTicks - folder.SourceModifiedTicks) >= TimeSpan.TicksPerSecond))
                     {
                         if (await db.ExecuteScalarAsync<bool>(new CommandDefinition(
                             "SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))", folder, tx, cancellationToken: ct)))
