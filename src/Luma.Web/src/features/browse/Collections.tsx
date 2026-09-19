@@ -4,6 +4,7 @@ import { EllipsisVertical, Heart, Tag } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Field, IconButton, Input, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
+import { tagTone } from '../../components/ui/TagTone'
 import { errorMessage, request, type Filters } from './api'
 import type { components } from '../../lib/api/generated'
 
@@ -49,9 +50,10 @@ function TagChip({ tag, onChoose, onManage }: { tag: TagSummary; onChoose: () =>
   const pressed = useRef(false)
   function startPress() { pressed.current = false; pressTimer.current = window.setTimeout(() => { pressed.current = true; onManage() }, longPressMs) }
   function cancelPress() { window.clearTimeout(pressTimer.current) }
+  const tone = tagTone(tag.name)
   return <div className="flex items-center gap-1">
-    <QuietButton onPointerDown={startPress} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress} onClick={() => { if (!pressed.current) onChoose() }}><Tag className="size-4" />{tag.name}</QuietButton>
-    <IconButton label={`Manage tag ${tag.name}`} onClick={onManage}><EllipsisVertical className="size-4" /></IconButton>
+    <QuietButton className="tag-tone" style={tone} onPointerDown={startPress} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress} onClick={() => { if (!pressed.current) onChoose() }}><Tag className="size-4" />{tag.name}</QuietButton>
+    <IconButton label={`Manage tag ${tag.name}`} className="tag-tone" style={tone} onClick={onManage}><EllipsisVertical className="size-4" /></IconButton>
   </div>
 }
 
@@ -59,7 +61,7 @@ export function Collections({ onChoose }: { onChoose: (filters: Filters) => void
   const [cursor, setCursor] = useState<string>()
   const [managing, setManaging] = useState<TagSummary | null>(null)
   const tags = useQuery({ queryKey: ['collection-tags', cursor], queryFn: ({ signal }) => request<components['schemas']['CollectionTagPage']>(`/api/collections/tags${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, signal), gcTime: 0 })
-  return <div className="space-y-6 overflow-auto p-5">
+  return <div className="space-y-6 overflow-auto p-5" data-scroll-restore>
     <section className="space-y-3"><h2 className="text-lg font-semibold">Favourites</h2><QuietButton onClick={() => onChoose({ preference: 'liked' })}><Heart className="size-4" />Open favourites</QuietButton></section>
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Tags</h2>

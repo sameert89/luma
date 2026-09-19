@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Check, Plus, Search, Tag as TagIcon, X } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Field, Input, QuietButton, Select } from '../../components/ui/Controls'
+import { tagTone } from '../../components/ui/TagTone'
 import { errorMessage, request, type Tag } from '../browse/api'
 
 const sameTag = (a: string, b: string) => a.trim().normalize('NFC').toUpperCase() === b.trim().normalize('NFC').toUpperCase()
@@ -49,7 +50,7 @@ export function TagEditor({ mediaIds, tags = [], bulk = false, onChanged }: { me
     if (event.key === 'Escape' && index >= 0) { event.preventDefault(); event.stopPropagation(); input.current?.focus() }
   }
   return <section className="space-y-4" aria-label={bulk ? 'Bulk tag editor' : 'Tag editor'}>
-    {!bulk && <div className="flex flex-wrap gap-2">{tags.length === 0 && <p className="text-sm text-muted">No tags yet.</p>}{tags.map(tag => <QuietButton key={tag.id} className="gap-2" disabled={update.isPending} onClick={() => update.mutate({ id: tag.id, remove: true })} aria-label={`Remove tag ${tag.name}`}>
+    {!bulk && <div className="flex flex-wrap gap-2">{tags.length === 0 && <p className="text-sm text-muted">No tags yet.</p>}{tags.map(tag => <QuietButton key={tag.id} className="tag-tone gap-2" style={tagTone(tag.name)} disabled={update.isPending} onClick={() => update.mutate({ id: tag.id, remove: true })} aria-label={`Remove tag ${tag.name}`}>
       {tag.name}<X className="size-3" aria-hidden="true" />
     </QuietButton>)}</div>}
     <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (name.trim()) update.mutate({}) }}>
@@ -67,7 +68,7 @@ export function TagEditor({ mediaIds, tags = [], bulk = false, onChanged }: { me
         {matches.map(tag => { const on = applied.has(tag.id); return <li key={tag.id} className="border-b border-line last:border-b-0">
           <button type="button" disabled={on || update.isPending} onClick={() => choose(tag)} onKeyDown={move}
             className="flex min-h-11 w-full items-center gap-3 px-3 text-left text-sm hover:bg-surface focus-visible:ring-inset disabled:cursor-default">
-            <TagIcon className="size-4 shrink-0 text-accent" aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{tag.name}</span>
+            <TagIcon className="size-4 shrink-0 text-accent" aria-hidden="true" /><span className="tag-tone min-w-0 flex-1 truncate rounded-full border px-2 py-1" style={tagTone(tag.name)}>{tag.name}</span>
             {on ? <span className="flex shrink-0 items-center gap-1 text-xs text-muted"><Check className="size-3" aria-hidden="true" />Added</span>
               : <span className="shrink-0 text-xs text-muted">{removing ? 'Remove' : 'Add'}</span>}
           </button>

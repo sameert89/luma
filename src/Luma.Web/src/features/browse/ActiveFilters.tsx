@@ -1,4 +1,5 @@
 import { QuietButton } from '../../components/ui/Controls'
+import { tagTone } from '../../components/ui/TagTone'
 import { type Filters } from './api'
 
 export function ActiveFilters({ filters, onApply, libraryName, folderName }: { libraryName?: string; folderName?: string; filters: Filters; onApply: (value: Filters) => void }) {
@@ -7,7 +8,9 @@ export function ActiveFilters({ filters, onApply, libraryName, folderName }: { l
   const active = Object.entries(filters).filter(([key, value]) => !['cursor', 'limit'].includes(key) && value !== undefined && value !== '' && value !== null && (!Array.isArray(value) || value.length))
   if (!active.length) return null
   return <nav aria-label="Active filters" className="no-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b border-line bg-canvas px-4 py-1">
-    {active.map(([key, value]) => <QuietButton compact key={key} className="shrink-0" aria-label={`Clear ${key} filter`} onClick={() => onApply({ ...filters, [key]: undefined, ...(key === 'libraryId' ? { folderId: undefined } : {}) })}>{labels[key] ?? key}: {shown(key, value)} ×</QuietButton>)}
+    {active.flatMap(([key, value]) => key === 'tag' && Array.isArray(value)
+      ? value.map(name => <QuietButton compact key={`${key}:${name}`} className="tag-tone shrink-0" style={tagTone(String(name))} aria-label={`Clear tag filter ${name}`} onClick={() => onApply({ ...filters, tag: value.filter(item => item !== name) })}>{name} ×</QuietButton>)
+      : [<QuietButton compact key={key} className={`shrink-0 ${key === 'collectionTag' ? 'tag-tone' : ''}`} style={key === 'collectionTag' ? tagTone(String(value)) : undefined} aria-label={`Clear ${key} filter`} onClick={() => onApply({ ...filters, [key]: undefined, ...(key === 'libraryId' ? { folderId: undefined } : {}) })}>{labels[key] ?? key}: {shown(key, value)} ×</QuietButton>])}
     <QuietButton compact className="shrink-0" onClick={() => onApply({})}>Clear all filters</QuietButton>
   </nav>
 }

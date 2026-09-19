@@ -2,6 +2,7 @@ import { FileImage, FolderOpen, Search, SlidersHorizontal, Tag, X } from 'lucide
 import { useDeferredValue, useEffect, useId, useRef, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { IconButton, Input } from './Controls'
+import { tagTone } from './TagTone'
 import { request } from '../../features/browse/api'
 import type { components } from '../../lib/api/generated'
 
@@ -63,7 +64,7 @@ export function SearchHeader({ value, onChange, onSearch, onSuggestion, onClear,
               // Choosing on pointer down keeps focus in the field (a click would blur it first).
               onPointerDown={event => { event.preventDefault(); choose(suggestion) }} onMouseEnter={() => setActiveIndex(index)}>
               <Icon className="size-4 shrink-0 text-accent" aria-hidden="true" />
-              <span className="min-w-0 flex-1"><span className="block truncate">{suggestion.label}</span>{suggestion.detail && <span className="block truncate text-xs text-muted">{suggestion.detail}</span>}</span>
+              <span className="min-w-0 flex-1"><span className={suggestion.kind === 'tag' ? 'tag-tone inline-block max-w-full truncate rounded-full border px-2 py-1' : 'block truncate'} style={suggestion.kind === 'tag' ? tagTone(suggestion.label) : undefined}>{suggestion.label}</span>{suggestion.detail && <span className="block truncate text-xs text-muted">{suggestion.detail}</span>}</span>
               <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-xs text-muted">{kind.label}</span>
             </li> })}
           </ul>}

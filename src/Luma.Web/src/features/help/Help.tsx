@@ -33,7 +33,7 @@ export function Help({ onBack }: { onBack: () => void }) {
     heading?.scrollIntoView?.({ block: 'start' })
     heading?.focus({ preventScroll: true })
   }
-  return <div className="min-h-0 flex-1 overflow-auto" data-testid="help-scroll">
+  return <div className="min-h-0 flex-1 overflow-auto" data-testid="help-scroll" data-scroll-restore>
     <div className="sticky top-0 z-10 border-b border-line bg-canvas px-5 py-3"><div className="mx-auto flex w-full max-w-5xl items-center gap-3">
       <QuietButton onClick={onBack}><ArrowLeft className="size-4" aria-hidden="true" />Back</QuietButton>
     </div></div>
