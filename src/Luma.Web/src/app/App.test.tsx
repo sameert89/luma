@@ -426,8 +426,8 @@ it('organizes settings under consistent headings without an installation panel',
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
   }
   expect(screen.getAllByRole('heading', { name: 'Metadata exchange' })).toHaveLength(1)
-  expect(screen.getByRole('heading', { name: 'About' }).closest('section')).toHaveTextContent('Luma v1.0.3')
-  expect(screen.getByTestId('desktop-version')).toHaveTextContent('Luma v1.0.3')
+  expect(screen.getByRole('heading', { name: 'About' }).closest('section')).toHaveTextContent('Luma v1.0.4')
+  expect(screen.getByTestId('desktop-version')).toHaveTextContent('Luma v1.0.4')
   expect(screen.getByTestId('desktop-version').closest('aside')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/sameert89/luma')
   expect(screen.queryByText('Install Luma')).not.toBeInTheDocument()
