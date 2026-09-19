@@ -50,8 +50,8 @@ public static class TaskEndpoints
             // A worker still winding down the old scan would otherwise write alongside the new one.
             if(worker.IsActive(key) || await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM ProcessingJobs WHERE ScanId=@key AND State IN ('pending','running'))",new{key},tx,cancellationToken:ct))) throw new ApiRequestException(409,"conflict","This operation is still stopping. Try again in a moment.");
             try {
-                var next=await db.ExecuteScalarAsync<long?>(new CommandDefinition("INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt,MetadataMode) SELECT @LibraryId,@FolderId,'queued',@Force,@RetryFailures,@now,@MetadataMode FROM Libraries WHERE Id=@LibraryId AND Enabled=1 RETURNING Id",new{scan.LibraryId,scan.FolderId,scan.Force,scan.RetryFailures,scan.MetadataMode,now=DateTimeOffset.UtcNow.ToString("O")},tx,cancellationToken:ct)) ?? throw ApiRequestException.Missing();
-                await IndexingEndpoints.QueueMetadataAsync(db,tx,next,scan.LibraryId,scan.FolderId,scan.MetadataMode,ct);
+                var next=await db.ExecuteScalarAsync<long?>(new CommandDefinition("INSERT INTO Scans(LibraryId,FolderId,Recursive,State,Force,RetryFailures,StartedAt,MetadataMode) SELECT @LibraryId,@FolderId,@Recursive,'queued',@Force,@RetryFailures,@now,@MetadataMode FROM Libraries WHERE Id=@LibraryId AND Enabled=1 RETURNING Id",new{scan.LibraryId,scan.FolderId,scan.Recursive,scan.Force,scan.RetryFailures,scan.MetadataMode,now=DateTimeOffset.UtcNow.ToString("O")},tx,cancellationToken:ct)) ?? throw ApiRequestException.Missing();
+                await IndexingEndpoints.QueueMetadataAsync(db,tx,next,scan.LibraryId,scan.FolderId,scan.MetadataMode,ct,scan.Recursive);
                 await db.ExecuteAsync(new CommandDefinition("UPDATE Scans SET QueueDismissed=1 WHERE Id=@key",new{key},tx,cancellationToken:ct));
                 tx.Commit();
                 return Results.Accepted($"/api/scans/{next}",new ScanAccepted(next));
@@ -59,7 +59,9 @@ public static class TaskEndpoints
         }).WithName("QueueBackgroundTaskAgain");
         app.MapGet("/api/tasks",async(Database database,CancellationToken ct)=> {
             await using var db=await database.OpenAsync(ct);
-            return TypedResults.Ok((await db.QueryAsync<BackgroundTask>(new CommandDefinition("""
+            // Computed columns report no type when SQLite has no row to infer from (an empty or
+            // freshly cleared queue), so rows map by property rather than by constructor.
+            return TypedResults.Ok((await db.QueryAsync<TaskRow>(new CommandDefinition("""
                 SELECT 'metadata-'||j.Id Id,j.Kind,CASE WHEN j.State='failed' AND j.FailureCode='interrupted' THEN 'interrupted' ELSE j.State END State,j.CreatedAt,j.Processed,j.Failed,0 Pending,
                   COALESCE(NULLIF(f.RelativePath,''),l.Name,(SELECT FileName FROM Media WHERE Id=json_extract(j.Request,'$.MediaIds[0]')),'Filtered library') Scope
                 FROM (SELECT * FROM MetadataJobs WHERE QueueDismissed=0 ORDER BY Id DESC LIMIT 50) j
@@ -75,8 +77,19 @@ public static class TaskEndpoints
                 FROM (SELECT * FROM Scans WHERE QueueDismissed=0 ORDER BY Id DESC LIMIT 50) s
                 LEFT JOIN Libraries l ON l.Id=s.LibraryId LEFT JOIN Folders f ON f.Id=s.FolderId
                 ORDER BY CreatedAt DESC LIMIT 100
-                """,cancellationToken:ct))).ToArray());
+                """,cancellationToken:ct))).Select(x=>new BackgroundTask(x.Id,x.Kind,x.State,x.CreatedAt,x.Processed,x.Failed,x.Pending,x.Scope)).ToArray());
         }).WithName("GetBackgroundTasks");
+    }
+    private sealed class TaskRow
+    {
+        public string Id { get; set; } = "";
+        public string Kind { get; set; } = "";
+        public string State { get; set; } = "";
+        public string CreatedAt { get; set; } = "";
+        public long Processed { get; set; }
+        public long Failed { get; set; }
+        public long Pending { get; set; }
+        public string? Scope { get; set; }
     }
     private const string MetadataFinished="State IN ('completed','cancelled','failed','expired')";
     private const string ScanFinished="(State IN ('cancelled','failed','interrupted') OR State='completed' AND NOT EXISTS(SELECT 1 FROM ProcessingJobs WHERE ScanId=Scans.Id AND State IN ('pending','running')))";

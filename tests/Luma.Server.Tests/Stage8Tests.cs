@@ -203,8 +203,8 @@ public sealed class Stage8Tests
         await using var f=await PipelineFixture.CreateAsync(); await f.ScanAsync();
         await using(var db=await f.Database.OpenAsync(default)) {
             await db.ExecuteAsync("INSERT INTO Folders(Id,LibraryId,ParentId,RelativePath,PathKey) VALUES(2,1,1,'Zulu','zulu'),(3,1,1,'alpha','alpha'),(4,1,1,'Beta','beta'),(5,1,1,'ALPHA','ALPHA'),(6,1,1,'hidden','hidden'); UPDATE Folders SET Hidden=1 WHERE Id=6");
-            var plan=string.Join(" ", (await db.QueryAsync("EXPLAIN QUERY PLAN SELECT Id FROM Folders WHERE ParentId=1 AND Hidden=0 ORDER BY RelativePath COLLATE NOCASE,Id LIMIT 2")).Select(row=>(string)row.detail));
-            Assert.Contains("IX_Folders_Parent_Name",plan); Assert.DoesNotContain("TEMP B-TREE",plan);
+            var plan=string.Join(" ", (await db.QueryAsync("EXPLAIN QUERY PLAN SELECT Id FROM Folders WHERE ParentId=1 AND Hidden=0 ORDER BY SortKey,Id LIMIT 2")).Select(row=>(string)row.detail));
+            Assert.Contains("IX_Folders_Parent_Sort",plan); Assert.DoesNotContain("TEMP B-TREE",plan);
         }
         var signer=new CursorSigner(f.Database); await signer.InitializeAsync(default);
         var browser=new Luma.Server.Features.Libraries.LibraryBrowser(f.Database,signer);

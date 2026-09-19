@@ -76,6 +76,7 @@ api.MapIndexing();
 api.MapMedia();
 api.MapPlayback();
 api.MapTasks();
+api.MapSearchSuggestions();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseRouting();
 app.Use(async (context, next) =>

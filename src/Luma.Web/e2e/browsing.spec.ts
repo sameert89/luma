@@ -26,7 +26,7 @@ test('anchors mobile search to its icon and closes it with the cross', async ({ 
   const buttonPosition = await open.boundingBox()
   expect(buttonPosition!.x).toBeGreaterThan(page.viewportSize()!.width / 2)
   await open.click()
-  const search = page.getByRole('textbox', { name: 'Search media' })
+  const search = page.getByRole('combobox', { name: 'Search media' })
   await expect(search).toBeFocused()
   await expect(page.getByRole('button', { name: 'Close search' })).toBeVisible()
   await expect.poll(async () => (await filters.boundingBox())?.x).toBe(filterPosition!.x)
@@ -74,15 +74,13 @@ test('cancelling preparation stops the busy indicator even with paused jobs', as
   await page.route('**/api/scans/901', route => route.fulfill({ json: { id: 901, libraryId: 1, state: cancelled ? 'cancelled' : 'completed', discovered: 1500, ready: 1000, pending: 500, processing: 0, failed: 0 } }))
   await page.route('**/api/tasks', route => route.fulfill({ json: cancelled ? [] : [{ id: 'scan-901', kind: 'indexing', state: 'running', processed: 1000, pending: 500, failed: 0 }] }))
   await page.route('**/api/tasks/scan-901/cancel', async route => { cancelled = true; await route.fulfill({ status: 204 }) })
-  // Opening status triggers the shared query without waiting for its polling interval.
-  await page.getByRole('button', { name: 'Rescan Sample library', exact: true }).click()
-  const dialog = page.getByRole('dialog')
-  await expect(dialog.getByRole('button', { name: 'Cancel scan' })).toBeVisible()
-  await dialog.getByRole('button', { name: 'Cancel scan' }).click()
+  await page.getByRole('button', { name: /^Background jobs/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Background jobs' })
+  await expect(dialog.getByRole('button', { name: 'Cancel Indexing' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Cancel Indexing' }).click()
   await expect.poll(() => cancelled).toBe(true)
   await dialog.getByRole('button', { name: 'Close', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Rescan Sample library', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'View scan progress for Sample library' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Background jobs', exact: true })).toBeVisible()
 })
 
 test('selection is visible and its full checkbox target can be tapped', async ({ page }) => {
@@ -176,9 +174,9 @@ test('opening an unindexed folder discovers its files and prepares previews with
   await page.screenshot({ animations: 'disabled', path: `test-results/on-demand-${testInfo.project.name}.png` })
 })
 
-test('requires confirmation before starting a rescan and exposes mobile progress', async ({ page }, testInfo) => {
+test('rescans from the folder menu after confirmation and shows progress in Background jobs', async ({ page }, testInfo) => {
   let requested = false
-  await page.route('**/api/libraries/1/scans', async route => {
+  await page.route('**/api/folders/*/scans', async route => {
     requested = true
     await route.fulfill({ status: 202, json: { id: 900 } })
   })
@@ -187,20 +185,19 @@ test('requires confirmation before starting a rescan and exposes mobile progress
     await route.fulfill({ json: { libraries: [{ id: 1, name: 'Sample library', latestScanId: 900 }], cachePressure: false } })
   })
   await page.route('**/api/scans/900', route => route.fulfill({ json: { id: 900, libraryId: 1, state: 'running', discovered: 1500, ready: 1000, pending: 500, processing: 0, failed: 0 } }))
-  const rescan = page.getByRole('button', { name: 'Rescan Sample library', exact: true })
-  await rescan.click()
-  const confirmation = page.getByRole('dialog', { name: 'Background tasks' })
-  await expect(confirmation).toContainText('significant disk and CPU resources')
+  await (await galleryAction(page, 'Rescan library')).click()
+  const confirmation = page.getByRole('dialog', { name: 'Rescan library' })
+  await expect(confirmation).toContainText('significant disk and CPU')
   expect(requested).toBe(false)
-  await confirmation.getByRole('button', { name: 'Not now' }).click()
+  await confirmation.getByRole('button', { name: 'Cancel' }).click()
   expect(requested).toBe(false)
-  await rescan.click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Rescan library', exact: true }).click()
   await confirmation.getByRole('button', { name: 'Start rescan' }).click()
-  const progress = page.getByRole('button', { name: 'View scan progress for Sample library' })
-  await expect(progress).toBeVisible()
+  await expect(confirmation.getByRole('status')).toContainText('Rescan queued')
   expect(requested).toBe(true)
-  await progress.click()
-  await expect(page.getByRole('dialog', { name: 'Background tasks' }).getByRole('status')).toContainText('Checking folders for changes')
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: /^Background jobs/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Background jobs' })).toBeVisible()
   await page.screenshot({ animations: 'disabled', path: `test-results/scanning-${testInfo.project.name}.png` })
 })
 
@@ -280,7 +277,7 @@ test('keeps the virtualized gallery and retained summaries bounded', async ({ pa
 
 test('searches and edits tags with keyboard-accessible controls', async ({ page }, testInfo) => {
   if (testInfo.project.name === 'mobile') await page.getByRole('button', { name: 'Open search' }).click()
-  const search = page.getByRole('textbox', { name: 'Search media' })
+  const search = page.getByRole('combobox', { name: 'Search media' })
   await search.fill('holiday')
   await search.press('Enter')
   await expect(page).toHaveURL(/q=holiday/)
@@ -291,7 +288,7 @@ test('searches and edits tags with keyboard-accessible controls', async ({ page 
   await page.getByRole('button', { name: 'Edit tags' }).click()
   const editor = page.getByRole('dialog', { name: /Tag 1 items/ })
   await expect(editor).toBeVisible()
-  await editor.getByRole('combobox', { name: 'Tag name' }).fill(`Browser ${testInfo.project.name}`)
+  await editor.getByRole('searchbox', { name: 'Find or create a tag' }).fill(`Browser ${testInfo.project.name}`)
   await editor.getByRole('button', { name: 'Apply to 1 items' }).click()
   await expect(editor.getByRole('status')).toHaveText('Tags saved.')
   await page.keyboard.press('Escape')

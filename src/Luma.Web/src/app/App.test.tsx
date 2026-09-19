@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
@@ -89,11 +89,11 @@ describe('browsing shell', () => {
     expect(screen.queryByRole('heading', { name: 'Search your media' })).not.toBeInTheDocument()
     expect(screen.getByTestId('gallery-scroll')).toBeVisible()
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith('/api/media?') && String(url).includes('sort=name') && !String(url).includes('q='))).toBe(true))
-    await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'Beach{Enter}')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Beach{Enter}')
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     await userEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
     expect(window.location.search).toBe('')
-    expect(screen.getByRole('textbox', { name: 'Search media' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'Search media' })).toHaveValue('')
   })
 
   it('opens a child folder menu without navigating and imports that folder rather than the parent', async () => {
@@ -136,7 +136,7 @@ describe('browsing shell', () => {
     localStorage.clear()
     browsingApi()
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
-    const input = screen.getByRole('textbox', { name: 'Search media' })
+    const input = screen.getByRole('combobox', { name: 'Search media' })
     await userEvent.type(input, 'Beach{Enter}')
     expect(window.location.search).toContain('q=Beach')
     await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
@@ -147,15 +147,44 @@ describe('browsing shell', () => {
     expect(await screen.findByRole('heading', { name: 'Trips' })).toBeVisible()
   })
 
+  it('runs an exact tag search from a tag suggestion and opens folder and file suggestions directly', async () => {
+    const photo = { id: 12, libraryId: 1, folderId: 2, fileName: 'beach-sunset.jpg', mediaType: 'image', extension: '.jpg', availability: 'present', preference: 'neutral',
+      modifiedAt: '2026-01-01T00:00:00Z', effectiveDate: '2026-01-01T00:00:00Z', capturedAt: null, width: 10, height: 10, durationMs: null, sizeBytes: 1, tags: [],
+      thumbnail: { status: 'ready', url: '/thumb', width: 10, height: 10 }, preview: { status: 'ready', url: '/preview', width: 10, height: 10 } }
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      const data = url.startsWith('/api/search/suggestions') ? [{ kind: 'tag', label: 'Beach', id: 4 }, { kind: 'folder', label: 'Beach trip', id: 30, detail: 'Photos', libraryId: 1 }, { kind: 'file', label: 'beach-sunset.jpg', id: 12, detail: 'Trips' }]
+        : url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }] : url === '/api/tasks' ? [] : url === '/api/media/12' ? photo
+          : url.startsWith('/api/folders?') ? { current: { id: 30, libraryId: 1, parentId: 1, name: 'Beach trip' }, ancestors: [], items: [] }
+          : url.includes('/neighbors?') ? { previous: null, next: null } : url.startsWith('/api/indexing') ? { libraries: [] } : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    }))
+    renderApp()
+    const field = await screen.findByRole('combobox', { name: 'Search media' })
+    await userEvent.type(field, 'bea')
+    await userEvent.click(await screen.findByRole('option', { name: /Beach\s*Tag/ }))
+    expect(new URLSearchParams(window.location.search).getAll('tag')).toEqual(['Beach'])
+    expect(window.location.search).not.toContain('q=')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'bea')
+    await userEvent.click(await screen.findByRole('option', { name: /beach-sunset\.jpg/ }))
+    expect(await screen.findByRole('dialog', { name: 'beach-sunset.jpg' })).toBeVisible()
+    expect(new URLSearchParams(window.location.search).get('q')).toBe('beach-sunset.jpg')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'bea')
+    await userEvent.click(await screen.findByRole('option', { name: /Beach trip\s*Photos\s*Folder/ }))
+    expect(window.location.search).toBe('?libraryId=1&folderId=30')
+    expect(await screen.findByRole('heading', { name: 'Beach trip' })).toBeVisible()
+  })
+
   it('clears a search started from Search back to its default page', async () => {
     browsingApi()
     renderApp()
     await userEvent.click((await screen.findAllByRole('button', { name: 'Search' })).find(button => button.textContent?.includes('Search'))!)
-    await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'Beach{Enter}')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Beach{Enter}')
     expect(window.location.search).toContain('q=Beach')
     await userEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(window.location.search).toBe('')
-    expect(screen.getByRole('textbox', { name: 'Search media' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'Search media' })).toHaveValue('')
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
   })
 
@@ -207,10 +236,15 @@ describe('browsing shell', () => {
     const library = await screen.findByRole('button', { name: 'Open Photos' })
     expect(library.closest('article')).toHaveClass('max-w-sm')
     expect(library.closest('article')?.innerHTML).toContain('bg-linear-to-t')
-    const status = screen.getByRole('button', { name: 'Indexing status' })
-    expect(status).toHaveTextContent('Indexing status')
+    // A library card carries the same actions menu as any folder.
+    expect(within(library.closest('article')!).getByRole('button', { name: 'Folder actions for Photos' })).toBeVisible()
+    const status = screen.getByRole('button', { name: 'Background jobs' })
     await userEvent.click(status)
-    expect(screen.getByRole('dialog', { name: 'Indexing status' })).toBeVisible()
+    const jobs = screen.getByRole('dialog', { name: 'Background jobs' })
+    expect(jobs).toBeVisible()
+    // The jobs panel lists jobs only; rescanning lives in each folder's menu.
+    expect(within(jobs).queryByText('Scan controls')).not.toBeInTheDocument()
+    expect(within(jobs).queryByRole('button', { name: 'Start rescan' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     await userEvent.click(library)
     const folder = await screen.findByRole('button', { name: 'Open Trips' })
@@ -219,7 +253,7 @@ describe('browsing shell', () => {
   it('explains how to connect an empty library', async () => {
     emptyApi(); renderApp()
     expect(await screen.findByRole('heading', { name: 'Connect your first library' })).toBeVisible()
-    expect(screen.getByRole('textbox', { name: 'Search media' })).toBeDefined()
+    expect(screen.getByRole('combobox', { name: 'Search media' })).toBeDefined()
   })
   it('opens filters from the keyboard and restores focus after Escape', async () => {
     emptyApi(); renderApp()
@@ -232,7 +266,7 @@ describe('browsing shell', () => {
   })
   it('keeps applied search and filter state in the URL', async () => {
     emptyApi(); renderApp()
-    await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'Summer{Enter}')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Summer{Enter}')
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Favourite state' }), 'liked')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
@@ -372,7 +406,7 @@ describe('browsing shell', () => {
     expect(window.location.search).toContain('mediaType=image')
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
-    await userEvent.type(screen.getByRole('textbox', { name: 'Search media' }), 'beach{Enter}')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'beach{Enter}')
     expect(window.location.search).toContain('q=beach')
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
@@ -539,16 +573,41 @@ describe('folder actions', () => {
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes('/neighbors?') && String(url).includes('recursive=true'))).toBe(true))
   })
 
-  it('asks before rescanning when refreshing a library collection', async () => {
+  it('rescans a folder and everything inside it from its menu, only after confirmation', async () => {
     const fetch = folderApi()
     renderFolder()
+    const posted = () => fetch.mock.calls.filter(([url, init]) => String(url).endsWith('/scans') && (init as RequestInit | undefined)?.method === 'POST')
+    // Refresh collection only reloads what is shown; it never starts a scan.
     await userEvent.click(await screen.findByRole('button', { name: 'Folder actions for Trips' }))
     await userEvent.click(screen.getByRole('button', { name: 'Refresh collection' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Background tasks' })
-    expect(dialog).toHaveTextContent('Start a rescan now?')
-    expect(fetch.mock.calls.some(([url, init]) => String(url).endsWith('/scans') && (init as RequestInit | undefined)?.method === 'POST')).toBe(false)
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Not now' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(posted()).toHaveLength(0)
+    await userEvent.click(await screen.findByRole('button', { name: 'Folder actions for Trips' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Rescan folder' }))
+    const dialog = screen.getByRole('dialog', { name: 'Rescan folder' })
+    expect(dialog).toHaveTextContent('every folder inside it')
+    expect(posted()).toHaveLength(0)
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Metadata during indexing' }), 'none')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Start rescan' }))
+    await waitFor(() => expect(posted()).toHaveLength(1))
+    expect(posted()[0][0]).toBe('/api/folders/2/scans')
+    expect(JSON.parse(String((posted()[0][1] as RequestInit).body))).toEqual({ metadataMode: 'none' })
+    expect(await within(dialog).findByRole('status')).toHaveTextContent('Rescan queued')
+  })
+
+  it('orders folders by their date for date sorts and by name for every other sort', async () => {
+    const fetch = folderApi()
+    const folderSorts = () => fetch.mock.calls.map(([url]) => String(url)).filter(url => url.startsWith('/api/folders?')).map(url => new URLSearchParams(url.split('?')[1]).get('sort'))
+    renderFolder()
+    await screen.findByRole('button', { name: 'Folder actions for Trips' })
+    // The default media sort is by date modified, so folders follow their own modified time.
+    expect(folderSorts().at(-1)).toBe('modified')
+    for (const [sort, expected] of [['name', 'name'], ['size', 'name'], ['captured', 'modified']]) {
+      window.history.replaceState(null, '', `/?libraryId=1&folderId=2&sort=${sort}`)
+      cleanup()
+      render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
+      await screen.findByRole('button', { name: 'Folder actions for Trips' })
+      expect(folderSorts().at(-1)).toBe(expected)
+    }
   })
 
   it('shows folder information without library scan status', async () => {

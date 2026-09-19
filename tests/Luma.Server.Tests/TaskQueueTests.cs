@@ -41,6 +41,23 @@ public sealed class TaskQueueTests
     }
 
     [Fact]
+    public async Task An_empty_or_fully_cleared_queue_lists_without_error()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await using var host = Host(f);
+        using var client = host.CreateClient();
+        // Clearing leaves nothing for SQLite to infer computed column types from.
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/api/tasks/clear-finished", null)).StatusCode);
+        var response = await client.GetAsync("/api/tasks");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty((await response.Content.ReadFromJsonAsync<BackgroundTask[]>())!);
+        await using (var db = await f.Database.OpenAsync(default))
+            await db.ExecuteAsync("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt) VALUES('xmp','queued','{}','2099')");
+        // A first row whose scope is NULL must map as well.
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/tasks")).StatusCode);
+    }
+
+    [Fact]
     public async Task Active_tasks_cannot_be_cleared()
     {
         await using var f = await PipelineFixture.CreateAsync();

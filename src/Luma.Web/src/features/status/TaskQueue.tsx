@@ -1,6 +1,6 @@
 import { useQuery, useIsMutating, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { QuietButton } from '../../components/ui/Controls'
-import { errorMessage, request } from '../browse/api'
+import { errorMessage, request, type IndexingStatus } from '../browse/api'
 import type { components } from '../../lib/api/generated'
 
 type Task = components['schemas']['BackgroundTask']
@@ -35,13 +35,15 @@ export function TaskQueue() {
   const starting = useIsMutating({ predicate: mutation => mutation.options.mutationKey?.[0] === 'background-task' })
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: ({ signal }) => request<Task[]>('/api/tasks', signal), refetchInterval: query => starting || query.state.data?.some(isActive) ? 2000 : 10000 })
   const clear = useMutation({ mutationFn: () => request('/api/tasks/clear-finished', undefined, 'POST'), onSuccess: () => client.invalidateQueries({ queryKey: ['tasks'] }) })
+  const indexing = useQuery({ queryKey: ['indexing'], queryFn: ({ signal }) => request<IndexingStatus>('/api/indexing', signal), refetchInterval: 10000 })
   const finished = tasks.data?.filter(task => !isActive(task)).length ?? 0
   const running = (tasks.data?.length ?? 0) - finished
   return <section aria-label="Task queue" className="space-y-3">
     <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-canvas py-2">
-      <p className="text-sm font-semibold">Background tasks{running > 0 && <span className="font-normal text-muted"> · {running} active</span>}</p>
+      <p className="text-sm font-semibold">Jobs{running > 0 && <span className="font-normal text-muted"> · {running} active</span>}</p>
       <QuietButton disabled={!finished || clear.isPending} onClick={() => clear.mutate()}>{clear.isPending ? 'Clearing…' : 'Clear finished'}</QuietButton>
     </div>
+    {indexing.data?.cachePressure && <p role="status" className="text-sm text-danger">Preview storage is full, so preview preparation is paused.</p>}
     {clear.isError && <p role="alert" className="text-sm text-danger">{errorMessage(clear.error)}</p>}
     {!!starting && <p role="status" className="text-sm text-muted">Starting operation…</p>}
     {tasks.isPending && <p role="status" className="text-sm text-muted">Loading tasks…</p>}

@@ -59,10 +59,10 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                     await Task.Delay(TimeSpan.FromSeconds(5), ct);
                     await FinishFailedAsync(scan.Id, "interrupted", "database_busy", ct);
                     await db.ExecuteAsync(new CommandDefinition("""
-                        INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt,MetadataMode)
-                        SELECT @LibraryId,@FolderId,'queued',@Force,@RetryFailures,@now,@MetadataMode
+                        INSERT INTO Scans(LibraryId,FolderId,Recursive,State,Force,RetryFailures,StartedAt,MetadataMode)
+                        SELECT @LibraryId,@FolderId,@Recursive,'queued',@Force,@RetryFailures,@now,@MetadataMode
                         WHERE NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))
-                        """, new { scan.LibraryId, scan.FolderId, scan.Force, scan.RetryFailures, scan.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
+                        """, new { scan.LibraryId, scan.FolderId, scan.Recursive, scan.Force, scan.RetryFailures, scan.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
                 }
                 catch (Exception error)
                 {
@@ -113,7 +113,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 // Access errors are not ignored: any traversal error prohibits missing reconciliation.
                 var directoryPath = relativeFolder.Length == 0 ? root.Path : SourcePaths.Resolve(root, relativeFolder);
                 await channel.Writer.WriteAsync(new DiscoveredEntry(relativeFolder, true, 0, ""), linked.Token);
-                foreach (var entry in SourceTraversal.Enumerate(directoryPath, recursive: scan.FolderId is null, skipDirectory: hidden.Count == 0 ? null
+                foreach (var entry in SourceTraversal.Enumerate(directoryPath, recursive: scan.FolderId is null || scan.Recursive, skipDirectory: hidden.Count == 0 ? null
                     : path => hidden.Contains(root.Key(Path.GetRelativePath(root.Path, path).Replace(Path.DirectorySeparatorChar, '/')))))
                 {
                     linked.Token.ThrowIfCancellationRequested();
@@ -160,13 +160,13 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             if (owned == 1)
                 await db.ExecuteAsync(new CommandDefinition("""
                     UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND LastSeenScanId<>@Id
-                      AND (@FolderId IS NULL OR FolderId=@FolderId)
+                      AND (@FolderId IS NULL OR FolderId=@FolderId OR @Recursive AND FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId))
                       AND FolderId NOT IN (SELECT a.DescendantId FROM Folders h JOIN FolderAncestry a ON a.AncestorId=h.Id WHERE h.LibraryId=@LibraryId AND h.Hidden=1);
                     UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
                       (SELECT Id FROM Media WHERE LibraryId=@LibraryId AND Availability='missing');
                     UPDATE Libraries SET Availability='available' WHERE Id=@LibraryId;
                     UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now')
-                      WHERE LibraryId=@LibraryId AND ((@FolderId IS NULL AND LastSeenScanId=@Id) OR Id=@FolderId);
+                      WHERE LibraryId=@LibraryId AND (((@FolderId IS NULL OR @Recursive) AND LastSeenScanId=@Id) OR Id=@FolderId);
                     """, scan, tx, cancellationToken: ct));
             tx.Commit();
         }
@@ -236,7 +236,14 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
     private static async Task PersistEntryAsync(SqliteConnection db, SqliteTransaction tx, Dictionary<string, long> folders, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct, bool priority = false)
     {
         if (entry.Directory)
-            await EnsureFolderAsync(db, tx, root, entry.RelativePath, scan.Id, ct, folders);
+        {
+            var folderId = await EnsureFolderAsync(db, tx, root, entry.RelativePath, scan.Id, ct, folders);
+            // The traversal already listed the directory's time, so folders can sort by date
+            // without browsing ever touching disk. The scan's starting folder carries none.
+            if (entry.ModifiedAt.Length > 0)
+                await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET ModifiedTicks=@ticks WHERE Id=@folderId AND ModifiedTicks<>@ticks",
+                    new { folderId, ticks = Media.SearchText.Ticks(entry.ModifiedAt) }, tx, cancellationToken: ct));
+        }
         else if (!MediaFormats.TryGet(entry.RelativePath, out var format))
             await db.ExecuteAsync(new CommandDefinition("UPDATE Scans SET Skipped=Skipped+1 WHERE Id=@Id", scan, tx, cancellationToken: ct));
         else

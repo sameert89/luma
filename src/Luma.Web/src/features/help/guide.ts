@@ -1,7 +1,7 @@
 import {
   Bookmark, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Clapperboard, Download, EllipsisVertical, Eye, EyeOff, FileInput, Film,
-  FolderOpen, Heart, HeartCrack, ImageMinus, Images, Info, ListVideo, Maximize, Minimize, Pause, PictureInPicture2, Play, Plus, Presentation, RefreshCw, Search, Settings,
-  Settings2, Shuffle, SlidersHorizontal, Square, Tag, Timer, Volume2, VolumeX, X, type LucideIcon,
+  FileImage, FolderOpen, Heart, HeartCrack, ImageMinus, Images, Info, ListVideo, Maximize, Minimize, Pause, PictureInPicture2, Play, Plus, Presentation, RefreshCw, Search, Settings,
+  Settings2, Shuffle, SlidersHorizontal, Tag, Timer, Volume2, VolumeX, X, type LucideIcon,
 } from 'lucide-react'
 
 /**
@@ -27,14 +27,14 @@ export const guideSections: GuideSection[] = [
       ] },
       { title: 'Indexing', entries: [
         { label: 'Start indexing', name: 'Initial indexing', where: 'Opens when you choose a library that has not been indexed yet', what: 'Starts the first scan. Choose Index only, Index + embedded metadata, or Index + embedded metadata + XMP to decide which tags are read while indexing.' },
-        { icons: [RefreshCw], name: 'Rescan / View scan progress', where: 'In the header of an open library', what: 'Opens Background tasks with the queue and a Start rescan option. The icon spins while any task runs.' },
-        { label: 'Indexing status', name: 'Indexing status', where: 'Beside Help on Your libraries', what: 'Opens files found, previews prepared, items waiting or failed, and scan controls for each indexed library.' },
+        { icons: [RefreshCw], name: 'Background jobs', where: 'Beside Help on Your libraries, and in the header of an open library', what: 'Opens the list of indexing, import and export jobs. The icon spins while any job runs.' },
       ] },
       { title: 'Folder and gallery menus', entries: [
-        { icons: [EllipsisVertical], name: 'Folder actions', where: 'On every folder card, and in the header of the open folder', what: 'Opens the folder menu. In the header it also holds the gallery actions below.' },
+        { icons: [EllipsisVertical], name: 'Folder actions', where: 'On every folder and library card, and in the header of the open folder', what: 'Opens the folder menu. A library is its top folder, so its card has the same menu. In the header it also holds the gallery actions below.' },
+        { icons: [RefreshCw], name: 'Rescan folder / Rescan library', where: 'Folder actions menu', what: 'Checks the folder and every folder inside it (or the whole library, from its card) for new, changed or removed files. Choose whether to read embedded metadata or XMP too, then Start rescan; progress shows in Background jobs.' },
         { icons: [EllipsisVertical], name: 'Gallery actions', where: 'Header of search results and other views outside a folder', what: 'Slideshow, selection, refresh and filter actions for the current results.' },
         { label: 'Start slideshow', name: 'Start slideshow', where: 'Folder or gallery actions menu', what: 'Opens the first result in the viewer and advances through the rest automatically. A folder that only contains subfolders plays everything inside them.' },
-        { label: 'Refresh collection', name: 'Refresh collection', where: 'Folder or gallery actions menu', what: 'Inside a library, asks before rescanning it for new, changed or removed files, which can take a long time. Elsewhere it reloads the results from Luma’s index.' },
+        { label: 'Refresh collection', name: 'Refresh collection', where: 'Folder or gallery actions menu', what: 'Reloads what is shown from Luma’s index. It never rescans; use Rescan folder for that.' },
         { icons: [Info], name: 'Folder information', where: 'Folder actions menu', what: 'Shows the folder’s name, library and location.' },
         { icons: [FileInput], name: 'Import folder metadata', where: 'Folder actions menu', what: 'Merges EXIF/XMP tags from every indexed file directly in this folder, regardless of the current filters. Originals are never changed.' },
         { icons: [ImageMinus], name: 'Reset album cover', where: 'Folder actions menu, when you picked the folder’s cover yourself', what: 'Forgets your cover choice so the folder goes back to an automatic cover in your Settings style. No photos change.' },
@@ -60,8 +60,8 @@ export const guideSections: GuideSection[] = [
       ] },
     ],
     notes: [
-      'Folders are always sorted by name and follow the selected direction. Date, type, size and shuffle sorts apply to media only; they never reorder folders.',
-      'Refresh collection inside a library is a rescan and always asks first. In search results and other views outside a library it only reloads what Luma has already indexed.',
+      'Folders follow the selected direction. Date sorts order folders by when each folder last changed on disk; every other sort orders them by name, with numbers in order (Day 2 before Day 10) and letter case and accents ignored.',
+      'Refresh collection only reloads what Luma has already indexed. Rescan folder (or Rescan library) reads the files on disk again and always asks first.',
       'Hiding the active-filter row only hides it. Use Clear all filters to actually widen the results.',
     ],
   },
@@ -70,11 +70,12 @@ export const guideSections: GuideSection[] = [
     groups: [
       { title: 'Search', entries: [
         { icons: [Search], name: 'Search', where: 'Header search field, and Search in the bottom bar', what: 'Searches file names, folders and tags within the current filters. Inside a folder it covers that folder and its subfolders.' },
+        { icons: [Tag, FolderOpen, FileImage], name: 'Search suggestions', where: 'Below the search field as you type', what: 'Completes tags, folders and file names from your whole library, each marked Tag, Folder or File with where it lives. A tag shows everything with exactly that tag; a folder or file opens it. Press Enter without choosing to search the typed text.' },
         { icons: [Search, X], name: 'Open search / Close search', where: 'Header on phones', what: 'Reveals or tucks away the search field.' },
         { icons: [X], name: 'Clear search', where: 'Header, when the search has text', what: 'Clears the search and returns to the folder you searched from, or to the empty Search page.' },
       ] },
       { title: 'Tags', entries: [
-        { icons: [Plus], name: 'Add tag', where: 'Tags in Media details, the Reels Tags sheet and bulk Edit tags', what: 'Type a name (existing tags are suggested) and press Enter. A new name creates the tag.' },
+        { icons: [Plus], name: 'Find or create a tag', where: 'Tags in Media details, the Reels Tags sheet and bulk Edit tags', what: 'Matching tags list below the field as you type; tap one to add it (tags already on the item show Added). Create “…” adds a new tag, as does pressing Enter.' },
         { label: 'beach ×', name: 'Remove tag', where: 'Tag list for the open item', what: 'Removes that tag from this item only.' },
         { label: 'Apply to 3 items', name: 'Bulk tag operation', where: 'Edit tags for a selection', what: 'Choose Add a tag or Remove a tag, then apply it to every selected item.' },
       ] },
@@ -166,18 +167,16 @@ export const guideSections: GuideSection[] = [
     ],
   },
   {
-    id: 'tasks', title: 'Background tasks', summary: 'Scans, metadata imports and exports',
+    id: 'tasks', title: 'Background jobs', summary: 'Scans, metadata imports and exports',
     groups: [
       { title: 'Where to find the queue', entries: [
-        { icons: [RefreshCw], name: 'Rescan / View scan progress', where: 'Library cards and the header of an open library; Refresh collection opens the same panel', what: 'Opens the Background tasks panel. The queue is at the top; below it you can start a rescan.' },
+        { icons: [RefreshCw], name: 'Background jobs', where: 'Beside Help on Your libraries, and in the header of an open library', what: 'Opens the jobs list. Start a rescan from a folder or library card’s Folder actions menu.' },
       ] },
       { title: 'Queue actions', entries: [
         { label: 'Cancel', name: 'Cancel / Cancel scan', where: 'On a queued or running task', what: 'Stops the task. Work already finished, such as prepared previews and imported tags, is kept.' },
         { label: 'Queue again', name: 'Queue again', where: 'On a cancelled, failed or interrupted task', what: 'Runs the task again as a new task, which replaces the stopped one in the list.' },
         { label: 'Clear', name: 'Clear', where: 'On any task that is no longer active', what: 'Removes that one entry from the list.' },
         { label: 'Clear finished', name: 'Clear finished', where: 'Top of the queue', what: 'Removes every completed, cancelled, failed and interrupted entry and leaves active ones in place.' },
-        { icons: [Square], name: 'Cancel scan', where: 'Indexing status → Scan controls on a library card, while a scan runs', what: 'Stops the current scan. Start another scan to pick up remaining work.' },
-        { label: 'Start rescan', name: 'Start rescan / Not now', where: 'Background tasks panel, when no scan is running', what: 'Checks every folder for new, changed or removed media. On a large library this can take a long time.' },
       ] },
     ],
     notes: [

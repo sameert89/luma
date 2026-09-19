@@ -148,8 +148,8 @@ test('reels carry the active filters when switching modes', async ({ page }) => 
   await expect(page).toHaveURL(/order=asc/)
 
   await navigation.getByRole('button', { name: 'Search', exact: true }).click()
-  await page.getByRole('textbox', { name: 'Search media' }).fill('photo')
-  await page.getByRole('textbox', { name: 'Search media' }).press('Enter')
+  await page.getByRole('combobox', { name: 'Search media' }).fill('photo')
+  await page.getByRole('combobox', { name: 'Search media' }).press('Enter')
   await expect(page).toHaveURL(/q=photo/)
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 

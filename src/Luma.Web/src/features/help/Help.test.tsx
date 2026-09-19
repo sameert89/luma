@@ -12,7 +12,7 @@ describe('Help guide', () => {
   it('indexes every section and documents each control with a location and behaviour', () => {
     render(<Help onBack={() => {}} />)
     const index = screen.getByRole('navigation', { name: 'Help sections' })
-    for (const title of ['Libraries, folders and gallery', 'Search, tags and Collections', 'Photo and video viewer', 'Reels', 'Background tasks', 'Settings', 'Gestures and keyboard shortcuts'])
+    for (const title of ['Libraries, folders and gallery', 'Search, tags and Collections', 'Photo and video viewer', 'Reels', 'Background jobs', 'Settings', 'Gestures and keyboard shortcuts'])
       expect(within(index).getByRole('link', { name: new RegExp(title) })).toBeVisible()
     for (const entry of guideSections.flatMap(item => item.groups.flatMap(group => group.entries))) {
       expect(entry.where).not.toBe('')
@@ -24,11 +24,11 @@ describe('Help guide', () => {
   it('explains the distinctions users most often confuse', () => {
     render(<Help onBack={() => {}} />)
     const libraries = section('Libraries, folders and gallery')
-    expect(libraries).toHaveTextContent('Folders are always sorted by name and follow the selected direction')
-    expect(libraries).toHaveTextContent('Refresh collection inside a library is a rescan and always asks first')
+    expect(libraries).toHaveTextContent('Date sorts order folders by when each folder last changed on disk')
+    expect(libraries).toHaveTextContent('Rescan folder (or Rescan library) reads the files on disk again and always asks first')
     expect(libraries).toHaveTextContent('Hiding the row does not clear anything')
     expect(section('Reels')).toHaveTextContent('no right-side volume swipe')
-    expect(section('Background tasks')).toHaveTextContent('It does not delete media, scan history or metadata checkpoints')
+    expect(section('Background jobs')).toHaveTextContent('It does not delete media, scan history or metadata checkpoints')
     expect(section('Photo and video viewer')).toHaveTextContent('not a per-person account sync')
     expect(section('Gestures and keyboard shortcuts')).toHaveTextContent('Videos in the normal viewer only')
     expect(section('Settings')).toHaveTextContent('It does not serve random videos')

@@ -95,9 +95,11 @@ public sealed class IndexingSetup(Database database, IndexingOptions options)
             await db.ExecuteAsync(new CommandDefinition("""
                 INSERT INTO Libraries(Id,Name,Path,CaseSensitive) VALUES(@Id,@Name,@Path,@CaseSensitive)
                 ON CONFLICT(Id) DO UPDATE SET Name=excluded.Name, Enabled=1;
-                INSERT INTO Scans(LibraryId,FolderId,State,Force,RetryFailures,StartedAt,MetadataMode)
+                INSERT INTO Scans(LibraryId,FolderId,Recursive,State,Force,RetryFailures,StartedAt,MetadataMode)
                 SELECT @Id,CASE WHEN NOT @ScanOnStartup AND NOT @encoderChanged THEN
-                  (SELECT FolderId FROM Scans WHERE LibraryId=@Id AND State='interrupted' ORDER BY Id DESC LIMIT 1) ELSE NULL END,'queued',
+                  (SELECT FolderId FROM Scans WHERE LibraryId=@Id AND State='interrupted' ORDER BY Id DESC LIMIT 1) ELSE NULL END,
+                  CASE WHEN NOT @ScanOnStartup AND NOT @encoderChanged THEN
+                  COALESCE((SELECT Recursive FROM Scans WHERE LibraryId=@Id AND State='interrupted' ORDER BY Id DESC LIMIT 1),0) ELSE 0 END,'queued',
                   COALESCE((SELECT Force FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),
                   COALESCE((SELECT RetryFailures FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),@now,(SELECT MetadataMode FROM Libraries WHERE Id=@Id) WHERE
                   (@ScanOnStartup OR @encoderChanged OR (SELECT State FROM Scans WHERE LibraryId=@Id ORDER BY Id DESC LIMIT 1)='interrupted')
