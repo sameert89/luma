@@ -17,6 +17,61 @@ var mode=args[0];
 var directory=Path.GetFullPath(args[1]);
 var count=args.Length>2?int.Parse(args[2],CultureInfo.InvariantCulture):1500;
 Directory.CreateDirectory(directory);
+if (mode == "index-benchmark")
+{
+    // End-to-end first-index throughput on real media, through the production queue and workers:
+    // discovery, then thumbnails and embedded keywords running concurrently as they do in Luma.
+    // Usage: index-benchmark <work directory> <ProcessingWorkers 1-4> <media folder (opened read-only)>
+    var media = Path.GetFullPath(args[3]);
+    var run = Path.Combine(directory, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+    var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Luma:DatabasePath"] = Path.Combine(run, "index.db") }).Build();
+    var indexDatabase = new Database(configuration, Host.CreateApplicationBuilder().Environment);
+    await new MigrationRunner(indexDatabase).ApplyAsync(default);
+    var options = new Luma.Server.Features.Indexing.IndexingOptions { ProcessingWorkers = count, CachePath = Path.Combine(run, "cache"),
+        Libraries = [new() { Id = 1, Name = "Benchmark", Path = media }] };
+    options.Validate(run, indexDatabase.Path);
+    await new Luma.Server.Features.Indexing.IndexingSetup(indexDatabase, options).InitializeAsync(default);
+    await using var connection = await indexDatabase.OpenAsync(default);
+    var clock = Stopwatch.StartNew();
+    var scan = await connection.QuerySingleAsync<Luma.Server.Features.Indexing.ScanRow>(
+        "INSERT INTO Scans(LibraryId,State,StartedAt,MetadataMode) VALUES(1,'running',@now,'embedded') RETURNING *", new { now = DateTimeOffset.UtcNow.ToString("O") });
+    await new Luma.Server.Features.Indexing.ScanWorker(indexDatabase, options, Microsoft.Extensions.Logging.Abstractions.NullLogger<Luma.Server.Features.Indexing.ScanWorker>.Instance)
+        .ScanAsync(scan, options.Libraries[0], default);
+    var discovery = clock.Elapsed.TotalSeconds;
+    using var processor = new Luma.Server.MediaProcessing.MediaProcessor(options);
+    var cache = new Luma.Server.MediaProcessing.GeneratedCache(indexDatabase, options);
+    using var processing = new Luma.Server.MediaProcessing.ProcessingWorker(indexDatabase, options, processor, cache,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<Luma.Server.MediaProcessing.ProcessingWorker>.Instance);
+    using var keywords = new MetadataJobs(indexDatabase, options, null, processor);
+    await processing.StartAsync(default);
+    await keywords.StartAsync(default);
+    double? thumbnails = null, tags = null;
+    while (thumbnails is null || tags is null)
+    {
+        await Task.Delay(250);
+        if (thumbnails is null && await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingJobs WHERE State IN ('pending','running')") == 0) thumbnails = clock.Elapsed.TotalSeconds;
+        if (tags is null && await connection.ExecuteScalarAsync<bool>("SELECT EXISTS(SELECT 1 FROM MetadataJobs) AND NOT EXISTS(SELECT 1 FROM MetadataJobs WHERE State IN ('queued','running'))")) tags = clock.Elapsed.TotalSeconds;
+        var left = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingJobs WHERE State IN ('pending','running')");
+        var read = await connection.ExecuteScalarAsync<int>("SELECT COALESCE(SUM(Processed),0) FROM MetadataJobs");
+        Console.Write($"\r{clock.Elapsed.TotalSeconds,7:F0}s  jobs left {left,7}  keywords read {read,7}");
+    }
+    Console.WriteLine();
+    await processing.StopAsync(default);
+    await keywords.StopAsync(default);
+    var photos = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Media WHERE MediaType='image'");
+    var videos = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Media WHERE MediaType='video'");
+    var cacheBytes = await connection.ExecuteScalarAsync<long>("SELECT SizeBytes FROM CacheAccounting");
+    var report = JsonSerializer.Serialize(new { media, processingWorkers = options.ProcessingWorkers, imageWorkers = options.ImageWorkers, photos, videos,
+        failed = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingJobs WHERE State='failed'"),
+        tagged = await connection.ExecuteScalarAsync<int>("SELECT COUNT(DISTINCT MediaId) FROM MediaTags"),
+        discoverySeconds = discovery, thumbnailsDoneSeconds = thumbnails, keywordsDoneSeconds = tags,
+        mediaPerSecond = (photos + videos) / (thumbnails - discovery), cacheBytes, cacheBytesPerItem = cacheBytes / Math.Max(1, photos + videos),
+        environment = System.Runtime.InteropServices.RuntimeInformation.OSDescription, processors = Environment.ProcessorCount },
+        new JsonSerializerOptions { WriteIndented = true });
+    await File.WriteAllTextAsync(Path.Combine(run, "results.json"), report);
+    Console.WriteLine(report);
+    return;
+}
 if (mode == "decode-benchmark")
 {
     var source = Path.Combine(directory, "source.jpg");

@@ -23,7 +23,7 @@ Measure release builds on the hardware above over wired LAN. Datasets: represent
 | Server resident memory, browse / indexing peak | 256 / 768 MiB | 320 / 896 MiB |
 | Idle CPU / idle disk writes | <1% of one core / <1 MiB per minute | same |
 
-During concurrent browse/index: background work averages at most two CPU cores (200% Linux process CPU), server plus child-process RSS at most 1 GiB, and average disk throughput at most 40 MiB/s over 60 s. Default limits are in INDEXING.md; tune downward if latency exceeds target. No unbounded queues, tasks, SQL result materialization, or request-time media processing.
+During concurrent browse/index: background decoders run below normal OS priority and may use every otherwise idle core (up to 400% Linux process CPU on the 4-core target), provided browse latency stays within the concurrent-indexing targets above; server plus child-process RSS at most 1 GiB, and average disk throughput at most 40 MiB/s over 60 s. Default limits are in INDEXING.md; tune downward if latency exceeds target. No unbounded queues, tasks, SQL result materialization, or request-time media processing.
 
 Client test on a 4 GiB Android device and desktop Chromium, 60 Hz: first visible gallery within 1.5 s warm LAN, frame time p95 ≤20 ms, fewer than 5% dropped frames, no routine input stalls >100 ms. After 30 minutes/10,000 traversed items, JS heap ≤150 MiB, tab memory ≤350 MiB, ≤300 media cells mounted, ≤600 retained summaries, and at most three active/nearby full-size media. Evict old pages while retaining ID/cursor/scroll anchors. Reels preload at most one preceding and one following item; only the active video plays.
 

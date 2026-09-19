@@ -31,3 +31,11 @@ export const mediaPage = (filters: Filters, cursor: string | undefined, signal?:
 export const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 // GIFs are indexed as images, but only their original animates.
 export const isGif = (item: Pick<Media, 'extension'>) => item.extension?.toLowerCase() === '.gif'
+// Indexing prepares thumbnails only; an image's large preview is prepared when it is first opened.
+// Until then the viewer shows the original, which browsers decode directly for these formats.
+const browserImages = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'])
+export const originalStandsIn = (item: Pick<Media, 'mediaType' | 'extension' | 'preview'>) =>
+  item.mediaType === 'image' && item.preview.status !== 'ready' && browserImages.has(item.extension?.toLowerCase() ?? '')
+/** The URL the viewer shows for a photo, or null while a preview it cannot do without is prepared. */
+export const imageUrl = (item: Pick<Media, 'id' | 'mediaType' | 'extension' | 'preview'>) =>
+  isGif(item) || originalStandsIn(item) ? `/api/media/${item.id}/original` : item.preview.status === 'ready' ? item.preview.url : null

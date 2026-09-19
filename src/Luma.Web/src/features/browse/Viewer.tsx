@@ -10,7 +10,7 @@ import { MetadataExchange } from '../tags/MetadataExchange'
 import { TagEditor } from '../tags/TagEditor'
 import { usePreviewPriority } from './usePreviewPriority'
 import { useIdle } from './useIdle'
-import { errorMessage, isGif, queryString, request, type Filters, type Media, type Neighbors, type Library } from './api'
+import { errorMessage, imageUrl, isGif, queryString, request, type Filters, type Media, type Neighbors, type Library } from './api'
 
 const slideSecondsKey = 'luma-slideshow-seconds'
 const slideChoices = [3, 5, 10, 20]
@@ -37,7 +37,7 @@ export function Viewer({ active, filters, startSlideshow = false, onChange, onCl
   const neighbors = useQuery({ queryKey: ['neighbors', filters, active.id], queryFn: ({ signal }) => request<Neighbors>(`/api/media/${active.id}/neighbors?${queryString(filters)}`, signal), gcTime: 0 })
   const previous = neighbors.data?.previous
   const next = neighbors.data?.next
-  usePreviewPriority([item, next, previous])
+  usePreviewPriority([item, next, previous], true)
   const motion = item.mediaType === 'video' || isGif(item)
   useEffect(() => { try { localStorage.setItem(slideSecondsKey, String(slideSeconds)) } catch { /* the choice still applies to this visit */ } }, [slideSeconds])
   // Photos and GIFs advance on a timer; videos advance when they end (see onEnded).
@@ -48,7 +48,7 @@ export function Viewer({ active, filters, startSlideshow = false, onChange, onCl
     return () => window.clearTimeout(timer)
   }, [slideshow, detailsOpen, item.id, item.mediaType, next, neighbors.isSuccess, slideSeconds, navigate])
   // Decode the next slide ahead of time so each advance is instant.
-  const nextSlide = slideshow && next && next.mediaType !== 'video' ? isGif(next) ? `/api/media/${next.id}/original` : next.preview.status === 'ready' ? next.preview.url : null : null
+  const nextSlide = slideshow && next && next.mediaType !== 'video' ? imageUrl(next) : null
   useEffect(() => {
     if (!nextSlide) return
     const preload = new Image()

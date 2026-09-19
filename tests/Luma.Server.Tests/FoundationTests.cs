@@ -19,12 +19,12 @@ public sealed class FoundationTests
         await using var factory = new LumaFactory();
         using var client = factory.CreateClient();
         var status = await client.GetFromJsonAsync<StatusResponse>("/api/status");
-        Assert.Equal(new StatusResponse("ready", 15), status);
+        Assert.Equal(new StatusResponse("ready", 16), status);
         await using var connection = await factory.Services.GetRequiredService<Database>().OpenAsync(default);
         var identity = await connection.ExecuteScalarAsync<string>("SELECT Value FROM ApplicationState WHERE Key='instanceId'");
         await factory.Services.GetRequiredService<MigrationRunner>().ApplyAsync(default);
         Assert.Equal(identity, await connection.ExecuteScalarAsync<string>("SELECT Value FROM ApplicationState WHERE Key='instanceId'"));
-        Assert.Equal(15, await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM SchemaMigrations"));
+        Assert.Equal(16, await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM SchemaMigrations"));
         Assert.Equal("wal", await connection.ExecuteScalarAsync<string>("PRAGMA journal_mode"));
         Assert.Equal(1, await connection.ExecuteScalarAsync<int>("PRAGMA foreign_keys"));
     }
@@ -93,7 +93,7 @@ public sealed class FoundationTests
         await cancellation.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             factory.Services.GetRequiredService<MigrationRunner>().ApplyAsync(cancellation.Token));
-        Assert.Equal(new StatusResponse("ready", 15), await client.GetFromJsonAsync<StatusResponse>("/api/status"));
+        Assert.Equal(new StatusResponse("ready", 16), await client.GetFromJsonAsync<StatusResponse>("/api/status"));
     }
 }
 

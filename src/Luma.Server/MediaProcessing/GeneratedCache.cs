@@ -73,9 +73,12 @@ public sealed class GeneratedCache(Database database, IndexingOptions options)
             await db.ExecuteAsync(new CommandDefinition("""
                 UPDATE Media SET Width=@Width,Height=@Height,DurationMs=@DurationMs,CapturedAt=@CapturedAt,
                   EffectiveDate=COALESCE(@CapturedAt,ModifiedAt),ProcessingStatus='ready' WHERE Id=@MediaId AND SourceRevision=@SourceRevision;
-                UPDATE ProcessingJobs SET State='ready',Claim=NULL,LeaseUntil=NULL,FailureCode=NULL
+                UPDATE ProcessingJobs SET State=CASE WHEN WantPreview=1 AND NOT @previewed THEN 'pending' ELSE 'ready' END,
+                  Claim=NULL,LeaseUntil=NULL,FailureCode=NULL
                   WHERE MediaId=@MediaId AND SourceRevision=@SourceRevision AND EncoderVersion=@EncoderVersion AND Claim=@Claim;
-                """, new { job.MediaId, job.SourceRevision, job.EncoderVersion, job.Claim, metadata.Width, metadata.Height, metadata.DurationMs, metadata.CapturedAt }, tx, cancellationToken: ct));
+                """, new { job.MediaId, job.SourceRevision, job.EncoderVersion, job.Claim, metadata.Width, metadata.Height, metadata.DurationMs, metadata.CapturedAt,
+                    // A preview requested while a thumbnail-only job was running stays queued (at its priority).
+                    previewed = variants.Any(x => x.Variant == "preview") }, tx, cancellationToken: ct));
             tx.Commit();
             return true;
         }
@@ -108,14 +111,18 @@ public sealed class GeneratedCache(Database database, IndexingOptions options)
                         await db.ExecuteAsync(new CommandDefinition("DELETE FROM CacheEntries WHERE rowid=@RowId", entry, cancellationToken: ct));
                         continue;
                     }
-                    if (entry.State != "ready") continue; // Evicted previews need explicit demand, not periodic regeneration.
-                    var valid = false;
-                    try
+                    if (entry.State != "ready")
                     {
-                        await using var stream = File.OpenRead(path);
-                        valid = stream.Length == entry.SizeBytes && Convert.ToHexString(await SHA256.HashDataAsync(stream, ct)) == entry.ContentHash;
+                        // Evicted previews need explicit demand, not periodic regeneration. Remove any file left
+                        // behind (eviction by migration marks rows only), unless it was regenerated meanwhile.
+                        if (await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM CacheEntries WHERE rowid=@RowId", entry, cancellationToken: ct)) is not "ready")
+                            File.Delete(path);
+                        continue;
                     }
-                    catch (IOException) { }
+                    // A length check catches missing and truncated files. Hashing every cached byte on each
+                    // pass read the whole cache back from disk; the hash still serves as the ETag.
+                    var file = new FileInfo(path);
+                    var valid = file.Exists && file.Length == entry.SizeBytes;
                     if (!valid)
                     {
                         File.Delete(path);
@@ -155,7 +162,7 @@ public sealed class GeneratedCache(Database database, IndexingOptions options)
         }
     }
 
-    private async Task EvictAsync(CancellationToken ct)
+    public async Task EvictAsync(CancellationToken ct)
     {
         await gate.WaitAsync(ct);
         try

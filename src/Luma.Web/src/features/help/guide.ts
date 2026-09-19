@@ -1,6 +1,6 @@
 import {
   Bookmark, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Clapperboard, Download, EllipsisVertical, Eye, EyeOff, FileInput, Film,
-  FolderOpen, Heart, HeartCrack, Images, Info, Maximize, Minimize, Pause, PictureInPicture2, Play, Plus, Presentation, RefreshCw, Search, Settings,
+  FolderOpen, Heart, HeartCrack, ImageMinus, Images, Info, Maximize, Minimize, Pause, PictureInPicture2, Play, Plus, Presentation, RefreshCw, Search, Settings,
   Settings2, Shuffle, SlidersHorizontal, Square, Tag, Timer, Volume2, VolumeX, X, type LucideIcon,
 } from 'lucide-react'
 
@@ -37,6 +37,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Refresh collection', name: 'Refresh collection', where: 'Folder or gallery actions menu', what: 'Inside a library, asks before rescanning it for new, changed or removed files, which can take a long time. Elsewhere it reloads the results from Luma’s index.' },
         { icons: [Info], name: 'Folder information', where: 'Folder actions menu', what: 'Shows the folder’s name, library and location.' },
         { icons: [FileInput], name: 'Import folder metadata', where: 'Folder actions menu', what: 'Merges EXIF/XMP tags from every indexed file directly in this folder, regardless of the current filters. Originals are never changed.' },
+        { icons: [ImageMinus], name: 'Reset album cover', where: 'Folder actions menu, when you picked the folder’s cover yourself', what: 'Forgets your cover choice so the folder goes back to an automatic cover in your Settings style. No photos change.' },
         { icons: [EyeOff], name: 'Hide folder', where: 'Folder actions menu, for folders inside a library (not the library itself)', what: 'Leaves the folder and everything in it out of browsing, search, Reels, slideshows and indexing. Nothing is deleted; show it again from Settings.' },
         { label: 'Use as folder cover', name: 'Use as folder cover / Use as library cover', where: 'Media details in the viewer', what: 'Makes the open item the cover art for its folder or library.' },
       ] },
@@ -184,11 +185,12 @@ export const guideSections: GuideSection[] = [
     ],
   },
   {
-    id: 'settings', title: 'Settings', summary: 'Theme, random media links, exports and hidden folders',
+    id: 'settings', title: 'Settings', summary: 'Theme, album covers, random media links, exports and hidden folders',
     groups: [
       { title: 'Settings sections', entries: [
         { icons: [Settings], name: 'Settings', where: 'Bottom bar or side navigation', what: 'Opens Settings. Your current filters stay in place for when you return.' },
         { label: 'Theme & appearance', name: 'Theme & appearance', where: 'Settings', what: 'Chooses Luma’s colours on this device.' },
+        { label: 'Album covers', name: 'Album covers', where: 'Settings', what: 'Smart covers show a mosaic for albums with three or more photos and fit single photos to the card; Cropped covers fill the card with one photo. Covers you picked yourself keep their photo either way.' },
         { icons: [Shuffle], name: 'Random media URL', where: 'Settings', what: 'Builds a reusable link that returns a random cached photo or GIF preview matching your current browsing filters. It does not serve random videos.' },
         { label: 'Export XMP', name: 'Export XMP / Export disliked paths', where: 'Settings → Metadata exchange', what: 'Prepares downloads of your tags as XMP, or a list of disliked file paths. Download export appears when ready.' },
         { icons: [Eye], name: 'Show', where: 'Settings → Hidden folders', what: 'Brings a hidden folder back into browsing and indexing.' },

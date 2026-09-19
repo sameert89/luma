@@ -16,6 +16,13 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
         if(request.Ids.Count>200 || ids.Length!=request.Ids.Count) throw ApiRequestException.Invalid("Visible media priority accepts 1 to 200 positive media IDs.");
         if(ids.Length==0) throw ApiRequestException.Invalid("Visible media priority accepts 1 to 200 positive media IDs.");
         await using var db=await database.OpenAsync(ct);
+        await PrioritizeAsync(db,ids,request.Previews,ct);
+    }
+
+    // Previews: also prepare the large image preview, which indexing leaves until someone opens the image.
+    // Regenerate: the recorded preview failed to serve, so replace it even though its row says ready.
+    internal static async Task PrioritizeAsync(SqliteConnection db,IReadOnlyList<long> ids,bool previews,CancellationToken ct,bool regenerate=false)
+    {
         // The queue orders by NextAttemptAt: stamping each request position separately makes
         // preparation follow the order the caller listed, instead of falling back to media ID.
         // Newer visible requests precede older requests, so opening a viewer can jump ahead of gallery work.
@@ -29,11 +36,11 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
               WHERE s.LibraryId=m.LibraryId AND s.State IN ('running','completed'))
             WHERE MediaId IN (SELECT json_extract(value,'$.id') FROM json_each(@json))
               AND EncoderVersion=@version
-              AND State IN ('pending','waiting')
+              AND (State IN ('pending','waiting') OR (@previews AND State='ready' AND MediaType='image'))
               AND NOT EXISTS (SELECT 1 FROM Scans s WHERE s.Id=ProcessingJobs.ScanId AND s.State IN ('running','completed'))
               AND EXISTS (SELECT 1 FROM Scans s JOIN Media m ON m.Id=ProcessingJobs.MediaId
                 WHERE s.LibraryId=m.LibraryId AND s.State IN ('running','completed'));
-            """,new{json,version=IndexingOptions.EncoderVersion},tx,cancellationToken:ct));
+            """,new{json,previews,version=IndexingOptions.EncoderVersion},tx,cancellationToken:ct));
         await db.ExecuteAsync(new CommandDefinition("""
             UPDATE ProcessingJobs SET State='pending',FailureCode=NULL,Claim=NULL,LeaseUntil=NULL,
               NextAttemptAt=(SELECT json_extract(value,'$.at') FROM json_each(@json)
@@ -45,6 +52,22 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
                 WHERE m.Id=ProcessingJobs.MediaId AND m.SourceRevision=ProcessingJobs.SourceRevision
                   AND m.Availability='present' AND l.Enabled=1 AND s.State IN ('running','completed'));
             """,new{json,version=IndexingOptions.EncoderVersion},tx,cancellationToken:ct));
+        // A running job keeps its claim; it returns to pending on publish because WantPreview is set.
+        if(previews) await db.ExecuteAsync(new CommandDefinition("""
+            UPDATE ProcessingJobs SET WantPreview=1,
+              State=CASE WHEN State='running' THEN 'running' ELSE 'pending' END,
+              Attempts=CASE WHEN State='ready' THEN 0 ELSE Attempts END,
+              NextAttemptAt=(SELECT json_extract(value,'$.at') FROM json_each(@json)
+                WHERE json_extract(value,'$.id')=ProcessingJobs.MediaId)
+            WHERE MediaId IN (SELECT json_extract(value,'$.id') FROM json_each(@json))
+              AND EncoderVersion=@version AND MediaType='image'
+              AND State IN ('pending','ready','running')
+              AND (@regenerate OR NOT EXISTS (SELECT 1 FROM CacheEntries c WHERE c.MediaId=ProcessingJobs.MediaId AND c.SourceRevision=ProcessingJobs.SourceRevision
+                AND c.EncoderVersion=ProcessingJobs.EncoderVersion AND c.Variant='preview' AND c.State='ready'))
+              AND EXISTS (SELECT 1 FROM Media m JOIN Libraries l ON l.Id=m.LibraryId JOIN Scans s ON s.Id=ProcessingJobs.ScanId
+                WHERE m.Id=ProcessingJobs.MediaId AND m.SourceRevision=ProcessingJobs.SourceRevision
+                  AND m.Availability='present' AND l.Enabled=1 AND s.State IN ('running','completed'));
+            """,new{json,regenerate,version=IndexingOptions.EncoderVersion},tx,cancellationToken:ct));
         tx.Commit();
     }
 

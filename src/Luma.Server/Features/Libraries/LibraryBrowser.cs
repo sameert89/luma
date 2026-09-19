@@ -7,8 +7,12 @@ using Luma.Server.Features.Indexing;
 namespace Luma.Server.Features.Libraries;
 
 public sealed record CoverRequest(long? MediaId);
-public sealed record LibrarySummary(long Id,string Name,string Availability,long? RootFolderId,string? CoverUrl);
-public sealed record FolderSummary(long Id,long LibraryId,long? ParentId,string Name,string? CoverUrl);
+// Cover selection (which media represent a folder) is separate from rendering, which the client
+// chooses. CoverOverride: the person picked a cover; while it stays eligible it is the only image
+// returned. Otherwise CoverImages holds up to five automatic candidates, newest first.
+public sealed record CoverImage(string Url,int Width,int Height);
+public sealed record LibrarySummary(long Id,string Name,string Availability,long? RootFolderId,string? CoverUrl,bool CoverOverride = false,IReadOnlyList<CoverImage>? CoverImages = null);
+public sealed record FolderSummary(long Id,long LibraryId,long? ParentId,string Name,string? CoverUrl,bool CoverOverride = false,IReadOnlyList<CoverImage>? CoverImages = null);
 public sealed record FolderVisibilityRequest(bool Hidden);
 public sealed record HiddenFolderSummary(long Id,long LibraryId,string LibraryName,string Path);
 public sealed record FolderPage(FolderSummary Current,IReadOnlyList<FolderSummary> Ancestors,IReadOnlyList<FolderSummary> Items,string? NextCursor,string? PreviousCursor);
@@ -25,15 +29,16 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
         await using var db=await database.OpenAsync(ct);
         var rows=await db.QueryAsync<LibraryRow>(new CommandDefinition($"""
             SELECT l.Id,l.Name,l.Availability,(SELECT Id FROM Folders WHERE LibraryId=l.Id AND PathKey='') RootFolderId,
-            COALESCE((SELECT '/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion
+            (SELECT CoverMediaId IS NOT NULL FROM Folders WHERE LibraryId=l.Id AND PathKey='') CoverOverride,
+            COALESCE((SELECT json_array({CoverJson})
              FROM Folders root JOIN Media m ON m.Id=root.CoverMediaId JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
              WHERE root.LibraryId=l.Id AND root.PathKey='' AND m.LibraryId=l.Id AND m.Availability='present' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder),
-            (SELECT '/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion
+            (SELECT json_group_array(json(Cover)) FROM (SELECT {CoverJson} Cover
              FROM Media m CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
              WHERE m.LibraryId=l.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
-             ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT 1)) CoverUrl FROM Libraries l WHERE Enabled=1 ORDER BY l.Id
+             ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverCandidates}))) CoverJson FROM Libraries l WHERE Enabled=1 ORDER BY l.Id
             """,new { encoder=IndexingOptions.EncoderVersion },cancellationToken:ct));
-        return rows.Select(x=>new LibrarySummary(x.Id,x.Name,x.Availability,x.RootFolderId,x.CoverUrl)).ToArray();
+        return rows.Select(x=>{var images=CoverImages(x.CoverJson);return new LibrarySummary(x.Id,x.Name,x.Availability,x.RootFolderId,images.FirstOrDefault()?.Url,x.CoverOverride,images);}).ToArray();
     }
     public async Task<FolderPage> FoldersAsync(long? libraryId,long? parentId,int? limit,string? cursor,CancellationToken ct,string? sort = null,string? sortOrder = null)
     {
@@ -42,7 +47,7 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
         if(limit is <1 or >200 || libraryId<=0 || parentId<=0 || (libraryId is null && parentId is null)) throw ApiRequestException.Invalid();
         await using var db=await database.OpenAsync(ct);
         var current=await db.QuerySingleOrDefaultAsync<FolderRow>(new CommandDefinition("""
-            SELECT f.*,l.Name LibraryName FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
+            SELECT f.*,f.CoverMediaId IS NOT NULL CoverOverride,l.Name LibraryName FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
             WHERE (@parentId IS NOT NULL AND f.Id=@parentId) OR (@parentId IS NULL AND f.LibraryId=@libraryId AND f.PathKey='')
             """,new{parentId,libraryId},cancellationToken:ct)) ?? throw ApiRequestException.Missing();
         if(libraryId is not null && current.LibraryId!=libraryId) throw ApiRequestException.Invalid();
@@ -57,15 +62,15 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
         var ordering=sort=="name"?$"f.RelativePath COLLATE NOCASE {order},f.Id {order}":$"f.Id {order}";
         string Encode(FolderRow row,bool backward)=>sort=="name"?cursors.Encode(scope,[row.RelativePath],row.Id,backward):cursors.Encode(scope,0,row.Id,backward);
         var rows=(await db.QueryAsync<FolderRow>(new CommandDefinition($"""
-            SELECT f.*,
-            COALESCE((SELECT '/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion
+            SELECT f.*,f.CoverMediaId IS NOT NULL CoverOverride,
+            COALESCE((SELECT json_array({CoverJson})
              FROM Media m JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
              WHERE m.Id=f.CoverMediaId AND m.LibraryId=f.LibraryId AND m.Availability='present' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
                AND EXISTS(SELECT 1 FROM FolderAncestry WHERE AncestorId=f.Id AND DescendantId=m.FolderId)),
-            (SELECT '/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion
+            (SELECT json_group_array(json(Cover)) FROM (SELECT {CoverJson} Cover
              FROM FolderAncestry a CROSS JOIN Media m ON m.FolderId=a.DescendantId AND m.LibraryId=f.LibraryId
              CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
-             WHERE a.AncestorId=f.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT 1)) CoverUrl
+             WHERE a.AncestorId=f.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverCandidates}))) CoverJson
             FROM Folders f WHERE ParentId=@id AND Hidden=0 {seek} ORDER BY {ordering} LIMIT @limit
             """,new{id=current.Id,after=position?.Id,key=position?.Tuple?[0],limit=(limit??100)+1,encoder=IndexingOptions.EncoderVersion},cancellationToken:ct))).ToList();
         var more=rows.Count>(limit??100);if(more)rows.RemoveAt(rows.Count-1);if(backwards)rows.Reverse();
@@ -111,8 +116,17 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
             WHERE f.Hidden=1 AND l.Enabled=1 ORDER BY l.Id,f.RelativePath LIMIT 500
             """,cancellationToken:ct))).ToArray();
     }
-    private static FolderSummary ToSummary(FolderRow row)=>new(row.Id,row.LibraryId,row.ParentId,row.RelativePath==""?row.LibraryName:row.RelativePath.Split('/')[^1],row.CoverUrl);
-    private sealed class FolderRow {public long Id{get;set;}public long LibraryId{get;set;}public long? ParentId{get;set;}public string RelativePath{get;set;}="";public string LibraryName{get;set;}="";public string? CoverUrl{get;set;}}
+    private static FolderSummary ToSummary(FolderRow row)
+    {
+        var images=CoverImages(row.CoverJson);
+        return new(row.Id,row.LibraryId,row.ParentId,row.RelativePath==""?row.LibraryName:row.RelativePath.Split('/')[^1],images.FirstOrDefault()?.Url,row.CoverOverride,images);
+    }
+    // Enough candidates for a five-tile mosaic; the client decides how many it shows.
+    private const int CoverCandidates=5;
+    private const string CoverJson="json_object('url','/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion,'width',c.Width,'height',c.Height)";
+    private static readonly System.Text.Json.JsonSerializerOptions CoverJsonOptions=new(System.Text.Json.JsonSerializerDefaults.Web);
+    private static IReadOnlyList<CoverImage> CoverImages(string? json)=>json is null?[]:System.Text.Json.JsonSerializer.Deserialize<CoverImage[]>(json,CoverJsonOptions)??[];
+    private sealed class FolderRow {public long Id{get;set;}public long LibraryId{get;set;}public long? ParentId{get;set;}public string RelativePath{get;set;}="";public string LibraryName{get;set;}="";public bool CoverOverride{get;set;}public string? CoverJson{get;set;}}
     private sealed record FolderParent(long? ParentId);
-    private sealed class LibraryRow {public long Id{get;set;}public string Name{get;set;}="";public string Availability{get;set;}="";public long? RootFolderId{get;set;}public string? CoverUrl{get;set;}}
+    private sealed class LibraryRow {public long Id{get;set;}public string Name{get;set;}="";public string Availability{get;set;}="";public long? RootFolderId{get;set;}public bool CoverOverride{get;set;}public string? CoverJson{get;set;}}
 }

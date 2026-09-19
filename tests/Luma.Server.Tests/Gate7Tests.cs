@@ -72,6 +72,40 @@ public sealed class Gate7Tests
     }
 
     [Fact]
+    public async Task Cover_candidates_are_automatic_until_overridden_and_reset_returns_to_them()
+    {
+        await using var f=await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path,"album"));
+        for(var i=0;i<6;i++) await f.CreateImageAsync(Path.Combine("album",$"{i}.png"));
+        await f.ScanAsync();await f.ProcessAllAsync();
+        var signer=new CursorSigner(f.Database);await signer.InitializeAsync(default);
+        var browser=new LibraryBrowser(f.Database,signer);
+        await using var db=await f.Database.OpenAsync(default);
+        var album=Assert.Single((await browser.FoldersAsync(1,null,10,null,default)).Items);
+        // Automatic: up to five candidates with their thumbnail dimensions, newest first.
+        Assert.False(album.CoverOverride);
+        Assert.Equal(5,album.CoverImages!.Count);
+        Assert.All(album.CoverImages,image=>Assert.Equal((128,96),(image.Width,image.Height)));
+        Assert.Equal(album.CoverUrl,album.CoverImages[0].Url);
+        Assert.Equal(5,Assert.Single(await browser.LibrariesAsync(default)).CoverImages!.Count);
+        // A manual cover is the folder's only cover image, and is flagged as an override.
+        var chosen=await db.ExecuteScalarAsync<long>("SELECT MIN(Id) FROM Media");
+        await browser.SetCoverAsync(album.Id,chosen,default);
+        album=Assert.Single((await browser.FoldersAsync(1,null,10,null,default)).Items);
+        Assert.True(album.CoverOverride);
+        Assert.Contains($"/media/{chosen}/",Assert.Single(album.CoverImages!).Url);
+        Assert.False(Assert.Single(await browser.LibrariesAsync(default)).CoverOverride);
+        Assert.True((await browser.FoldersAsync(null,album.Id,10,null,default)).Current.CoverOverride);
+        // Reset returns to automatic selection; the media are untouched.
+        var files=Directory.GetFiles(Path.Combine(f.Root.Path,"album")).ToDictionary(x=>x,File.ReadAllBytes);
+        await browser.SetCoverAsync(album.Id,null,default);
+        album=Assert.Single((await browser.FoldersAsync(1,null,10,null,default)).Items);
+        Assert.False(album.CoverOverride);
+        Assert.Equal(5,album.CoverImages!.Count);
+        foreach(var file in files) Assert.Equal(file.Value,await File.ReadAllBytesAsync(file.Key));
+    }
+
+    [Fact]
     public async Task Custom_covers_persist_validate_reset_and_fall_back_when_stale_without_sources()
     {
         await using var f=await PipelineFixture.CreateAsync();
@@ -94,7 +128,7 @@ public sealed class Gate7Tests
     [Fact]
     public async Task Random_returns_filtered_cached_content_without_sources_and_has_explicit_empty_errors()
     {
-        await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("one.png");await f.ScanAsync();await f.ProcessAllAsync();
+        await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("one.png");await f.ScanAsync();await f.RequestPreviewsAsync();await f.ProcessAllAsync();
         await using var host=Host(f);using var client=host.CreateClient();
         Directory.Move(f.Root.Path,f.Root.Path+"-offline");
         await using var db=await f.Database.OpenAsync(default);await db.ExecuteAsync("UPDATE Libraries SET Enabled=1");
@@ -260,6 +294,18 @@ public sealed class Gate7Tests
         var job=await AwaitJobAsync(client,(await accepted.Content.ReadFromJsonAsync<JobAccepted>())!.Id);
         Assert.Equal("failed",job.State);Assert.Equal("job_quota_exceeded",job.FailureCode);Assert.Null(job.ContentUrl);
     }
+    [Fact]
+    public async Task Random_serves_an_original_until_its_preview_is_prepared()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("one.png");await f.ScanAsync();await f.ProcessAllAsync();
+        await using var host=Host(f);using var client=host.CreateClient();
+        var response=await client.GetAsync("/api/random");
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);Assert.Equal("image/png",response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("no-store",response.Headers.CacheControl!.ToString());
+        await using var db=await f.Database.OpenAsync(default);
+        Assert.True(await db.ExecuteScalarAsync<bool>("SELECT WantPreview FROM ProcessingJobs"));
+    }
+
     private static WebApplicationFactory<Program> Host(PipelineFixture f)=>new WebApplicationFactory<Program>().WithWebHostBuilder(builder=>builder.UseEnvironment("Testing")
         .UseSetting("Luma:DatabasePath",f.Database.Path).UseSetting("Luma:Indexing:CachePath",f.Options.CachePath)
         .UseSetting("Luma:Indexing:Libraries:0:Id","1").UseSetting("Luma:Indexing:Libraries:0:Name","Test").UseSetting("Luma:Indexing:Libraries:0:Path",f.Root.Path));

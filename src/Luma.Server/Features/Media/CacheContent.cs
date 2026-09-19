@@ -10,7 +10,7 @@ namespace Luma.Server.Features.Media;
 
 public sealed class CacheContent(Database database,IndexingOptions options,CacheAccessLog access) : BackgroundService
 {
-    private readonly Channel<(long Id, long Revision)> demands = Channel.CreateBounded<(long, long)>(new BoundedChannelOptions(256)
+    private readonly Channel<(long Id, long Revision, bool Preview)> demands = Channel.CreateBounded<(long, long, bool)>(new BoundedChannelOptions(256)
     {
         SingleReader = true,
         FullMode = BoundedChannelFullMode.DropWrite
@@ -20,7 +20,7 @@ public sealed class CacheContent(Database database,IndexingOptions options,Cache
     {
         await foreach (var demand in demands.Reader.ReadAllAsync(stoppingToken))
         {
-            try { await QueueAsync(demand.Id, demand.Revision, stoppingToken); }
+            try { await QueueAsync(demand.Id, demand.Revision, demand.Preview, stoppingToken); }
             // Cache demand is a disposable hint. A later request can retry; discovery
             // already owns the durable queue for newly indexed media.
             catch (SqliteException) { }
@@ -57,13 +57,15 @@ public sealed class CacheContent(Database database,IndexingOptions options,Cache
             catch {if(stream is not null) await stream.DisposeAsync();throw;}
             if(stream is not null) await stream.DisposeAsync();
         }
-        demands.Writer.TryWrite((id, revision));
+        demands.Writer.TryWrite((id, revision, variant == "preview"));
         context.Response.Headers.RetryAfter="30";
         throw new ApiRequestException(503,"cache_unavailable","This preview is not available yet. Background processing will retry it.");
     }
-    public async Task QueueAsync(long id,long revision,CancellationToken ct)
+    public async Task QueueAsync(long id,long revision,bool preview,CancellationToken ct)
     {
         await using var db=await database.OpenAsync(ct);
+        // Image previews are prepared on demand, ahead of background thumbnail work.
+        if(preview) { await MediaBrowser.PrioritizeAsync(db,[id],true,ct,regenerate:true); return; }
         var state = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition("""
             SELECT State FROM ProcessingJobs WHERE MediaId=@id AND SourceRevision=@revision AND EncoderVersion=@version
             """, new { id, revision, version = IndexingOptions.EncoderVersion }, cancellationToken: ct));

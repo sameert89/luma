@@ -93,7 +93,7 @@ Use the returned scan ID/Location, rather than assuming it is 1. `GET /api/index
 
 Start with `{ "retryFailures": true }` to explicitly retry permanent failures, or `{ "force": true }` to reprocess same-size/same-mtime edits. Transient failures retry three times after 5 seconds, 30 seconds and 5 minutes. An unavailable source waits for the next scan. Routine scans preserve IDs/preferences at an unchanged path; moves receive new IDs and retain the former record as missing. No source file is rewritten or deleted.
 
-Shutdown interrupts active work; startup releases job claims and retraverses interrupted scans. A failed/incomplete traversal cannot mark unseen files missing. Cache verification runs in the background: deleted or corrupt current cache files are regenerated when originals are available. Quota pressure pauses generation; maintenance removes obsolete files and evicts previews first. Evicted entries are not automatically regenerated in a loop; visible-item demand is part of stage 4. Diagnostics use stable codes and never expose absolute source paths or raw media-tool output.
+Shutdown interrupts active work; startup releases job claims and retraverses interrupted scans. A failed/incomplete traversal cannot mark unseen files missing. Cache verification runs in the background: deleted or corrupt current cache files are regenerated when originals are available. Quota pressure pauses generation; maintenance removes obsolete files and evicts previews first. Evicted entries are not automatically regenerated in a loop. Indexing prepares thumbnails and embedded keywords; large image previews are prepared when an image is opened, which keeps the cache to a few GB for a quarter-million photos. `dotnet run --project tests/Luma.Tools -c Release -- index-benchmark <work dir> 4 <photo folder>` measures first-index throughput on real media and target hardware. Diagnostics use stable codes and never expose absolute source paths or raw media-tool output.
 
 See [stage 3 verification](docs/STAGE-3-VERIFICATION.md), [indexing](docs/INDEXING.md) and [cache](docs/MEDIA-CACHE.md) for details. The sidebar shows scan state and can start or cancel a scan.
 
@@ -148,7 +148,7 @@ Filters expose library-scoped keyword/tag search, all/any tag matching, availabi
 
 Media details select/reset folder/library covers and explicitly import embedded/optional-sidecar tags or download XMP. Bulk tag details support metadata exchange for up to 500 selected items. Settings exposes whole-library XMP and disliked-path exports. Jobs report per-item findings, share a 1 GiB export quota and expire downloads after 24 hours. Originals stay read-only; archives include merge instructions and relative-path manifests.
 
-`GET /api/random` returns filtered cached JPEG content for embedding; for example `/api/random?tag=wallpaper&orientation=landscape`. It uses no-store and reports 404 for empty results or 503 for unavailable previews.
+`GET /api/random` returns filtered cached JPEG content for embedding; for example `/api/random?tag=wallpaper&orientation=landscape`. It uses no-store and reports 404 for empty results. A photo without a prepared preview is served as its original (and queued for a preview); 503 means neither is available.
 
 Build the staging image with `docker build -t luma:gate7-staging .`. Actual Pi deployment, real-library and long-session measurements are separate release requirements.
 

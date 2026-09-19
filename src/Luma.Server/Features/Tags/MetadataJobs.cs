@@ -20,8 +20,11 @@ public sealed record MetadataJobStatus(long Id,string Kind,string State,string C
 
 // One durable queue, one worker. Imports are capped at 500 selected items and exports
 // stream 100-row batches from one SQLite read snapshot without loading the whole result.
-public sealed class MetadataJobs(Database database,IndexingOptions options,ILogger<MetadataJobs>? logger = null) : BackgroundService
+public sealed class MetadataJobs(Database database,IndexingOptions options,ILogger<MetadataJobs>? logger = null,MediaProcessing.MediaProcessor? processor = null) : BackgroundService
 {
+    // Keyword reads reuse the pooled image workers; a standalone service owns its own pool.
+    private readonly MediaProcessing.MediaProcessor? ownedProcessor = processor is null ? new(options) : null;
+    private MediaProcessing.MediaProcessor Processor => processor ?? ownedProcessor!;
     private readonly ConcurrentDictionary<long,CancellationTokenSource> active = new();
     private const long Quota=1024L*1024*1024;
     private string JobDirectory => Path.Combine(Path.GetDirectoryName(database.Path)!,"exports");
@@ -312,7 +315,7 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
             }
             using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
-            var keywords=new List<string>(source.MediaType=="image"?await MetadataKeywords.ReadImageProcessAsync(path,timeout.Token):await ReadVideoAsync(path,timeout.Token));
+            var keywords=new List<string>(source.MediaType=="image"?await Processor.ReadTagsAsync(path,timeout.Token):await ReadVideoAsync(path,timeout.Token));
             // Videos rarely expose dc:subject through simple container tags; an XMP packet
             // embedded by a camera or editor is found the same container-agnostic way any
             // XMP reader locates one, by its self-delimiting <?xpacket?> wrapper.
@@ -346,7 +349,6 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
             if(code!="invalid_tags") await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataRevisions(MediaId,IncludeSidecars,Fingerprint) VALUES(@id,@sidecars,@fingerprint) ON CONFLICT DO UPDATE SET Fingerprint=excluded.Fingerprint",new{id,sidecars=request.IncludeSidecars,fingerprint},tx,cancellationToken:ct));
             await RecordImportAsync(db,job.Id,id,code,found,updated,skipped,ct,tx);
             tx.Commit();
-            await Task.Delay(15,ct);
             return;
         } catch(OperationCanceledException) when(ct.IsCancellationRequested) {throw;}
         catch(SqliteException error) when(error.SqliteErrorCode is 5 or 6) {throw;}
@@ -387,6 +389,12 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
         if(document.RootElement.TryGetProperty("format",out var format)) Add(format);
         if(document.RootElement.TryGetProperty("streams",out var streams)) foreach(var stream in streams.EnumerateArray()) Add(stream);
         return values;
+    }
+
+    public override void Dispose()
+    {
+        ownedProcessor?.Dispose();
+        base.Dispose();
     }
 
     private async Task ProgressAsync(long id,int processed,int failed,CancellationToken ct) {

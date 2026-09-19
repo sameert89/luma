@@ -7,7 +7,7 @@ import { useFullscreen } from './useFullscreen'
 import { useIdle } from './useIdle'
 import { useWatchProgress } from './useWatchProgress'
 import { ReelsSeek, ViewerVideoControls, formatTime } from './VideoControls'
-import { isGif, type Media } from './api'
+import { isGif, originalStandsIn, type Media } from './api'
 
 const fillKeys = { viewer: 'luma-viewer-fill', reels: 'luma-reels-fill' }
 
@@ -71,6 +71,12 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
   const [originalId, setOriginalId] = useState<number | null>(null)
   const original = originalId === item.id
   const animated = isGif(item)
+  // Until its preview is prepared a photo shows its original, and keeps it for this visit even
+  // once the preview arrives, so the picture never swaps (or re-decodes) under the viewer.
+  const [standInId, setStandInId] = useState<number | null>(null)
+  if (standInId !== item.id && originalStandsIn(item)) setStandInId(item.id)
+  const standIn = standInId === item.id
+  const showOriginal = original || animated || standIn
   const [failure, setFailure] = useState('')
   const [localOptionsOpen, setLocalOptionsOpen] = useState(false)
   const optionsOpen = controlledOptionsOpen ?? localOptionsOpen
@@ -380,7 +386,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         onEnded={() => { setPlaying(false); syncSession(); onEnded?.() }} onPlay={() => { setPlaying(true); syncSession() }} onPause={() => { setPlaying(false); endHold(); syncSession() }}
         onWaiting={waiting} onSeeking={waiting} onSeeked={() => { ready(); syncSession() }} onCanPlay={ready} onDurationChange={syncSession} onRateChange={syncSession}
         onPlaying={() => { ready(); if (!video.current?.error) setFailure('') }} onError={() => { ready(); setFailure('This video could not play. Copy its stream URL and open it in an external player such as VLC.') }}
-        className={`motion-media pointer-events-none h-full w-full ${displayFill ? 'object-cover' : 'object-contain'}`} /> : <div key={item.id} data-axis={reels ? 'vertical' : 'horizontal'} data-direction={direction} className="motion-media flex h-full w-full items-center justify-center"><div className="flex h-full w-full items-center justify-center" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)` }}><CachedImage url={original || animated ? originalUrl : item.preview.url} status={original || animated ? 'ready' : item.preview.status} alt={item.fileName} preview className={`h-full w-full select-none ${displayFill ? 'object-cover' : 'object-contain'}`} /></div></div>}
+        className={`motion-media pointer-events-none h-full w-full ${displayFill ? 'object-cover' : 'object-contain'}`} /> : <div key={item.id} data-axis={reels ? 'vertical' : 'horizontal'} data-direction={direction} className="motion-media flex h-full w-full items-center justify-center"><div className="flex h-full w-full items-center justify-center" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)` }}><CachedImage url={showOriginal ? originalUrl : item.preview.url} status={showOriginal ? 'ready' : item.preview.status === 'failed' ? 'failed' : item.preview.status === 'ready' ? 'ready' : 'pending'} placeholder={standIn && item.thumbnail.status === 'ready' ? item.thumbnail.url : undefined} alt={item.fileName} preview className={`h-full w-full select-none ${displayFill ? 'object-cover' : 'object-contain'}`} /></div></div>}
       {isVideo && volumeOverlay && <span role="status" className="pointer-events-none absolute right-8 top-1/2 rounded-lg bg-canvas/85 px-4 py-3 text-ink">Volume {Math.round(volume * 100)}%</span>}
       {isVideo && watch.resume !== null && <div data-chrome className="absolute top-16 flex flex-wrap gap-3 rounded-lg bg-canvas/90 p-3"><QuietButton onClick={() => watch.choose(false)}>Resume from {formatTime(watch.resume)}</QuietButton><QuietButton onClick={() => watch.choose(true)}>Start from beginning</QuietButton></div>}
       {isVideo && buffering && <div className="pointer-events-none absolute flex size-16 items-center justify-center rounded-full bg-canvas/60" data-testid="buffering"><LoaderCircle aria-hidden="true" className="size-8 text-ink motion-safe:animate-spin" /><span className="sr-only">Buffering</span></div>}

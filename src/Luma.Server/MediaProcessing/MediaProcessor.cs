@@ -45,6 +45,7 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
                 worker = new(process);
                 try { process.Start(); }
                 catch (System.ComponentModel.Win32Exception) { process.Dispose(); worker = null; throw new ProcessingException("tool_unavailable", true); }
+                Deprioritize(process);
             }
             using var registration = ct.Register(() => Kill(worker.Process));
             await worker.Process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(args).AsMemory(), ct);
@@ -84,11 +85,13 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
         workerSlots.Dispose();
     }
 
-    public async Task<ImageProcessResult> ProcessAsync(string path, string type, string thumbnail, string large, CancellationToken ct)
+    // A null large path generates only the thumbnail; image previews are prepared when someone opens the image.
+    public async Task<ImageProcessResult> ProcessAsync(string path, string type, string thumbnail, string? large, CancellationToken ct)
     {
+        if (type == "video" && large is null) throw new ArgumentNullException(nameof(large));
         var source = path;
         MediaMetadata? metadata = null;
-        var frame = large + ".frame.tmp";
+        var frame = (large ?? thumbnail) + ".frame.tmp";
         try
         {
             if (type == "video")
@@ -99,12 +102,23 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
                 catch (ProcessingException) when (seek > 0) { await ExtractFrameAsync(path, frame, 0, ct); }
                 source = frame;
             }
-            var json = await DecodeAsync(["--process-image", source, thumbnail, large, type == "image" ? "preview" : "poster"], ct);
+            var json = await DecodeAsync(["--process-image", source, thumbnail, large ?? "", large is null ? "thumbnail" : type == "image" ? "preview" : "poster"], ct);
             var result = JsonSerializer.Deserialize<ImageProcessResult>(json) ?? throw new ProcessingException("invalid_generated_media");
             if (result.FailureCode is { } code) throw new ProcessingException(code, code == "cache_io");
             return result with { Metadata = metadata ?? result.Metadata };
         }
         finally { File.Delete(frame); }
+    }
+
+    public async Task<IReadOnlyList<string>> ReadTagsAsync(string path, CancellationToken ct)
+    {
+        var result = JsonSerializer.Deserialize<TagReadResult>(await DecodeAsync(["--read-tags", path], ct)) ?? throw new InvalidDataException();
+        return result.FailureCode switch
+        {
+            null => result.Keywords,
+            "source_unavailable" => throw new IOException(result.FailureCode),
+            _ => throw new InvalidDataException(result.FailureCode)
+        };
     }
 
     private async Task ExtractFrameAsync(string source, string frame, double seek, CancellationToken ct)
@@ -169,6 +183,7 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
         try { process.Start(); }
         catch (System.ComponentModel.Win32Exception) { throw new ProcessingException("tool_unavailable", true); }
+        Deprioritize(process);
         using var registration = ct.Register(() => Kill(process));
         var output = ReadBoundedAsync(process.StandardOutput, process, ct);
         var errors = ReadBoundedAsync(process.StandardError, process, ct);
@@ -192,6 +207,12 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
             result.Write(buffer, 0, count);
         }
         return Encoding.UTF8.GetString(result.GetBuffer(), 0, (int)result.Length);
+    }
+    // Background decoders may use every idle core, but the kernel always schedules browse requests first.
+    private static void Deprioritize(Process process)
+    {
+        try { process.PriorityClass = ProcessPriorityClass.BelowNormal; }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or PlatformNotSupportedException) { }
     }
     private static void Kill(Process process)
     {

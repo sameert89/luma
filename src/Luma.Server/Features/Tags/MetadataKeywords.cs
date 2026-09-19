@@ -1,5 +1,4 @@
 using System.Text;
-using System.Diagnostics;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
@@ -15,33 +14,6 @@ public static class MetadataKeywords
     public const int MaximumMetadataBytes = 4 * 1024 * 1024;
     private static readonly XNamespace Dc = "http://purl.org/dc/elements/1.1/";
     private static readonly XNamespace Rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-
-    public static async Task<IReadOnlyList<string>> ReadImageProcessAsync(string path,CancellationToken ct)
-    {
-        using var process=new Process { StartInfo=new ProcessStartInfo("dotnet") {
-            UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true } };
-        process.StartInfo.ArgumentList.Add(typeof(MetadataKeywords).Assembly.Location);
-        process.StartInfo.ArgumentList.Add("--read-tags");
-        process.StartInfo.ArgumentList.Add(path);
-        process.StartInfo.Environment["DOTNET_GCHeapHardLimit"]="0x08000000";
-        process.Start();
-        using var kill=ct.Register(()=>{try {process.Kill(true);} catch(InvalidOperationException) {}});
-        var stderr=process.StandardError.BaseStream.CopyToAsync(Stream.Null,ct);
-        using var output=new MemoryStream();
-        var buffer=new byte[8192];
-        try {
-            int read;
-            while((read=await process.StandardOutput.BaseStream.ReadAsync(buffer,ct))>0) {
-                if(output.Length+read>MaximumMetadataBytes) throw new InvalidDataException();
-                await output.WriteAsync(buffer.AsMemory(0,read),ct);
-            }
-            await process.WaitForExitAsync(ct); await stderr;
-            if(process.ExitCode!=0) throw new InvalidDataException();
-            return JsonSerializer.Deserialize<string[]>(output.ToArray()) ?? [];
-        } finally {
-            if(!process.HasExited) {process.Kill(true);await process.WaitForExitAsync(CancellationToken.None);}
-        }
-    }
 
     public static IReadOnlyList<string> ReadXmp(byte[] bytes)
     {

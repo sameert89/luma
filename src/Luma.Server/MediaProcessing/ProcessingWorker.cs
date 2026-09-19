@@ -16,9 +16,20 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
 
     private async Task MaintainAsync(CancellationToken ct)
     {
+        // The full sweep visits every cache entry and file, so it runs at startup and then daily;
+        // the quota check between sweeps is a single query.
+        var sweepAfter = DateTimeOffset.MinValue;
         while (!ct.IsCancellationRequested)
         {
-            try { await cache.MaintainAsync(ct); }
+            try
+            {
+                if (DateTimeOffset.UtcNow < sweepAfter) await cache.EvictAsync(ct);
+                else
+                {
+                    await cache.MaintainAsync(ct);
+                    sweepAfter = DateTimeOffset.UtcNow.AddHours(24);
+                }
+            }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception error) { logger.LogWarning(error, "Cache maintenance will retry"); }
             await Task.Delay(TimeSpan.FromSeconds(options.VerificationIntervalSeconds), ct);
@@ -109,14 +120,15 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
             var path = SourcePaths.Resolve(root, source.RelativePath);
             CheckRevision(path, source);
             inspectingSource = false;
-            foreach (var variant in type == "image" ? new[] { "thumbnail", "preview" } : ["thumbnail", "poster"])
+            // Indexing prepares thumbnails; an image's preview waits until someone opens it.
+            foreach (var variant in type == "video" ? ["thumbnail", "poster"] : job.WantPreview ? new[] { "thumbnail", "preview" } : ["thumbnail"])
             {
                 var output = cache.FilePath(job.MediaId, job.SourceRevision, variant);
                 Directory.CreateDirectory(Path.GetDirectoryName(output)!);
                 var temporary = output + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 temporaries.Add(temporary);
             }
-            var result = await processor.ProcessAsync(path, type, temporaries[0], temporaries[1], deadline.Token);
+            var result = await processor.ProcessAsync(path, type, temporaries[0], temporaries.ElementAtOrDefault(1), deadline.Token);
             inspectingSource = true;
             SourcePaths.Check(root, path);
             CheckRevision(path, source);
@@ -212,6 +224,7 @@ public sealed class ProcessingJob
     public int EncoderVersion { get; set; }
     public long ScanId { get; set; }
     public int Attempts { get; set; }
+    public bool WantPreview { get; set; }
     public string Claim { get; set; } = "";
     public bool ScanCancelled { get; set; }
 }

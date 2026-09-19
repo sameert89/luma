@@ -14,6 +14,22 @@ function render(ui: ReactNode) {
 const image = { id: 1, fileName: 'image.jpg', mediaType: 'image', width: 640, height: 480, preview: { url: '/cached.jpg', status: 'ready' } } as Media
 
 describe('media viewing', () => {
+  it('shows the original over its thumbnail until a preview exists and does not swap mid-visit', () => {
+    const pending = { ...image, extension: '.jpg', thumbnail: { url: '/thumb.webp', status: 'ready' }, preview: { url: '/cached.jpg', status: 'pending' } } as Media
+    const { rerender } = render(<MediaStage item={pending} onNavigate={vi.fn()} />)
+    const photo = screen.getByRole('img', { name: 'image.jpg' })
+    expect(photo).toHaveAttribute('src', '/api/media/1/original')
+    expect(photo.style.backgroundImage).toContain('/thumb.webp')
+    rerender(<MediaStage item={{ ...pending, preview: { ...pending.preview, status: 'ready' } }} onNavigate={vi.fn()} />)
+    expect(screen.getByRole('img', { name: 'image.jpg' })).toHaveAttribute('src', '/api/media/1/original')
+    // The next photo, whose preview is ready, uses the prepared preview.
+    rerender(<MediaStage item={{ ...pending, id: 2, preview: { ...pending.preview, status: 'ready' } }} onNavigate={vi.fn()} />)
+    expect(screen.getByRole('img', { name: 'image.jpg' })).toHaveAttribute('src', '/cached.jpg')
+    // Browsers cannot show a TIFF original, so it waits for its preview.
+    rerender(<MediaStage item={{ ...pending, id: 3, extension: '.tiff' }} onNavigate={vi.fn()} />)
+    expect(screen.getByText('Preparing preview…')).toBeInTheDocument()
+  })
+
   it('hides the options trigger during element and native video fullscreen and restores it on exit', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})

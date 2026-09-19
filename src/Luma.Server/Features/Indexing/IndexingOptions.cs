@@ -12,9 +12,13 @@ public sealed class IndexingOptions
     public string FfmpegPath { get; set; } = "ffmpeg";
     public string FfprobePath { get; set; } = "ffprobe";
     public int DiscoveryWorkers { get; set; } = 1;
-    public int ImageWorkers { get; set; } = 1;
+    // Decoders run below normal OS priority, so background work can use every idle core of a
+    // 4-core server while browse requests are still scheduled first. Unless configured, image
+    // workers follow the aggregate limit, leaving one slot for video and keyword work.
+    private int? imageWorkers;
+    public int ImageWorkers { get => imageWorkers ?? Math.Max(1, ProcessingWorkers - 1); set => imageWorkers = value; }
     public int VideoWorkers { get; set; } = 1;
-    public int ProcessingWorkers { get; set; } = 2;
+    public int ProcessingWorkers { get; set; } = 4;
     public int QueueCapacity { get; set; } = 128;
     public long CacheQuotaBytes { get; set; } = 20L * 1024 * 1024 * 1024;
     public long ReserveFreeBytes { get; set; } = 1024L * 1024 * 1024;

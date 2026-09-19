@@ -276,6 +276,7 @@ public sealed class IndexingTests
         await using var f = await PipelineFixture.CreateAsync();
         await f.CreateImageAsync("image.png");
         await f.ScanAsync();
+        await f.RequestPreviewsAsync();
         await f.ProcessAllAsync();
         await using var db = await f.Database.OpenAsync(default);
         var bytes = await db.ExecuteScalarAsync<long>("SELECT SizeBytes FROM CacheAccounting");
@@ -316,6 +317,19 @@ public sealed class IndexingTests
         await f.ScanAsync();
         await f.ProcessAllAsync();
         await using var db = await f.Database.OpenAsync(default);
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE Variant='preview'"));
+        var thumbnails = (await db.QueryAsync<(string FileName, string RelativePath)>("SELECT m.FileName,c.RelativePath FROM CacheEntries c JOIN Media m ON m.Id=c.MediaId WHERE c.Variant='thumbnail'")).ToDictionary(x => x.FileName, x => x.RelativePath);
+        using (var thumbnail = await Image.LoadAsync<Rgba32>(Path.Combine(f.Options.CachePath, thumbnails["rotated.jpg"])))
+            Assert.Equal((40, 80), (thumbnail.Width, thumbnail.Height));
+        using (var thumbnail = await Image.LoadAsync<Rgba32>(Path.Combine(f.Options.CachePath, thumbnails["transparent.png"])))
+            Assert.Equal((320, 240, 0), (thumbnail.Width, thumbnail.Height, (int)thumbnail[0, 0].A));
+        foreach (var extension in new[] { "gif", "tiff" })
+        {
+            using var first = await Image.LoadAsync<Rgba32>(Path.Combine(f.Options.CachePath, thumbnails["frames." + extension]));
+            Assert.True(first[0, 0].R > 240 && first[0, 0].B < 15);
+        }
+        await f.RequestPreviewsAsync();
+        await f.ProcessAllAsync();
         var metadata = await db.QuerySingleAsync<OrientedMetadata>("SELECT Width,Height,CapturedAt FROM Media WHERE FileName='rotated.jpg'");
         Assert.Equal(40, metadata.Width);
         Assert.Equal(80, metadata.Height);
@@ -396,7 +410,8 @@ public sealed class IndexingTests
         Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingFailures WHERE Code='invalid_media'"));
         Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT Skipped FROM Scans WHERE Id=@scan", new { scan = scan.Id }));
         Assert.Equal("completed", await db.ExecuteScalarAsync<string>("SELECT State FROM Scans WHERE Id=@scan", new { scan = scan.Id }));
-        Assert.Equal(24, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE State='ready'"));
+        Assert.Equal(18, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE State='ready'"));
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE Variant='preview'"));
         Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Folders WHERE RelativePath='empty/nested'"));
         Assert.Equal(3, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM FolderAncestry WHERE DescendantId=(SELECT Id FROM Folders WHERE RelativePath='empty/nested')"));
         Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE Width>128 OR Height>96"));
@@ -461,11 +476,65 @@ public sealed class IndexingTests
     }
 
     [Fact]
+    public async Task Indexing_prepares_thumbnails_and_previews_follow_demand_even_mid_job()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("image.png");
+        await f.ScanAsync();
+        await f.ProcessAllAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        Assert.Equal("thumbnail", await db.ExecuteScalarAsync<string>("SELECT group_concat(Variant) FROM CacheEntries"));
+        Assert.Equal("ready", await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs"));
+        // A preview requested while a thumbnail-only job runs is prepared right after it publishes.
+        await f.ScanAsync(force: true);
+        var job = await f.ClaimAsync();
+        Assert.False(job!.WantPreview);
+        await f.RequestPreviewsAsync();
+        await f.Processor.ProcessAsync(job, "image", default);
+        Assert.Equal("pending", await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE SourceRevision=2"));
+        await f.ProcessAllAsync();
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE SourceRevision=2 AND State='ready'"));
+        Assert.Equal("ready", await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE SourceRevision=2"));
+        // Asking again once the preview exists is a no-op.
+        await f.RequestPreviewsAsync();
+        Assert.Equal("ready", await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE SourceRevision=2"));
+    }
+
+    [Fact]
+    public async Task Upgrade_releases_eager_previews_keeps_thumbnails_and_retries_congestion_failures()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("one.png");
+        await f.CreateImageAsync("two.png");
+        await f.ScanAsync();
+        await f.RequestPreviewsAsync();
+        await f.ProcessAllAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        // Simulate an earlier release: a pipeline-congestion failure, and the migration not yet applied.
+        await db.ExecuteAsync("UPDATE ProcessingJobs SET State='failed',FailureCode='processing_timeout',Attempts=3 WHERE MediaId=2");
+        await db.ExecuteAsync("UPDATE Media SET ProcessingStatus='failed' WHERE Id=2");
+        var preview = await db.ExecuteScalarAsync<string>("SELECT RelativePath FROM CacheEntries WHERE Variant='preview' AND MediaId=1");
+        var thumbnailBytes = await db.ExecuteScalarAsync<long>("SELECT SUM(SizeBytes) FROM CacheEntries WHERE Variant='thumbnail'");
+        var migration = typeof(MigrationRunner).Assembly.GetManifestResourceNames().Single(x => x.EndsWith("0016_OnDemandPreviews.sql"));
+        using (var reader = new StreamReader(typeof(MigrationRunner).Assembly.GetManifestResourceStream(migration)!))
+            await db.ExecuteAsync((await reader.ReadToEndAsync()).Replace("ALTER TABLE ProcessingJobs ADD COLUMN WantPreview INTEGER NOT NULL DEFAULT 0;", ""));
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE Variant='preview' AND State='ready'"));
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE Variant='thumbnail' AND State='ready'"));
+        Assert.Equal(thumbnailBytes, await db.ExecuteScalarAsync<long>("SELECT SizeBytes FROM CacheAccounting"));
+        Assert.Equal("pending", await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE MediaId=2"));
+        Assert.Equal("pending", await db.ExecuteScalarAsync<string>("SELECT ProcessingStatus FROM Media WHERE Id=2"));
+        Assert.True(File.Exists(Path.Combine(f.Options.CachePath, preview!)));
+        await f.Cache.MaintainAsync(default);
+        Assert.False(File.Exists(Path.Combine(f.Options.CachePath, preview!)));
+    }
+
+    [Fact]
     public async Task Missing_and_corrupt_cache_regenerate_without_changing_media_identity()
     {
         await using var f = await PipelineFixture.CreateAsync();
         await f.CreateImageAsync("image.png");
         await f.ScanAsync();
+        await f.RequestPreviewsAsync();
         await f.ProcessAllAsync();
         await using var db = await f.Database.OpenAsync(default);
         var entries = (await db.QueryAsync<CacheEntry>("SELECT * FROM CacheEntries")).ToArray();
@@ -679,6 +748,13 @@ internal sealed class PipelineFixture : IAsyncDisposable
             UPDATE ProcessingJobs SET State='running',Claim='test',LeaseUntil='2099' WHERE rowid=(SELECT rowid FROM ProcessingJobs
             WHERE State='pending' AND NextAttemptAt<=@now ORDER BY MediaId LIMIT 1) RETURNING *
             """, new { now = DateTimeOffset.UtcNow.ToString("O") });
+    }
+    // Indexing prepares thumbnails; opening an image in the viewer requests its large preview.
+    public async Task RequestPreviewsAsync()
+    {
+        await using var db = await Database.OpenAsync(default);
+        var ids = (await db.QueryAsync<long>("SELECT Id FROM Media WHERE MediaType='image'")).ToArray();
+        if (ids.Length > 0) await (await BrowsingTests.BrowserAsync(this)).PrioritizeAsync(new(ids, true), default);
     }
     public async Task ProcessAllAsync()
     {

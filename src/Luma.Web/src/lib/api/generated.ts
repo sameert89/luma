@@ -589,6 +589,13 @@ export interface components {
             nextCursor: string | null;
             previousCursor: string | null;
         };
+        CoverImage: {
+            url: string;
+            /** Format: int32 */
+            width: number;
+            /** Format: int32 */
+            height: number;
+        };
         CoverRequest: {
             /** Format: int64 */
             mediaId: number | null;
@@ -612,6 +619,9 @@ export interface components {
             parentId: number | null;
             name: string;
             coverUrl: string | null;
+            /** @default false */
+            coverOverride: boolean;
+            coverImages?: components["schemas"]["CoverImage"][] | null;
         };
         FolderVisibilityRequest: {
             hidden: boolean;
@@ -665,6 +675,9 @@ export interface components {
             /** Format: int64 */
             rootFolderId: number | null;
             coverUrl: string | null;
+            /** @default false */
+            coverOverride: boolean;
+            coverImages?: components["schemas"]["CoverImage"][] | null;
         };
         MediaNeighbors: {
             previous: components["schemas"]["MediaSummary"] | null;
@@ -678,6 +691,8 @@ export interface components {
         };
         MediaPriorityRequest: {
             ids: number[];
+            /** @default false */
+            previews: boolean;
         };
         MediaQuery: {
             /** Format: int32 */

@@ -11,7 +11,7 @@ import { TagEditor } from '../tags/TagEditor'
 import { useFullscreen } from './useFullscreen'
 import { usePreviewPriority } from './usePreviewPriority'
 import { ApiError } from '../../lib/api/client'
-import { errorMessage, queryString, request, type Filters, type Media, type MediaPage, type Neighbors } from './api'
+import { errorMessage, imageUrl, queryString, request, type Filters, type Media, type MediaPage, type Neighbors } from './api'
 
 const autoScrollSeconds = 3
 const reelsStateKey = 'luma-reels-state'
@@ -66,7 +66,7 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
   const next = neighbors.data?.next
   const preference = useMutation({ mutationFn: ({ id, value }: { id: number; value: 'liked' | 'disliked' | 'neutral' }) => request(`/api/media/${id}/preference`, undefined, 'PUT', { preference: value }),
     onSuccess: async (_result, { id }) => { await Promise.all([client.invalidateQueries({ queryKey: ['detail', id] }), client.invalidateQueries({ queryKey: ['media'] })]) } })
-  usePreviewPriority([item, next, neighbors.data?.previous])
+  usePreviewPriority([item, next, neighbors.data?.previous], true)
   useEffect(() => {
     if (!next || next.mediaType !== 'video' || suspended) return
     let warm: HTMLVideoElement | null = null
@@ -78,12 +78,13 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
     }, warmNextMs)
     return () => { window.clearTimeout(timer); if (warm) { warm.removeAttribute('src'); warm.load() } }
   }, [next?.id, next?.mediaType, suspended])
+  const nextStill = !next ? null : next.mediaType === 'video' ? next.preview.status === 'ready' ? next.preview.url : null : imageUrl(next)
   useEffect(() => {
-    if (next?.preview.status !== 'ready') return
+    if (!nextStill) return
     const preload = new Image()
-    preload.src = next.preview.url
+    preload.src = nextStill
     return () => preload.removeAttribute('src')
-  }, [next?.preview.status, next?.preview.url])
+  }, [nextStill])
   function navigate(direction: 'next' | 'previous') { const target = neighbors.data?.[direction]; if (target) { setDirection(direction); setActive(target) } }
   // Videos advance through MediaStage's onEnded; a photo has no such event, so it gets its
   // own timer here. Depending on the item's id/type rather than the query objects keeps an

@@ -3,9 +3,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { usePreviewPriority } from './usePreviewPriority'
 import type { Media } from './api'
 
-const media = (id: number, status: string) => ({ id, thumbnail: { status }, preview: { status } } as Media)
+const media = (id: number, status: string, preview = status) => ({ id, mediaType: 'image', thumbnail: { status }, preview: { status: preview } } as Media)
 
-function Probe({ items }: { items: Media[] }) { usePreviewPriority(items); return null }
+function Probe({ items, previews = false }: { items: Media[]; previews?: boolean }) { usePreviewPriority(items, previews); return null }
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
@@ -18,7 +18,7 @@ it('requests preparation for pending previews in the order they are shown', asyn
   await act(async () => { await vi.advanceTimersByTimeAsync(400) })
 
   expect(fetch).toHaveBeenCalledTimes(1)
-  expect(JSON.parse(String(fetch.mock.calls[0][1].body))).toEqual({ ids: [4, 1, 7] })
+  expect(JSON.parse(String(fetch.mock.calls[0][1].body))).toEqual({ ids: [4, 1, 7], previews: false })
 
   // The same batch is not re-sent while nothing has changed.
   rerender(<Probe items={[...items]} />)
@@ -31,7 +31,7 @@ it('requests preparation for pending previews in the order they are shown', asyn
   rerender(<Probe items={[items[2], items[3], items[1]]} />)
   await act(async () => { await vi.advanceTimersByTimeAsync(400) })
   expect(fetch).toHaveBeenCalledTimes(2)
-  expect(JSON.parse(String(fetch.mock.calls[1][1].body))).toEqual({ ids: [1, 7, 4] })
+  expect(JSON.parse(String(fetch.mock.calls[1][1].body))).toEqual({ ids: [1, 7, 4], previews: false })
 })
 
 it('stays quiet when every preview is ready and retries a failed batch a bounded number of times', async () => {
@@ -50,4 +50,18 @@ it('stays quiet when every preview is ready and retries a failed batch a bounded
   }
   await act(async () => { await vi.advanceTimersByTimeAsync(30000) })
   expect(fetch).toHaveBeenCalledTimes(4)
+})
+
+it('leaves previews to the viewer: the gallery asks only for thumbnails', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  // Indexed photos have thumbnails; their preview is prepared only once opened.
+  const indexed = [media(3, 'ready', 'pending'), media(5, 'ready', 'evicted'), media(6, 'ready', 'failed')]
+  const { rerender } = render(<Probe items={indexed} />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+  expect(fetch).not.toHaveBeenCalled()
+
+  rerender(<Probe items={indexed} previews />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+  expect(JSON.parse(String(fetch.mock.calls[0][1].body))).toEqual({ ids: [3, 5], previews: true })
 })

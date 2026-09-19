@@ -7,12 +7,6 @@ using Luma.Server.Features.Media;
 using Luma.Server.Features.Tags;
 using Luma.Server.Features.Libraries;
 
-if (args.FirstOrDefault() == "--read-tags")
-{
-    try { await Console.Out.WriteAsync(System.Text.Json.JsonSerializer.Serialize(await MetadataKeywords.ReadImageAsync(args[1],CancellationToken.None))); }
-    catch { Environment.ExitCode=1; }
-    return;
-}
 if (args.FirstOrDefault() == "--image-worker")
 {
     await ImageProcessCommand.RunWorkerAsync(CancellationToken.None);

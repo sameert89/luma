@@ -2434,6 +2434,27 @@
           }
         }
       },
+      "CoverImage": {
+        "required": [
+          "url",
+          "width",
+          "height"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "CoverRequest": {
         "required": [
           "mediaId"
@@ -2521,6 +2542,17 @@
           },
           "coverUrl": {
             "type": "string",
+            "nullable": true
+          },
+          "coverOverride": {
+            "type": "boolean",
+            "default": false
+          },
+          "coverImages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoverImage"
+            },
             "nullable": true
           }
         }
@@ -2691,6 +2723,17 @@
           "coverUrl": {
             "type": "string",
             "nullable": true
+          },
+          "coverOverride": {
+            "type": "boolean",
+            "default": false
+          },
+          "coverImages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoverImage"
+            },
+            "nullable": true
           }
         }
       },
@@ -2761,6 +2804,10 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          "previews": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

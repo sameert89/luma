@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { ImageOff, RefreshCw } from 'lucide-react'
 import { QuietButton } from './Controls'
 
-export function CachedImage({ url, alt, status = 'ready', className = '', preview = false }: { url: string; alt: string; status?: string; className?: string; preview?: boolean }) {
+// placeholder: a small image painted behind the full one (letterboxed the same way) while it loads.
+export function CachedImage({ url, alt, status = 'ready', className = '', preview = false, placeholder }: { url: string; alt: string; status?: string; className?: string; preview?: boolean; placeholder?: string }) {
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
@@ -18,5 +19,6 @@ export function CachedImage({ url, alt, status = 'ready', className = '', previe
     <span className="text-xs">Preview unavailable</span>
     {preview && <QuietButton onClick={() => { setAttempt(x => x + 1); setFailed(false) }}><RefreshCw className="size-4" />Retry preview</QuietButton>}
   </div>
-  return <img draggable={false} key={attempt} src={url} alt={alt} loading={preview ? 'eager' : 'lazy'} decoding="async" className={className} onError={() => setFailed(true)} />
+  const behind = placeholder ? { backgroundImage: `url("${placeholder}")`, backgroundSize: className.includes('object-cover') ? 'cover' : 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : undefined
+  return <img draggable={false} key={attempt} src={url} alt={alt} loading={preview ? 'eager' : 'lazy'} decoding="async" className={className} style={behind} onError={() => setFailed(true)} />
 }

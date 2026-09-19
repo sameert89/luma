@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { EllipsisVertical, EyeOff, FileInput, Info } from 'lucide-react'
+import { EllipsisVertical, EyeOff, FileInput, ImageMinus, Info } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Button } from '../../components/ui/Button'
 import { IconButton, QuietButton } from '../../components/ui/Controls'
@@ -8,25 +8,30 @@ import { MetadataExchange } from '../tags/MetadataExchange'
 import { hiddenFolderQueries } from './HiddenFolders'
 import { errorMessage, request, type FolderPage } from './api'
 
-export function FolderActions({ folder, libraryName, ancestors = [], onHidden, extraActions }: {
-  folder: FolderPage['current']; libraryName?: string; ancestors?: FolderPage['ancestors']; onHidden?: () => void; extraActions?: (close: () => void) => ReactNode
+export function FolderActions({ folder, libraryName, ancestors = [], onHidden, extraActions, tone }: {
+  folder: FolderPage['current']; libraryName?: string; ancestors?: FolderPage['ancestors']; onHidden?: () => void; extraActions?: (close: () => void) => ReactNode; tone?: 'overlay'
 }) {
   const [panel, setPanel] = useState<'actions' | 'info' | 'import' | 'hide' | null>(null)
   const client = useQueryClient()
   const hide = useMutation({ mutationFn: () => request(`/api/folders/${folder.id}/hidden`, undefined, 'PUT', { hidden: true }),
     onSuccess: () => { setPanel(null); onHidden?.(); for (const queryKey of hiddenFolderQueries) void client.invalidateQueries({ queryKey }) } })
+  // Clears only the folder's manual cover choice; automatic selection and the Settings style apply again.
+  const resetCover = useMutation({ mutationFn: () => request(`/api/folders/${folder.id}/cover`, undefined, 'PUT', { mediaId: null }),
+    onSuccess: async () => { setPanel(null); await Promise.all([client.invalidateQueries({ queryKey: ['folders'] }), client.invalidateQueries({ queryKey: ['libraries'] })]) } })
   const title = panel === 'info' ? 'Folder information' : panel === 'import' ? 'Import folder metadata' : panel === 'hide' ? 'Hide folder' : 'Folder actions'
   return <>
-    <IconButton label={`Folder actions for ${folder.name}`} onClick={() => setPanel('actions')}><EllipsisVertical className="size-4" /></IconButton>
+    <IconButton label={`Folder actions for ${folder.name}`} tone={tone} onClick={() => setPanel('actions')}><EllipsisVertical className="size-4" /></IconButton>
     <Modal open={panel !== null} onOpenChange={open => { if (!open) setPanel(null) }} title={title}
       description={panel === 'import' ? 'Merge EXIF/XMP tags from every indexed photo and video directly in this folder, regardless of the current filters. Originals stay unchanged.' : folder.name} sheet>
       <div className="space-y-4 overflow-auto p-5">
         {panel === 'actions' && <div className="flex flex-wrap gap-2">{extraActions?.(() => setPanel(null))}
           <QuietButton onClick={() => setPanel('info')}><Info className="size-4" />Folder information</QuietButton>
           <QuietButton onClick={() => setPanel('import')}><FileInput className="size-4" />Import folder metadata</QuietButton>
+          {folder.coverOverride && <QuietButton disabled={resetCover.isPending} onClick={() => resetCover.mutate()}><ImageMinus className="size-4" />{resetCover.isPending ? 'Resetting cover…' : 'Reset album cover'}</QuietButton>}
           {/* A library root is the library itself; only folders inside it can be hidden. */}
           {!!folder.parentId && <QuietButton onClick={() => setPanel('hide')}><EyeOff className="size-4" />Hide folder</QuietButton>}
         </div>}
+        {panel === 'actions' && resetCover.isError && <p role="alert" className="text-sm text-danger">{errorMessage(resetCover.error)}</p>}
         {panel === 'info' && <><dl className="space-y-3 text-sm">
           <div><dt className="text-muted">Name</dt><dd className="break-words">{folder.name}</dd></div>
           <div><dt className="text-muted">Library</dt><dd className="break-words">{libraryName ?? 'Library'}</dd></div>

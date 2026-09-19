@@ -7,7 +7,7 @@ public sealed record MediaSummary(long Id,long LibraryId,long FolderId,string Fi
     string Preference,string Availability,CacheRepresentation Thumbnail,CacheRepresentation Preview,IReadOnlyList<TagSummary> Tags,string? GroupKey = null,string? GroupLabel = null,WatchState? WatchProgress = null);
 public sealed record MediaPage(IReadOnlyList<MediaSummary> Items,string? NextCursor,string? PreviousCursor,string? Seed = null);
 public sealed record MediaNeighbors(MediaSummary? Previous,MediaSummary? Next);
-public sealed record MediaPriorityRequest(IReadOnlyList<long> Ids);
+public sealed record MediaPriorityRequest(IReadOnlyList<long> Ids,bool Previews = false);
 public sealed class MediaRow
 {
     public long Id {get;set;} public long LibraryId {get;set;} public long FolderId {get;set;}

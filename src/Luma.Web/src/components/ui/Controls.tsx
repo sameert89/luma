@@ -33,9 +33,11 @@ export function QuietButton({ className = '', type = 'button', compact = false, 
 export function QuietLink({ className = '', children, ...props }: ComponentProps<'a'>) {
   return <a className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-surface ${className}`} {...props}>{children}</a>
 }
-export function IconButton({ label, className = '', type = 'button', ...props }: ComponentProps<'button'> & { label: string }) {
+// overlay: sits on top of photos, so it carries its own dark frosted backing in every theme.
+const iconTones = { default: 'border-line text-ink hover:bg-surface', overlay: 'border-white/25 bg-black/45 text-white backdrop-blur-sm hover:bg-black/65' }
+export function IconButton({ label, className = '', type = 'button', tone = 'default', ...props }: ComponentProps<'button'> & { label: string; tone?: keyof typeof iconTones }) {
   // A fixed square (not QuietButton's text padding) keeps every icon-only control a true circle.
   return <button type={type} aria-label={label} title={label}
-    className={`inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-line text-ink hover:bg-surface disabled:cursor-default disabled:opacity-40 ${className}`}
+    className={`inline-flex size-10 shrink-0 items-center justify-center rounded-full border disabled:cursor-default disabled:opacity-40 ${iconTones[tone]} ${className}`}
     {...props} />
 }
