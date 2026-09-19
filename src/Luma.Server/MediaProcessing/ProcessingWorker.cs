@@ -74,6 +74,7 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
                               AND l.Enabled=1 AND s.State IN ('running','completed'))
                         ORDER BY j.NextAttemptAt,j.MediaId LIMIT 1
                         """, new { type, version = IndexingOptions.EncoderVersion, now }, cancellationToken: ct));
+                    if (candidate is not null) await database.YieldToForegroundAsync(ct);
                     var job = candidate is null ? null : await db.QuerySingleOrDefaultAsync<ProcessingJob>(new CommandDefinition("""
                         UPDATE ProcessingJobs SET State='running',Claim=@claim,LeaseUntil=@lease
                         WHERE rowid=@candidate AND State='pending' AND NextAttemptAt<=@now RETURNING *
@@ -194,6 +195,7 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
     }
     private async Task SetOutcomeAsync(ProcessingJob job, string state, string? code, int delay, bool failure, CancellationToken ct)
     {
+        await database.YieldToForegroundAsync(ct);
         await using var db = await database.OpenAsync(ct);
         using var tx = db.BeginTransaction();
         var changed = await db.ExecuteAsync(new CommandDefinition("""

@@ -2243,6 +2243,29 @@
         }
       }
     },
+    "/api/tasks/{id}/clear": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ClearBackgroundTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/tasks/{id}/cancel": {
       "post": {
         "tags": [

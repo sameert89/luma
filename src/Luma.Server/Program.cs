@@ -69,11 +69,13 @@ app.UseStatusCodePages(async context =>
     await Results.Problem(statusCode: status,
         extensions: ApiErrors.Extensions(status, context.HttpContext)).ExecuteAsync(context.HttpContext);
 });
-app.MapStatus();
-app.MapIndexing();
-app.MapMedia();
-app.MapPlayback();
-app.MapTasks();
+// Interactive writes take priority over background work and retry briefly on contention.
+var api = app.MapGroup("").AddEndpointFilter<ForegroundWriteFilter>();
+api.MapStatus();
+api.MapIndexing();
+api.MapMedia();
+api.MapPlayback();
+api.MapTasks();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseRouting();
 app.Use(async (context, next) =>

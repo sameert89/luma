@@ -11,13 +11,24 @@ export type Neighbors = components['schemas']['MediaNeighbors']
 export type IndexingStatus = components['schemas']['IndexingStatus']
 export type Scan = components['schemas']['ScanProgress']
 
+// The server already retries interactive writes briefly; these cover a lock that outlasts that,
+// so background work never surfaces as an error unless the database stays locked.
+const busyRetryMs = [300, 1000]
+
 export async function request<T>(path: string, signal?: AbortSignal, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(path, { signal, method, headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) })
-  if (!response.ok) {
-    const problem = response.headers.get('content-type')?.includes('application/problem+json') ? await response.json() : undefined
-    throw new ApiError(response.status, problem)
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(path, { signal, method, headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) })
+    if (!response.ok) {
+      const problem = response.headers.get('content-type')?.includes('application/problem+json') ? await response.json() : undefined
+      if (method !== 'GET' && response.status === 503 && problem?.code === 'database_busy' && attempt < busyRetryMs.length) {
+        await new Promise(resolve => setTimeout(resolve, busyRetryMs[attempt]))
+        signal?.throwIfAborted()
+        continue
+      }
+      throw new ApiError(response.status, problem)
+    }
+    return (response.status === 204 ? undefined : await response.json()) as T
   }
-  return (response.status === 204 ? undefined : await response.json()) as T
 }
 export function queryString(filters: Filters) {
   const params = new URLSearchParams()

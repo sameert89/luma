@@ -5,7 +5,9 @@ import { expect, it, vi } from 'vitest'
 import { Viewer } from './Viewer'
 import type { Media } from './api'
 
-vi.mock('./MediaStage', () => ({ MediaStage: () => <div /> }))
+// The stub records the stage's latest props so tests can play its events (a video ending).
+const stage = vi.hoisted(() => ({ props: {} as Record<string, unknown> }))
+vi.mock('./MediaStage', () => ({ MediaStage: (props: Record<string, unknown>) => { stage.props = props; return <div /> } }))
 
 it('offers only the two explicit cover actions only inside media details', async () => {
   window.history.replaceState(null, '', '/')
@@ -117,3 +119,32 @@ it('keeps rating and a bottom menu with navigation in one row, and shows dislike
   expect(screen.getByRole('button', { name: 'Next item' }).closest('[inert]')).toBeNull()
 })
 
+
+it('autoplays the next video when one ends only while Autoplay is on, and remembers the choice', async () => {
+  window.history.replaceState(null, '', '/')
+  localStorage.removeItem('luma-video-autoplay')
+  const video = (id: number): Media => ({ id, libraryId: 1, folderId: 3, fileName: `${id}.mp4`, mediaType: 'video', extension: '.mp4', availability: 'present', preference: 'neutral',
+    modifiedAt: '2026-01-01T00:00:00Z', effectiveDate: '2026-01-01T00:00:00Z', capturedAt: null, width: null, height: null, durationMs: 1000,
+    sizeBytes: 100, tags: [], thumbnail: { status: 'ready', url: '/thumb', width: null, height: null }, preview: { status: 'ready', url: '/preview', width: null, height: null } })
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(JSON.stringify(
+    url.includes('/neighbors?') ? { previous: null, next: video(2) } : url === '/api/libraries' ? [] : video(1)), { headers: { 'Content-Type': 'application/json' } }))))
+  const onChange = vi.fn()
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+    <Viewer active={video(1)} filters={{ libraryId: 1 }} onChange={onChange} onClose={vi.fn()} restoreFocus={vi.fn()} />
+  </QueryClientProvider>)
+  await screen.findByRole('button', { name: 'Next item' })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Next item' })).toBeEnabled())
+
+  expect(stage.props.autoplayNext).toBe(false)
+  act(() => (stage.props.onEnded as () => void)())
+  expect(onChange).not.toHaveBeenCalled()
+
+  act(() => (stage.props.onAutoplayNextChange as (value: boolean) => void)(true))
+  expect(localStorage.getItem('luma-video-autoplay')).toBe('1')
+  act(() => (stage.props.onEnded as () => void)())
+  expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }))
+  // The next video starts by itself; a video the person picks does not.
+  expect(stage.props.autoPlay).toBe(true)
+  await userEvent.click(screen.getByRole('button', { name: 'Next item' }))
+  expect(stage.props.autoPlay).toBe(false)
+})

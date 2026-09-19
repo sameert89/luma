@@ -24,8 +24,8 @@ type WebkitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void; webk
 const pictureInPictureAvailable = typeof document !== 'undefined' && (document.pictureInPictureEnabled === true
   || (typeof HTMLVideoElement !== 'undefined' && 'webkitSetPresentationMode' in HTMLVideoElement.prototype))
 
-export function MediaStage({ item, reels = false, muted = false, suspended = false, loop = false, autoPlay = false, direction = 'next', optionsOpen: controlledOptionsOpen, onOptionsOpenChange, onEnded, onNavigate, fullscreenRoot, onOpenViewer, onLike, onDislike, onMutedChange }: {
-  item: Media; reels?: boolean; muted?: boolean; suspended?: boolean; loop?: boolean; autoPlay?: boolean; direction?: 'next' | 'previous'; optionsOpen?: boolean; onOptionsOpenChange?: (open: boolean) => void; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>; onOpenViewer?: (item: Media) => void; onLike?: () => void; onDislike?: () => void; onMutedChange?: (value: boolean) => void
+export function MediaStage({ item, reels = false, muted = false, suspended = false, loop = false, autoPlay = false, autoplayNext, direction = 'next', optionsOpen: controlledOptionsOpen, onOptionsOpenChange, onEnded, onNavigate, fullscreenRoot, onOpenViewer, onLike, onDislike, onMutedChange, onAutoplayNextChange }: {
+  item: Media; reels?: boolean; muted?: boolean; suspended?: boolean; loop?: boolean; autoPlay?: boolean; autoplayNext?: boolean; direction?: 'next' | 'previous'; optionsOpen?: boolean; onOptionsOpenChange?: (open: boolean) => void; onEnded?: () => void; onNavigate: (direction: 'next' | 'previous') => void; fullscreenRoot?: RefObject<HTMLElement | null>; onOpenViewer?: (item: Media) => void; onLike?: () => void; onDislike?: () => void; onMutedChange?: (value: boolean) => void; onAutoplayNextChange?: (value: boolean) => void
 }) {
   const isFullscreen = useFullscreen()
   const host = useRef<HTMLDivElement>(null)
@@ -92,6 +92,9 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
   const [skip, setSkip] = useState<{ forward: boolean; key: number } | null>(null)
   const [flash, setFlash] = useState<{ playing: boolean; key: number } | null>(null)
   const isVideo = item.mediaType === 'video'
+  // Zoom, pan and rotate belong to the viewer. In Reels a photo or GIF keeps Reels' own
+  // gestures (double tap likes, swipes move on) instead of picture controls.
+  const zoomable = !isVideo && !reels
   // Fullscreen chrome steps aside while media plays; a paused video keeps its controls.
   const chromeHidden = useIdle(isFullscreen) && !(isVideo && !playing)
   const originalUrl = `/api/media/${item.id}/original`
@@ -236,7 +239,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
     const along = reels ? dy : dx
     const across = reels ? dx : dy
     if (zoom === 1 && !gesture.current.distance && Math.abs(along) > 60 && Math.abs(along) > Math.abs(across)) onNavigate(along < 0 ? 'next' : 'previous')
-    else if (!gesture.current.distance && !isVideo && Math.hypot(dx, dy) < 10) {
+    else if (!gesture.current.distance && zoomable && Math.hypot(dx, dy) < 10) {
       const now = Date.now()
       if (now - photoTap.current < doubleTapMs) {
         if (zoomRef.current > 1) { scale(1); zoomRef.current = 1; panRef.current = { x: 0, y: 0 } }
@@ -309,10 +312,12 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
       const dialog = host.current?.closest('[role="dialog"]'); const dialogs = document.querySelectorAll('[role="dialog"]'); if (dialogs.length && dialogs[dialogs.length - 1] !== dialog) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (event.target instanceof HTMLElement && event.target.closest('input,select,textarea,video,button,a,[contenteditable="true"]')) return
-      if (event.key === '+' || event.key === '=') { event.preventDefault(); scale(zoom * 1.25) }
-      if (event.key === '-') { event.preventDefault(); scale(zoom / 1.25) }
-      if (event.key === '1') actualSize()
-      if (event.key.toLowerCase() === 'r') setRotation(value => (value + 90) % 360)
+      if (!reels) {
+        if (event.key === '+' || event.key === '=') { event.preventDefault(); scale(zoom * 1.25) }
+        if (event.key === '-') { event.preventDefault(); scale(zoom / 1.25) }
+        if (event.key === '1') actualSize()
+        if (event.key.toLowerCase() === 'r') setRotation(value => (value + 90) % 360)
+      }
       if (event.key.toLowerCase() === 'f') void fullscreen()
       if (!isVideo) return
       if (event.key === ' ' || event.key.toLowerCase() === 'k') { event.preventDefault(); togglePlay() }
@@ -336,7 +341,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         event.currentTarget.setPointerCapture(event.pointerId); pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); gesture.current = { x: event.clientX, y: event.clientY, distance: 0 }
         const bounds = event.currentTarget.getBoundingClientRect()
         if (isVideo && !reels && pointers.current.size === 1 && event.clientX > bounds.left + bounds.width * 0.75 && event.clientY < bounds.bottom - seekStripHeight) volumeSwipe.current = { y: event.clientY, volume, active: false }
-        if (!isVideo && pointers.current.size === 2) {
+        if (zoomable && pointers.current.size === 2) {
           const points = [...pointers.current.values()]
           pinch.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), zoom: zoomRef.current, x: (points[0].x + points[1].x) / 2 - bounds.left - bounds.width / 2, y: (points[0].y + points[1].y) / 2 - bounds.top - bounds.height / 2, pan: panRef.current }
           gesture.current.distance = pinch.current.distance
@@ -369,14 +374,14 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         }
         const points = [...pointers.current.values()]
         const start = pinch.current
-        if (!isVideo && points.length === 2 && start) {
+        if (zoomable && points.length === 2 && start) {
           const bounds = event.currentTarget.getBoundingClientRect()
           const nextZoom = Math.max(1, Math.min(8, start.zoom * Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) / Math.max(1, start.distance)))
           const ratio = nextZoom / start.zoom
           const next = { x: (points[0].x + points[1].x) / 2 - bounds.left - bounds.width / 2 - (start.x - start.pan.x) * ratio, y: (points[0].y + points[1].y) / 2 - bounds.top - bounds.height / 2 - (start.y - start.pan.y) * ratio }
           setZoom(nextZoom); zoomRef.current = nextZoom
           boundedPan(next, nextZoom)
-        } else if (!isVideo && zoomRef.current > 1) boundedPan({ x: panRef.current.x + event.clientX - old.x, y: panRef.current.y + event.clientY - old.y }, zoomRef.current)
+        } else if (zoomable && zoomRef.current > 1) boundedPan({ x: panRef.current.x + event.clientX - old.x, y: panRef.current.y + event.clientY - old.y }, zoomRef.current)
       }}
       onPointerUp={pointerUp}
       onPointerCancel={() => { pointers.current.clear(); pinch.current = null; volumeSwipe.current = null; endHold() }}>
@@ -395,6 +400,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
       {skip && <span key={skip.key} aria-hidden="true" className={`motion-flash pointer-events-none absolute top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-full bg-canvas/60 px-4 py-3 text-xs font-semibold text-ink ${skip.forward ? 'right-8' : 'left-8'}`}>{skip.forward ? <ChevronsRight className="size-6" /> : <ChevronsLeft className="size-6" />}{skipSeconds} s</span>}
       {boosted && <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-1 rounded-full bg-canvas/80 px-3 py-1 text-sm font-semibold text-ink sm:top-6"><FastForward className="size-4" />2×</span>}
       {isVideo && !reels && <ViewerVideoControls video={video} mediaId={item.id} playing={playing} muted={viewerMuted || volume === 0} volume={volume} rate={rate} hidden={chromeHidden} fullscreen={isFullscreen} pictureInPicture={pictureInPictureAvailable}
+        autoplay={autoplayNext} onAutoplay={onAutoplayNextChange && (() => onAutoplayNextChange(!autoplayNext))}
         onTogglePlay={togglePlay} onToggleMute={toggleMute} onVolume={changeVolume} onRate={cycleRate} onFullscreen={() => void fullscreen()} onPictureInPicture={() => void pictureInPicture()} />}
       {isVideo && reels && <ReelsSeek video={video} mediaId={item.id} visible={seekVisible} stripRef={seekStrip} onReveal={revealSeek} />}
       {/* Liking is a universal, brand-independent gesture: it stays red in every theme,
@@ -412,7 +418,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
     <Modal open={optionsOpen} onOpenChange={setOptionsOpen} title="View options" description="Fit, playback and download actions for this item." sheet>
       <div className="flex flex-wrap gap-2 p-5">
         <QuietButton onClick={() => { toggleFill() }}>{fill ? 'Fit' : 'Fill'}</QuietButton>
-        {item.mediaType === 'image' && <><QuietButton aria-label="Zoom out" onClick={() => scale(zoom / 1.25)}>−</QuietButton><QuietButton aria-label="Reset zoom" onClick={() => scale(1)}>{Math.round(zoom * 100)}%</QuietButton><QuietButton aria-label="Zoom in" onClick={() => scale(zoom * 1.25)}>+</QuietButton><QuietButton onClick={actualSize}>Actual size</QuietButton><QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>Rotate</QuietButton></>}
+        {zoomable && <><QuietButton aria-label="Zoom out" onClick={() => scale(zoom / 1.25)}>−</QuietButton><QuietButton aria-label="Reset zoom" onClick={() => scale(1)}>{Math.round(zoom * 100)}%</QuietButton><QuietButton aria-label="Zoom in" onClick={() => scale(zoom * 1.25)}>+</QuietButton><QuietButton onClick={actualSize}>Actual size</QuietButton><QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>Rotate</QuietButton></>}
         {reels && onOpenViewer && <QuietButton onClick={() => { const player = video.current; if (player) { resumePlayback.current ||= !player.paused; player.pause() }; onOpenViewer(item); setOptionsOpen(false) }}>Open in viewer</QuietButton>}
         {isVideo && reels && <Field label="Volume"><Range min={0} max={1} step={0.05} value={volume} className="w-32" onChange={event => changeVolume(Number(event.target.value))} /></Field>}
         {isVideo && <div className="w-32 shrink-0"><Select aria-label="Playback speed" value={rate} onChange={event => { const value = Number(event.target.value); setRate(value); if (video.current) video.current.playbackRate = value }}><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></Select></div>}

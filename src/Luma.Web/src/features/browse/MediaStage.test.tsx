@@ -473,3 +473,56 @@ it('keeps right-side vertical swipes available for Reels navigation without chan
   expect(navigate).toHaveBeenCalledWith('next')
   vi.restoreAllMocks()
 })
+
+it('keeps picture controls out of Reels: a double tap on a photo or GIF likes instead of zooming', async () => {
+  vi.useFakeTimers()
+  const onLike = vi.fn()
+  try {
+    for (const item of [image, { ...image, id: 2, fileName: 'loop.gif', extension: '.gif' }]) {
+      onLike.mockClear()
+      const { container, unmount } = render(<MediaStage item={item} reels onNavigate={vi.fn()} onLike={onLike} />)
+      const stage = container.querySelector('.touch-none') as HTMLElement
+      vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400, height: 800, right: 400, bottom: 800, x: 0, y: 0, toJSON: () => ({}) })
+      tap(stage, 200, 400); tap(stage, 200, 400)
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(onLike).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('img').parentElement!.style.transform).toContain('scale(1)')
+      // Pinching does not zoom either, and the keyboard zoom keys are the viewer's.
+      stage.setPointerCapture = () => {}
+      fireEvent.pointerDown(stage, { pointerId: 1, clientX: 100, clientY: 400 })
+      fireEvent.pointerDown(stage, { pointerId: 2, clientX: 200, clientY: 400 })
+      fireEvent.pointerMove(stage, { pointerId: 2, clientX: 300, clientY: 400 })
+      fireEvent.pointerUp(stage, { pointerId: 2, clientX: 300, clientY: 400 })
+      fireEvent.pointerUp(stage, { pointerId: 1, clientX: 100, clientY: 400 })
+      fireEvent.keyDown(window, { key: '+' })
+      expect(screen.getByRole('img').parentElement!.style.transform).toContain('scale(1)')
+      unmount()
+    }
+  } finally { vi.restoreAllMocks(); vi.useRealTimers() }
+})
+
+it('offers zoom and rotate in View options only outside Reels', () => {
+  const { unmount } = render(<MediaStage item={image} reels optionsOpen onNavigate={vi.fn()} />)
+  expect(screen.queryByRole('button', { name: 'Zoom in' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument()
+  unmount()
+  render(<MediaStage item={image} optionsOpen onNavigate={vi.fn()} />)
+  expect(screen.getByRole('button', { name: 'Zoom in' })).toBeVisible()
+})
+
+it('shows an Autoplay toggle in the viewer player bar but not in Reels', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  try {
+    const change = vi.fn()
+    const { unmount } = render(<MediaStage item={{ ...image, mediaType: 'video' }} autoplayNext={false} onAutoplayNextChange={change} onNavigate={vi.fn()} />)
+    const toggle = screen.getByRole('button', { name: 'Autoplay next video' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(toggle)
+    expect(change).toHaveBeenCalledWith(true)
+    unmount()
+    render(<MediaStage item={{ ...image, mediaType: 'video' }} reels muted autoplayNext onAutoplayNextChange={change} onNavigate={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Autoplay next video' })).not.toBeInTheDocument()
+  } finally { vi.restoreAllMocks() }
+})

@@ -63,21 +63,18 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
         if(changed>0 && active.TryGetValue(id,out var source)) { try { source.Cancel(); } catch(ObjectDisposedException) { } }
     }
 
+    // Always a new job: the stopped record stays terminal (and clearable), so a worker still
+    // winding down the old ID can never write into the new run.
     public async Task<JobAccepted> QueueAgainAsync(long id,CancellationToken ct)
     {
-        await using var db=await database.OpenAsync(ct);
-        using var tx=db.BeginTransaction();
-        var job=await db.QuerySingleOrDefaultAsync<Job>(new CommandDefinition("SELECT * FROM MetadataJobs WHERE Id=@id",new{id},tx,cancellationToken:ct)) ?? throw ApiRequestException.Missing();
+        Job job;
+        await using(var db=await database.OpenAsync(ct))
+            job=await db.QuerySingleOrDefaultAsync<Job>(new CommandDefinition("SELECT * FROM MetadataJobs WHERE Id=@id",new{id},cancellationToken:ct)) ?? throw ApiRequestException.Missing();
         if(job.State is "queued" or "running" || active.ContainsKey(id)) throw new ApiRequestException(409,"conflict","This operation is still stopping or already queued.");
-        if(await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')",transaction:tx,cancellationToken:ct))>=16) throw new ApiRequestException(429,"rate_limited","The metadata job queue is full.");
-        if(job.State=="cancelled" && job.Kind=="import") {
-            var request=JsonSerializer.Deserialize<MetadataJobRequest>(job.Request)! with {ScanId=null};
-            await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET State='queued',QueueDismissed=0,FinishedAt=NULL,FailureCode=NULL,ScanId=NULL,Request=@request WHERE Id=@id",new{id,request=JsonSerializer.Serialize(request)},tx,cancellationToken:ct));
-            tx.Commit();
-            return new(id);
-        }
-        tx.Commit();
-        return await EnqueueAsync(job.Kind,JsonSerializer.Deserialize<MetadataJobRequest>(job.Request)! with {ScanId=null},ct);
+        var queued=await EnqueueAsync(job.Kind,JsonSerializer.Deserialize<MetadataJobRequest>(job.Request)! with {ScanId=null},ct);
+        await using(var db=await database.OpenAsync(ct))
+            await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET QueueDismissed=1 WHERE Id=@id",new{id},cancellationToken:ct));
+        return queued;
     }
 
     public async Task<MetadataJobStatus> StatusAsync(long id,long? afterMediaId,CancellationToken ct)
@@ -184,7 +181,8 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
             else await ExportAsync(job,request,ct);
             bytes=job.Kind=="import"?0:new FileInfo(ContentPath(job.Id,job.Kind)).Length;
         } catch(OperationCanceledException) when(hostToken.IsCancellationRequested) { throw; }
-        catch(OperationCanceledException) when(ct.IsCancellationRequested) {
+        // Cancelled (or otherwise finished) elsewhere while running: its state is already terminal.
+        catch(Exception error) when(error is JobStoppedException || error is OperationCanceledException && ct.IsCancellationRequested) {
             File.Delete(ContentPath(job.Id,job.Kind));
             File.Delete(ContentPath(job.Id,job.Kind)+".tmp");
             return true;
@@ -338,6 +336,7 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
             if(fingerprint!=$"{source.SourceRevision}:{SourceFingerprint(root,path,request.IncludeSidecars)}") throw new MetadataChangedException();
             // Tags, revision and checkpoint commit together so restart cannot double-count.
 
+            await database.YieldToForegroundAsync(ct);
             using var tx=db.BeginTransaction();
             if(!await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Media WHERE Id=@id AND SourceRevision=@revision)",new{id,revision=source.SourceRevision},tx,cancellationToken:ct))) throw new MetadataChangedException();
             var before=await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@id",new{id},tx,cancellationToken:ct));
@@ -351,17 +350,22 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
             tx.Commit();
             return;
         } catch(OperationCanceledException) when(ct.IsCancellationRequested) {throw;}
+        catch(JobStoppedException) {throw;}
         catch(SqliteException error) when(error.SqliteErrorCode is 5 or 6) {throw;}
         catch(Exception error) {code=error is MetadataChangedException?"source_changed":error is IOException or UnauthorizedAccessException?"source_unavailable":error is OperationCanceledException?"metadata_timeout":"invalid_metadata";}
         await RecordImportAsync(db,job.Id,id,code,found,0,0,ct);
     }
 
-    private static async Task RecordImportAsync(SqliteConnection db,long jobId,long id,string code,int found,int updated,int skipped,CancellationToken ct,SqliteTransaction? transaction=null)
+    private async Task RecordImportAsync(SqliteConnection db,long jobId,long id,string code,int found,int updated,int skipped,CancellationToken ct,SqliteTransaction? transaction=null)
     {
+        if(transaction is null) await database.YieldToForegroundAsync(ct);
         using var owned=transaction is null?db.BeginTransaction():null;
         var tx=transaction??owned!;
+        // Progress only counts while the job is running; a cancelled job's last item (and the
+        // tags read for it) roll back instead of landing on a terminal task.
+        if(await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET Processed=Processed+1,LastMediaId=MAX(LastMediaId,@id),Found=Found+@found,Updated=Updated+@updated,Skipped=Skipped+@skipped,Failed=Failed+@failed WHERE Id=@jobId AND State='running'",new{jobId,id,found,updated,skipped,failed=code is "imported" or "no_metadata" or "unchanged"?0:1},tx,cancellationToken:ct))==0)
+            throw new JobStoppedException();
         await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobItems(JobId,MediaId,Code,Found,Updated,Skipped) VALUES(@jobId,@id,@code,@found,@updated,@skipped)",new{jobId,id,code,found,updated,skipped},tx,cancellationToken:ct));
-        await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET Processed=Processed+1,LastMediaId=MAX(LastMediaId,@id),Found=Found+@found,Updated=Updated+@updated,Skipped=Skipped+@skipped,Failed=Failed+@failed WHERE Id=@jobId",new{jobId,id,found,updated,skipped,failed=code is "imported" or "no_metadata" or "unchanged"?0:1},tx,cancellationToken:ct));
         owned?.Commit();
     }
 
@@ -398,8 +402,10 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
     }
 
     private async Task ProgressAsync(long id,int processed,int failed,CancellationToken ct) {
+        await database.YieldToForegroundAsync(ct);
         await using var db=await database.OpenAsync(ct);
-        await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET Processed=Processed+@processed,Failed=Failed+@failed WHERE Id=@id",new{id,processed,failed},cancellationToken:ct));
+        if(await db.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET Processed=Processed+@processed,Failed=Failed+@failed WHERE Id=@id AND State='running'",new{id,processed,failed},cancellationToken:ct))==0)
+            throw new JobStoppedException();
     }
     private async Task FinishAsync(long id,string state,string? code,long bytes,CancellationToken ct) {
         for(var attempt=1;;attempt++) {
@@ -424,6 +430,7 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
     }
     private sealed class MetadataChangedException : IOException;
     private sealed class JobQuotaException : Exception;
+    private sealed class JobStoppedException : Exception;
     private sealed class Job { public long Id{get;set;} public string Kind{get;set;}=""; public string State{get;set;}=""; public string Request{get;set;}=""; public string CreatedAt{get;set;}=""; public string? SnapshotAt{get;set;} public string? FinishedAt{get;set;} public long LastMediaId{get;set;} public int Processed{get;set;} public int Failed{get;set;} public int Found{get;set;} public int Updated{get;set;} public int Skipped{get;set;} public string? FailureCode{get;set;} }
     private sealed record ExportRow(long Id,long LibraryId,string RelativePath,string Availability,string LibraryPath);
     private sealed record ExportTag(long MediaId,string Name);

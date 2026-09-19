@@ -53,23 +53,23 @@ public sealed class GeneratedCache(Database database, IndexingOptions options)
         try
         {
             await using var db = await database.OpenAsync(ct);
-            using var tx = db.BeginTransaction();
-            if (!await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
-                SELECT EXISTS(SELECT 1 FROM ProcessingJobs j JOIN Media m ON m.Id=j.MediaId JOIN Scans s ON s.Id=j.ScanId
-                WHERE j.MediaId=@MediaId AND j.SourceRevision=@SourceRevision AND j.EncoderVersion=@EncoderVersion AND j.Claim=@Claim
-                  AND j.State='running' AND m.SourceRevision=j.SourceRevision AND s.State IN ('running','completed'))
-                """, job, tx, cancellationToken: ct))) return false;
+            // Check the claim and move files before taking the write lock: file moves can be slow
+            // on network or spinning storage, and nothing else may wait on them. The paths are
+            // specific to this media revision, so a file published by a claim that is then lost
+            // is simply overwritten by the next attempt or removed by maintenance.
+            if (!await StillClaimedAsync(db, job, null, ct)) return false;
             foreach (var entry in entries)
-            {
-                var variant = variants.Single(x => x.Variant == entry.Variant);
-                File.Move(variant.TemporaryPath, Path.Combine(options.CachePath, entry.RelativePath), overwrite: true);
+                File.Move(variants.Single(x => x.Variant == entry.Variant).TemporaryPath, Path.Combine(options.CachePath, entry.RelativePath), overwrite: true);
+            await database.YieldToForegroundAsync(ct);
+            using var tx = db.BeginTransaction();
+            if (!await StillClaimedAsync(db, job, tx, ct)) return false;
+            foreach (var entry in entries)
                 await db.ExecuteAsync(new CommandDefinition("""
                     INSERT INTO CacheEntries(MediaId,SourceRevision,Variant,EncoderVersion,State,RelativePath,SizeBytes,Width,Height,ContentHash,LastAccessAt)
                     VALUES(@MediaId,@SourceRevision,@Variant,@EncoderVersion,'ready',@RelativePath,@SizeBytes,@Width,@Height,@ContentHash,strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                     ON CONFLICT(MediaId,SourceRevision,Variant,EncoderVersion) DO UPDATE SET State='ready',SizeBytes=excluded.SizeBytes,
                       Width=excluded.Width,Height=excluded.Height,ContentHash=excluded.ContentHash,LastAccessAt=excluded.LastAccessAt;
                     """, entry, tx, cancellationToken: ct));
-            }
             await db.ExecuteAsync(new CommandDefinition("""
                 UPDATE Media SET Width=@Width,Height=@Height,DurationMs=@DurationMs,CapturedAt=@CapturedAt,
                   EffectiveDate=COALESCE(@CapturedAt,ModifiedAt),ProcessingStatus='ready' WHERE Id=@MediaId AND SourceRevision=@SourceRevision;
@@ -84,6 +84,13 @@ public sealed class GeneratedCache(Database database, IndexingOptions options)
         }
         finally { gate.Release(); }
     }
+
+    private static Task<bool> StillClaimedAsync(Microsoft.Data.Sqlite.SqliteConnection db, ProcessingJob job, Microsoft.Data.Sqlite.SqliteTransaction? tx, CancellationToken ct) =>
+        db.ExecuteScalarAsync<bool>(new CommandDefinition("""
+            SELECT EXISTS(SELECT 1 FROM ProcessingJobs j JOIN Media m ON m.Id=j.MediaId JOIN Scans s ON s.Id=j.ScanId
+            WHERE j.MediaId=@MediaId AND j.SourceRevision=@SourceRevision AND j.EncoderVersion=@EncoderVersion AND j.Claim=@Claim
+              AND j.State='running' AND m.SourceRevision=j.SourceRevision AND s.State IN ('running','completed'))
+            """, job, tx, cancellationToken: ct));
 
     public async Task MaintainAsync(CancellationToken ct)
     {

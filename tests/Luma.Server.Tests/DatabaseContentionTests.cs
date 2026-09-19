@@ -1,8 +1,13 @@
+using System.Diagnostics;
+using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Dapper;
 using Luma.Server.Features.Tags;
 using Luma.Server.Http;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -59,5 +64,70 @@ public sealed class DatabaseContentionTests
         context.Response.Body.Position = 0;
         using var problem = await JsonDocument.ParseAsync(context.Response.Body);
         Assert.Equal("database_busy", problem.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Likes_succeed_promptly_while_background_work_keeps_taking_the_write_lock()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await BrowsingTests.SeedAsync(f, 1);
+        await using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Testing")
+            .UseSetting("Luma:DatabasePath", f.Database.Path).UseSetting("Luma:Indexing:CachePath", f.Options.CachePath)
+            .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Test").UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path));
+        using var client = host.CreateClient();
+        var database = host.Services.GetRequiredService<Luma.Server.Data.Database>();
+
+        // A background writer in the shape of indexing: back-to-back short batches that
+        // release the lock for only a moment between them.
+        using var stop = new CancellationTokenSource();
+        var background = Task.Run(async () =>
+        {
+            await using var db = await database.OpenAsync(default);
+            while (!stop.IsCancellationRequested)
+            {
+                await database.YieldToForegroundAsync(default);
+                using var tx = db.BeginTransaction();
+                await db.ExecuteAsync("UPDATE ApplicationState SET Value=Value WHERE Key='instanceId'", transaction: tx);
+                Thread.Sleep(30);
+                tx.Commit();
+            }
+        });
+        try
+        {
+            await client.GetAsync("/api/status");
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                // Let the background writer resume its rhythm before each tap.
+                await Task.Delay(100);
+                var timer = Stopwatch.StartNew();
+                var response = await client.PutAsJsonAsync("/api/media/1/preference", new { preference = attempt % 2 == 0 ? "liked" : "neutral" });
+                Assert.True(response.IsSuccessStatusCode, $"{response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+                Assert.True(timer.ElapsedMilliseconds < 1000, $"A like waited {timer.ElapsedMilliseconds} ms behind background writes.");
+            }
+        }
+        finally { await stop.CancelAsync(); await background; }
+    }
+
+    [Fact]
+    public async Task Interactive_writes_retry_a_locked_database_before_reporting_busy()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var filter = new ForegroundWriteFilter(f.Database, NullLogger<ForegroundWriteFilter>.Instance);
+        var context = new DefaultEndpointFilterInvocationContext(new DefaultHttpContext { Request = { Method = "PUT" } });
+        var attempts = 0;
+        var result = await filter.InvokeAsync(context, _ =>
+        {
+            Assert.True(f.Database.ForegroundWritePending);
+            return ++attempts < 3 ? throw new SqliteException("database is locked", 5) : ValueTask.FromResult<object?>("saved");
+        });
+        Assert.Equal("saved", result);
+        Assert.Equal(3, attempts);
+        Assert.False(f.Database.ForegroundWritePending);
+
+        // Retries are bounded: a lock that never clears still reaches the client as busy.
+        attempts = 0;
+        await Assert.ThrowsAsync<SqliteException>(async () => await filter.InvokeAsync(context, _ => { attempts++; throw new SqliteException("database is locked", 5); }));
+        Assert.Equal(4, attempts);
+        Assert.False(f.Database.ForegroundWritePending);
     }
 }

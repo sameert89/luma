@@ -19,6 +19,7 @@ public sealed class CacheAccessLog(Database database) : BackgroundService
             if(batch.Count==0) continue;
             try
             {
+                await database.YieldToForegroundAsync(ct);
                 await using var db=await database.OpenAsync(ct);
                 await db.ExecuteAsync(new CommandDefinition("""
                     UPDATE CacheEntries SET LastAccessAt=@now WHERE MediaId IN (SELECT value FROM json_each(@ids)) AND LastAccessAt<@cutoff

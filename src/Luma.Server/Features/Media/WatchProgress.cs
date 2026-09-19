@@ -9,7 +9,7 @@ public sealed record WatchState(long MediaId,double PositionSeconds,double Durat
 
 public static class PlaybackEndpoints
 {
-    public static void MapPlayback(this WebApplication app)
+    public static void MapPlayback(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/media/{id:long}/progress",async(long id,Database database,CancellationToken ct)=> {
             await using var db=await database.OpenAsync(ct);

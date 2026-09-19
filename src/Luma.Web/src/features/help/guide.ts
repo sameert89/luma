@@ -1,6 +1,6 @@
 import {
   Bookmark, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Clapperboard, Download, EllipsisVertical, Eye, EyeOff, FileInput, Film,
-  FolderOpen, Heart, HeartCrack, ImageMinus, Images, Info, Maximize, Minimize, Pause, PictureInPicture2, Play, Plus, Presentation, RefreshCw, Search, Settings,
+  FolderOpen, Heart, HeartCrack, ImageMinus, Images, Info, ListVideo, Maximize, Minimize, Pause, PictureInPicture2, Play, Plus, Presentation, RefreshCw, Search, Settings,
   Settings2, Shuffle, SlidersHorizontal, Square, Tag, Timer, Volume2, VolumeX, X, type LucideIcon,
 } from 'lucide-react'
 
@@ -120,8 +120,9 @@ export const guideSections: GuideSection[] = [
         { label: 'Seek', name: 'Seek bar', where: 'Video control bar', what: 'Drag or tap to jump to a time. The lighter part shows what has loaded.' },
         { icons: [Volume2, VolumeX], name: 'Mute / Unmute', where: 'Video control bar', what: 'Silences the video or restores its volume.' },
         { label: 'Volume', name: 'Volume slider', where: 'Video control bar', what: 'Sets the volume in fine steps.' },
-        { label: '1×', name: 'Playback speed', where: 'Video control bar, and View options', what: 'Cycles 1×, 1.5×, 2× and 0.5×.' },
-        { icons: [PictureInPicture2], name: 'Picture in picture', where: 'Video control bar and View options, where the browser supports it', what: 'Pops the video into a small floating window.' },
+        { icons: [ListVideo], name: 'Autoplay next video', where: 'Video control bar, including fullscreen', what: 'When on, the next video starts by itself when the current one ends. Luma remembers the choice. Reels uses its own Auto-scroll instead.' },
+        { label: '1×', name: 'Playback speed', where: 'Video control bar (View options on upright phones)', what: 'Cycles 1×, 1.5×, 2× and 0.5×.' },
+        { icons: [PictureInPicture2], name: 'Picture in picture', where: 'Video control bar (View options on upright phones), where the browser supports it', what: 'Pops the video into a small floating window.' },
         { label: 'Resume from 1:23', name: 'Resume from … / Start from beginning', where: 'Over a video you left part-way through', what: 'Carries on from where you stopped, or starts again from 0:00.' },
       ] },
       { title: 'Metadata for one item', entries: [
@@ -172,14 +173,16 @@ export const guideSections: GuideSection[] = [
       ] },
       { title: 'Queue actions', entries: [
         { label: 'Cancel', name: 'Cancel / Cancel scan', where: 'On a queued or running task', what: 'Stops the task. Work already finished, such as prepared previews and imported tags, is kept.' },
-        { label: 'Queue again', name: 'Queue again', where: 'On a finished, cancelled or failed task', what: 'Runs the task again. A cancelled metadata import continues from its unfinished checkpoint.' },
-        { label: 'Clear finished', name: 'Clear finished', where: 'Top of the queue', what: 'Removes finished entries from the list and leaves active ones in place.' },
+        { label: 'Queue again', name: 'Queue again', where: 'On a cancelled, failed or interrupted task', what: 'Runs the task again as a new task, which replaces the stopped one in the list.' },
+        { label: 'Clear', name: 'Clear', where: 'On any task that is no longer active', what: 'Removes that one entry from the list.' },
+        { label: 'Clear finished', name: 'Clear finished', where: 'Top of the queue', what: 'Removes every completed, cancelled, failed and interrupted entry and leaves active ones in place.' },
         { icons: [Square], name: 'Cancel scan', where: 'Indexing status → Scan controls on a library card, while a scan runs', what: 'Stops the current scan. Start another scan to pick up remaining work.' },
         { label: 'Start rescan', name: 'Start rescan / Not now', where: 'Background tasks panel, when no scan is running', what: 'Checks every folder for new, changed or removed media. On a large library this can take a long time.' },
       ] },
     ],
     notes: [
-      'Each task shows its kind (indexing, import, xmp or dislikes), its state (queued, running, completed, cancelled or failed) and counters for processed, pending and failed items.',
+      'Each task shows what it is (indexing, tag import, XMP export or disliked paths export), its state (queued, running, completed, cancelled, failed or interrupted) and its progress.',
+      'Interrupted means Luma stopped the task, for example on restart. An interrupted or cancelled task stops at once and never picks up again by itself.',
       'Clear finished only tidies the list. It does not delete media, scan history or metadata checkpoints.',
       'Cancelling stops further work; it does not undo changes a task has already made.',
     ],
@@ -207,15 +210,15 @@ export type Gesture = { gesture: string; where: string; result: string }
 
 export const gestures: Gesture[] = [
   { gesture: 'Swipe left or right', where: 'Viewer', result: 'Next or previous item.' },
-  { gesture: 'Pinch', where: 'Photos in the viewer and Reels', result: 'Zooms in or out; drag to pan while zoomed.' },
-  { gesture: 'Double-tap', where: 'Photos', result: 'Zooms into the tapped spot; double-tap again to return to fit.' },
+  { gesture: 'Pinch', where: 'Photos in the viewer', result: 'Zooms in or out; drag to pan while zoomed.' },
+  { gesture: 'Double-tap', where: 'Photos and GIFs in the viewer', result: 'Zooms into the tapped spot; double-tap again to return to fit.' },
   { gesture: 'Mouse wheel', where: 'Photos in the viewer', result: 'Zooms in or out.' },
   { gesture: 'Tap', where: 'Videos', result: 'Plays or pauses. In fullscreen with hidden controls, the first tap only shows them.' },
   { gesture: 'Double-tap left or right third', where: 'Videos in the viewer and Reels', result: 'Skips back or forward 10 seconds.' },
   { gesture: 'Press and hold', where: 'Playing videos', result: 'Plays at 2× until you let go.' },
   { gesture: 'Swipe up or down on the right side', where: 'Videos in the normal viewer only', result: 'Raises or lowers the volume, with a brief volume readout.' },
   { gesture: 'Swipe up or down', where: 'Reels', result: 'Next or previous reel. Mouse wheel and trackpad scrolling do the same.' },
-  { gesture: 'Double-tap / triple-tap the centre', where: 'Video reels', result: 'Likes / dislikes the reel.' },
+  { gesture: 'Double-tap / triple-tap the centre', where: 'Reels (videos, photos and GIFs)', result: 'Likes / dislikes the reel.' },
   { gesture: 'Tap the bottom strip', where: 'Video reels', result: 'Reveals the seek bar.' },
   { gesture: 'Press and hold a tag', where: 'Collections → Tags', result: 'Opens Manage tag.' },
 ]

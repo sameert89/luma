@@ -22,7 +22,7 @@ public sealed record SourceVerificationSetting(bool Enabled);
 
 public static class IndexingEndpoints
 {
-    public static void MapIndexing(this WebApplication app)
+    public static void MapIndexing(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/settings/source-verification", async (SourceVerificationPreference preference, CancellationToken ct) =>
         {

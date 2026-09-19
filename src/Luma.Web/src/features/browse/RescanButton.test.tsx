@@ -16,7 +16,7 @@ it('refreshes scan status immediately when opening instead of waiting for a poll
   expect(trigger.querySelector('svg')).not.toHaveClass('motion-safe:animate-spin')
   preparing = true
   await userEvent.click(trigger)
-  expect(await screen.findByRole('button', { name: 'Cancel scan' })).toBeVisible()
+  expect(await screen.findByRole('button', { name: 'Cancel Indexing' })).toBeVisible()
   expect(trigger.querySelector('svg')).toHaveClass('motion-safe:animate-spin')
   expect(screen.queryByRole('button', { name: 'Start rescan' })).not.toBeInTheDocument()
   unmount()

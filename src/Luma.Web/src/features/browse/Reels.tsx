@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Clapperboard, Info, Settings2, SlidersHorizontal, Eye, EyeOff, Tag, Timer, Volume2, VolumeX } from 'lucide-react'
 import { IconButton } from '../../components/ui/Controls'
@@ -10,6 +10,7 @@ import { MetadataExchange } from '../tags/MetadataExchange'
 import { TagEditor } from '../tags/TagEditor'
 import { useFullscreen } from './useFullscreen'
 import { usePreviewPriority } from './usePreviewPriority'
+import { usePreference } from './usePreference'
 import { ApiError } from '../../lib/api/client'
 import { errorMessage, imageUrl, queryString, request, type Filters, type Media, type MediaPage, type Neighbors } from './api'
 
@@ -48,7 +49,6 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const suspended = viewerOpen || tags || optionsOpen || infoOpen
-  const client = useQueryClient()
   const first = useQuery({ queryKey: ['reels-first', queryFilters], queryFn: ({ signal }) => request<MediaPage>(`/api/media?${queryString({ ...queryFilters, limit: 1 })}`, signal), enabled: !restoredId, gcTime: 0 })
   const base = active ?? first.data?.items[0]
   const baseId = active?.id ?? restoredId ?? base?.id
@@ -64,8 +64,7 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
   }, [muted, autoScroll, positionKey, item?.id, restoredId])
   const neighbors = useQuery({ queryKey: ['reels-neighbors', queryFilters, item?.id], queryFn: ({ signal }) => request<Neighbors>(`/api/media/${item!.id}/neighbors?${queryString(queryFilters)}`, signal), enabled: !!item, gcTime: 0 })
   const next = neighbors.data?.next
-  const preference = useMutation({ mutationFn: ({ id, value }: { id: number; value: 'liked' | 'disliked' | 'neutral' }) => request(`/api/media/${id}/preference`, undefined, 'PUT', { preference: value }),
-    onSuccess: async (_result, { id }) => { await Promise.all([client.invalidateQueries({ queryKey: ['detail', id] }), client.invalidateQueries({ queryKey: ['media'] })]) } })
+  const preference = usePreference()
   usePreviewPriority([item, next, neighbors.data?.previous], true)
   useEffect(() => {
     if (!next || next.mediaType !== 'video' || suspended) return
@@ -106,7 +105,7 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
       <p className="pointer-events-auto rounded-full bg-canvas/80 px-3 py-1 text-lg font-semibold tracking-tight">luma<span className="text-accent">.</span><Clapperboard className="ml-1 inline size-3 align-super text-accent" aria-hidden="true" /><span className="sr-only"> reels</span></p>
     </div>
     {/* The shared action row sits just above the seek strip; see MediaActions. */}
-    <div hidden={isFullscreen}><MediaActions preference={item.preference} pending={preference.isPending} onPreference={value => preference.mutate({ id: item.id, value })}
+    <div hidden={isFullscreen}><MediaActions preference={item.preference} onPreference={value => preference.mutate({ id: item.id, value })}
       menuOpen={menuOpen} onMenuOpenChange={setMenuOpen} menuLabel="Reels menu" className="bottom-16">
       <IconButton label="Filters" className={actionButton} onClick={onFilters}><SlidersHorizontal className="size-4" /></IconButton>
       {onToggleFilters && <IconButton label={filtersVisible ? 'Hide filters' : 'Show filters'} className={actionButton} onClick={onToggleFilters}>{filtersVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</IconButton>}

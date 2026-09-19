@@ -121,7 +121,7 @@ public sealed class Stage8Tests
     }
 
     [Fact]
-    public async Task Cancelled_import_stays_cancelled_and_queue_again_resumes_its_checkpoint()
+    public async Task Cancelled_import_stays_cancelled_and_queue_again_creates_a_new_job()
     {
         await using var f=await PipelineFixture.CreateAsync(); await BrowsingTests.SeedAsync(f,2);
         using var worker=new MetadataJobs(f.Database,f.Options);
@@ -136,11 +136,15 @@ public sealed class Stage8Tests
             await Task.Delay(100);
             Assert.Equal("cancelled",(await worker.StatusAsync(job.Id,null,default)).State);
             var queued=await worker.QueueAgainAsync(job.Id,default);
-            Assert.Equal(job.Id,queued.Id);
-            var done=await AwaitAsync(worker,job.Id);
+            Assert.NotEqual(job.Id,queued.Id);
+            var done=await AwaitAsync(worker,queued.Id);
             Assert.Equal("completed",done.State);
             Assert.Equal(2,done.Processed);
             Assert.Equal(2,done.Items.Count);
+            // The stopped record is never revived or advanced by the new run.
+            var old=await worker.StatusAsync(job.Id,null,default);
+            Assert.Equal("cancelled",old.State);
+            Assert.Equal(1,old.Processed);
         } finally { await worker.StopAsync(default); }
     }
 
@@ -251,9 +255,11 @@ public sealed class Stage8Tests
         await client.PostAsync("/api/tasks/clear-finished",null);
         Assert.DoesNotContain((await client.GetFromJsonAsync<BackgroundTask[]>("/api/tasks"))!,x=>x.Id==$"scan-{preparing}");
         var metadata=host.Services.GetRequiredService<MetadataJobs>();
-        var resumed=await metadata.QueueAgainAsync(5,default);
-        Assert.Equal(5,resumed.Id);
-        Assert.Contains((await client.GetFromJsonAsync<BackgroundTask[]>("/api/tasks"))!,x=>x.Id=="metadata-5" && x.State=="queued");
+        var requeued=await metadata.QueueAgainAsync(5,default);
+        Assert.NotEqual(5,requeued.Id);
+        var listed=(await client.GetFromJsonAsync<BackgroundTask[]>("/api/tasks"))!;
+        Assert.Contains(listed,x=>x.Id==$"metadata-{requeued.Id}" && x.State=="queued");
+        Assert.DoesNotContain(listed,x=>x.Id=="metadata-5");
     }
 
     private static WebApplicationFactory<Program> Host(PipelineFixture f)=>new WebApplicationFactory<Program>().WithWebHostBuilder(builder=>builder.UseEnvironment("Testing")

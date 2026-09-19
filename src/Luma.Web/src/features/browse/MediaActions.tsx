@@ -10,8 +10,8 @@ export const actionButton = 'border-transparent bg-canvas/85'
  * menu opens upward, so every secondary action lives in the same place in every mode.
  * Callers position the row; its contents and order never change.
  */
-export function MediaActions({ preference, pending, onPreference, menuOpen, onMenuOpenChange, menuLabel, faded = false, className = '', children }: {
-  preference: string; pending: boolean; onPreference: (value: 'liked' | 'disliked' | 'neutral') => void
+export function MediaActions({ preference, onPreference, menuOpen, onMenuOpenChange, menuLabel, faded = false, className = '', children }: {
+  preference: string; onPreference: (value: 'liked' | 'disliked' | 'neutral') => void
   menuOpen: boolean; onMenuOpenChange: (open: boolean) => void; menuLabel: string; faded?: boolean; className?: string; children: ReactNode
 }) {
   const menuId = useId()
@@ -25,9 +25,9 @@ export function MediaActions({ preference, pending, onPreference, menuOpen, onMe
       <div className="flex max-h-[calc(100dvh-15rem)] min-h-0 flex-col items-end gap-2 overflow-y-auto overflow-x-hidden pb-0.5 no-scrollbar">{children}</div>
     </div>
     <div className={`flex items-center gap-2 ${interactive}`}>
-      <IconButton label="Like" aria-pressed={liked} className={actionButton} disabled={pending} onClick={() => onPreference(liked ? 'neutral' : 'liked')}><Heart className={`size-4 ${liked ? 'fill-accent text-accent' : ''}`} /></IconButton>
+      <IconButton label="Like" aria-pressed={liked} className={actionButton} onClick={() => onPreference(liked ? 'neutral' : 'liked')}><Heart className={`size-4 ${liked ? 'fill-accent text-accent' : ''}`} /></IconButton>
       {/* The broken heart stays an outline: filled, its crack disappears and it reads as a like. */}
-      <IconButton label="Dislike" aria-pressed={disliked} className={actionButton} disabled={pending} onClick={() => onPreference(disliked ? 'neutral' : 'disliked')}><HeartCrack className={`size-4 ${disliked ? 'text-danger' : ''}`} /></IconButton>
+      <IconButton label="Dislike" aria-pressed={disliked} className={actionButton} onClick={() => onPreference(disliked ? 'neutral' : 'disliked')}><HeartCrack className={`size-4 ${disliked ? 'text-danger' : ''}`} /></IconButton>
       <IconButton label={menuOpen ? `Close ${menuLabel.toLowerCase()}` : menuLabel} aria-expanded={menuOpen} aria-controls={menuId} className={actionButton} onClick={() => onMenuOpenChange(!menuOpen)}>{menuOpen ? <X className="size-4" /> : <EllipsisVertical className="size-4" />}</IconButton>
     </div>
   </div>

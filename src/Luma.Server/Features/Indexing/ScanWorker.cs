@@ -18,6 +18,8 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         if (folderPriority.TryGetValue(libraryId, out var queue)) queue.Writer.TryWrite(folderId);
     }
     public void Cancel(long id) { if (active.TryGetValue(id, out var source)) source.Cancel(); }
+    /// <summary>True while a worker still owns this scan, including while it is stopping.</summary>
+    public bool IsActive(long id) => active.ContainsKey(id);
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
         options.Libraries.Count == 0 ? Task.CompletedTask : Task.WhenAll(Enumerable.Range(0, options.DiscoveryWorkers).Select(_ => RunAsync(stoppingToken)));
@@ -46,6 +48,8 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 {
                     await FinishFailedAsync(scan.Id, ct.IsCancellationRequested ? "interrupted" : "cancelled", "interrupted", CancellationToken.None);
                 }
+                // Stopped elsewhere (cancelled or interrupted): its state is already terminal.
+                catch (ScanStoppedException) { }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 {
                     await FinishFailedAsync(scan.Id, "failed", "source_unavailable", ct);
@@ -130,6 +134,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 if (scan.FolderId is null && folderPriority.TryGetValue(root.Id, out var priority)
                     && priority.Reader.TryRead(out var requestedFolder))
                     await DiscoverPriorityFolderAsync(db, scan, root, requestedFolder, ct);
+                await database.YieldToForegroundAsync(ct);
                 using (var batch = db.BeginTransaction())
                 {
                     var folders = new Dictionary<string, long>();
@@ -139,6 +144,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                         await PersistEntryAsync(db, batch, folders, scan, root, entry, ct);
                         if (started.ElapsedMilliseconds >= 25) break;
                     }
+                    await EnsureRunningAsync(db, batch, scan.Id, ct);
                     batch.Commit();
                 }
                 // Give processing and interactive writes a chance between discovery batches.
@@ -146,6 +152,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             }
             await producer;
             SourcePaths.Check(root, root.Path);
+            await database.YieldToForegroundAsync(ct);
             using var tx = db.BeginTransaction();
             var owned = await db.ExecuteAsync(new CommandDefinition("""
                 UPDATE Scans SET State='completed',FinishedAt=@now WHERE Id=@Id AND State='running'
@@ -170,7 +177,17 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         }
     }
 
-    private static async Task DiscoverPriorityFolderAsync(SqliteConnection db, ScanRow scan, LibraryOptions root, long folderId, CancellationToken ct)
+    // A stopped scan's in-flight batch must not land after its state changed: that would count
+    // progress on a terminal task, or stamp media with a scan a newer one has replaced.
+    private static async Task EnsureRunningAsync(SqliteConnection db, SqliteTransaction tx, long id, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM Scans WHERE Id=@id", new { id }, tx, cancellationToken: ct)) != "running")
+            throw new ScanStoppedException();
+    }
+    private sealed class ScanStoppedException : Exception;
+
+    private async Task DiscoverPriorityFolderAsync(SqliteConnection db, ScanRow scan, LibraryOptions root, long folderId, CancellationToken ct)
     {
         var relative = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
             "SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId AND DirectIndexedAt IS NULL",
@@ -195,11 +212,13 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                         Path.GetRelativePath(root.Path, entry.FullName).Replace(Path.DirectorySeparatorChar, '/'), directory,
                         directory ? 0 : ((FileInfo)entry).Length, entry.LastWriteTimeUtc.ToString("O")));
                 }
+                await database.YieldToForegroundAsync(ct);
                 using (var tx = db.BeginTransaction())
                 {
                     var folders = new Dictionary<string, long>();
                     foreach (var entry in discovered)
                         await PersistEntryAsync(db, tx, folders, scan, root, entry, ct, priority: true);
+                    await EnsureRunningAsync(db, tx, scan.Id, ct);
                     tx.Commit();
                 }
                 await Task.Delay(1, ct);

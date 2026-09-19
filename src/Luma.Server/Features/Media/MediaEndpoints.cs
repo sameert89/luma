@@ -8,7 +8,7 @@ namespace Luma.Server.Features.Media;
 
 public static class MediaEndpoints
 {
-    public static void MapMedia(this WebApplication app)
+    public static void MapMedia(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/media/{id:long}/original", async (long id, bool? download, HttpContext context, OriginalContent content, CancellationToken ct) =>
             await content.ServeAsync(id, download ?? false, context, ct)).WithName("GetOriginalMedia")

@@ -94,6 +94,7 @@ public sealed class SourcePresenceWorker(Database database, IndexingOptions opti
         }
         if (missing.Count > 0)
         {
+            await database.YieldToForegroundAsync(ct);
             using var tx = db.BeginTransaction();
             await db.ExecuteAsync(new CommandDefinition("""
                 UPDATE Media SET Availability='missing'

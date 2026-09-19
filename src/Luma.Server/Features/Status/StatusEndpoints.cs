@@ -8,7 +8,7 @@ public sealed record StatusResponse(string Status, int SchemaVersion);
 
 public static class StatusEndpoints
 {
-    public static void MapStatus(this WebApplication app) => app.MapGet("/api/status",
+    public static void MapStatus(this IEndpointRouteBuilder app) => app.MapGet("/api/status",
         async (Database database, CancellationToken cancellationToken) =>
         {
             await using var connection = await database.OpenAsync(cancellationToken);

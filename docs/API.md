@@ -149,7 +149,11 @@ Imports now include `found`, `updated`, and `skipped` file counts in job status.
 
 The UI stores the open media ID as `media` and Reels presentation as `view=reels` in its browser URL, separately from API query filters. Refresh restores the item and visible query scope. These presentation parameters are never sent to media APIs.
 
-`POST /api/tasks/{id}/cancel` cancels a queued/running operation (`scan-{number}` or `metadata-{number}`). Scan cancellation also cancels its unfinished metadata stage. Prepared previews and imported tags are retained. `POST /api/tasks/{id}/queue` explicitly queues a terminal operation again; active/stopping operations return 409 and a full metadata queue returns 429. Cancelled imports resume the same durable item/checkpoint counts; other metadata operations create a fresh job. Scan requeue creates a new traversal preserving its folder, metadata mode and scan options. Cancellation survives restart and does not automatically restart work.
+`POST /api/tasks/{id}/cancel` cancels a queued/running operation (`scan-{number}` or `metadata-{number}`). Scan cancellation also cancels its unfinished metadata stage. Prepared previews and imported tags are retained. `POST /api/tasks/{id}/queue` explicitly queues a terminal operation again; active/stopping operations (including a worker still winding down the old one) return 409 and a full metadata queue returns 429. Queue again always creates a new task ID and dismisses the old record, which stays terminal: a worker still stopping the old ID can never advance or finish the new one. Scan requeue preserves its folder, metadata mode and scan options. Cancellation reaches the running worker through its cancellation token and survives restart; it does not automatically restart work. Terminal tasks (completed, cancelled, failed, interrupted, expired) accept no further progress: workers write progress only while their task is running, and a scan's in-flight batch rolls back once its scan has stopped. Metadata exports stopped by a restart are listed as `interrupted`; a stopped scan reports no pending previews.
+
+`POST /api/tasks/{id}/clear` returns 204 and dismisses one terminal task, 409 while it is active, and 404 when unknown.
+
+Every mutating API request is an interactive write. Background workers (indexing, preview publishing, metadata jobs, presence checks) keep each write transaction short, do file and metadata work outside it, and defer their next transaction while an interactive write is waiting. An interactive write that still finds the database locked is retried with short bounded backoff (50/150/400 ms) before the 503 `database_busy` problem is returned; the web client retries that response twice more before showing an error.
 
 Folder sorting: `GET /api/folders` accepts optional `sort=id|name` and `order=asc|desc`.
 Omitting both retains the existing ID-ascending API contract. Name sorting uses SQLite
@@ -160,9 +164,8 @@ visible sort direction (default descending) with media. Date, type, size and shu
 remain media-only sorts; folder timestamps and recursive folder sizes are not stored.
 Migration 0014 adds the parent/visibility/name/ID index.
 
-`POST /api/tasks/clear-finished` returns 204 and dismisses completed/cancelled/failed/
-expired metadata operations and completed/cancelled/failed/interrupted scans from the
-queue. Active scans and completed traversals still preparing previews remain visible;
-a scan with an in-flight decoder is not cleared. Dismissal persists in SQLite (migration
-0015), without deleting scan dependencies, imported tags, checkpoints or export downloads.
-Explicitly resuming a dismissed cancelled import restores its queue visibility.
+`POST /api/tasks/clear-finished` returns 204 and dismisses every terminal task:
+completed/cancelled/failed/interrupted/expired metadata operations and
+completed/cancelled/failed/interrupted scans. Active scans and completed traversals still
+preparing previews remain visible. Dismissal persists in SQLite (migration 0015), without
+deleting scan dependencies, imported tags, checkpoints or export downloads.
