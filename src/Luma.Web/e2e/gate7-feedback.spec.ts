@@ -133,7 +133,7 @@ test('double tapping a reel likes it without toggling playback', async ({ page }
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 })
 
-test('reels keep their own filters when switching modes', async ({ page }) => {
+test('reels carry the active filters when switching modes', async ({ page }) => {
   const navigation = page.getByRole('navigation', { name: 'Primary navigation' })
   await page.goto('/?libraryId=1&folderId=1')
   await navigation.getByRole('button', { name: 'Reels', exact: true }).click()
@@ -156,5 +156,5 @@ test('reels keep their own filters when switching modes', async ({ page }) => {
   await navigation.getByRole('button', { name: 'Reels', exact: true }).click()
   await expect(page).toHaveURL(/mediaType=image/)
   await expect(page).toHaveURL(/order=asc/)
-  await expect(page).not.toHaveURL(/q=photo/)
+  await expect(page).toHaveURL(/q=photo/)
 })

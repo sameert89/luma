@@ -166,6 +166,7 @@ if(mode=="seed")
         SELECT Id,SourceRevision,1,LastSeenScanId,MediaType,'ready','2026-01-01' FROM Media WHERE 1
         ON CONFLICT(MediaId,SourceRevision,EncoderVersion) DO UPDATE SET State='ready',Claim=NULL,LeaseUntil=NULL;
         UPDATE Media SET Availability='present',ProcessingStatus='ready';
+        UPDATE Folders SET Hidden=0;
         UPDATE Folders SET LastSeenScanId=1,DirectIndexedAt='2026-01-01' WHERE Id IN (1,2);
         """);
     Console.WriteLine($"Fixture ready: {directory}");return;

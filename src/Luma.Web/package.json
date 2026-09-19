@@ -1,6 +1,6 @@
 {
   "name": "luma-web",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,7 @@
     "build": "tsc -b && vite build",
     "build:host": "npm run build && node scripts/publish.mjs",
     "test": "vitest run",
-    "test:e2e": "dotnet run --project ../../tests/Luma.Tools -c Release -- seed ../../.local/browser-fixture-v2 1500 && playwright test",
+    "test:e2e": "npm run build && dotnet run --project ../../tests/Luma.Tools -c Release -- seed ../../.local/browser-fixture-v2 1500 && playwright test",
     "lint": "eslint .",
     "generate:api": "node scripts/generate-api.mjs",
     "preview": "vite preview"

@@ -115,9 +115,9 @@ test('reels preserve query, bound media, auto-scroll, stop inactive playback and
   expect(await reels.locator('link[rel=preload]').count()).toBeLessThanOrEqual(1)
   await page.screenshot({ path: `test-results/stage6-reels-${test.info().project.name}.png` })
   await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Library', exact: true }).click()
-  await expect(page.getByTestId('media-cell')).toHaveCount(3)
+  await expect(page.getByTestId('media-cell')).toHaveCount(2)
   await expect(page).toHaveURL(/q=stage6/)
-  await expect(page).not.toHaveURL(/mediaType=motion/)
+  await expect(page).toHaveURL(/mediaType=motion/)
 })
 
 test('Back closes nested details then viewer then returns to libraries', async ({ page }) => {
@@ -181,5 +181,4 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1490/original')
 })
-
 

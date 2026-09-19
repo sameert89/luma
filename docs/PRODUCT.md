@@ -187,7 +187,7 @@ Playback should feel like a streaming service's player:
 - double tapping the left/right of the video skips 10 seconds; pressing and holding plays at 2× and restores the chosen speed on release; J/K/L and M are keyboard shortcuts
 - picture-in-picture where the browser supports it, background playback, and lock-screen/headset controls through Media Session
 - in fullscreen, controls hide after a few seconds of inactivity during playback, return on any interaction, and a visible exit-fullscreen control is always offered
-- on upright phones the scrubber gets its own full-width, larger row and secondary controls compact into the row below (volume is left to the hardware keys); landscape phones, tablets and desktop keep the single-row player
+- on upright phones the scrubber gets its own full-width, larger row and secondary controls, including volume, compact into the row below; landscape phones, tablets and desktop keep the single-row player
 
 ## Slideshow
 
@@ -321,7 +321,7 @@ The interface must not simply shrink the desktop layout.
 
 The primary mobile destinations are Library, Reels, Search, Collections and Settings. They use a fixed bottom navigation bar. Search, sort and filters stay compact; filters open as a one-column bottom sheet, and scan status stays collapsed until requested. The folder heading truncates within a single row alongside icon-only preparation and selection controls, plus a folder actions toggle. Preparation spins while busy; selection becomes an X while active. There is no separate sort pill. Each folder card also exposes its own three-dot actions toggle beside its truncated name; folder information and whole-folder metadata import live in that menu. Full names and location remain available in folder information. Controls must never consume the gallery's primary viewport or overflow it horizontally.
 
-Desktop layouts show the installed Luma version unobtrusively in the bottom-right corner. Settings ends with an About section containing the same version, the canonical project link and creator credit.
+Desktop layouts show the installed Luma version unobtrusively at the bottom-left of the navigation sidebar. Settings ends with an About section containing the same version, the canonical project link and creator credit.
 
 Important mobile workflows:
 

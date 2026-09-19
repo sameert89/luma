@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { viewerAction } from './helpers'
+import { galleryAction, viewerAction } from './helpers'
 import { DatabaseSync } from 'node:sqlite'
 import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Your libraries' })).toBeVisible()
   await expect(page.getByTestId('media-cell')).toHaveCount(0)
-  const cover = page.getByRole('main').locator('section img').first()
+  const cover = page.getByRole('button', { name: 'Open Sample library', exact: true }).locator('img').first()
   await expect(cover).toBeVisible()
   await expect.poll(() => cover.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
   await page.screenshot({ animations: 'disabled', path: `test-results/libraries-${test.info().project.name}.png`, fullPage: true })
@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
 test('anchors mobile search to its icon and closes it with the cross', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile', 'Mobile search reveal')
   const open = page.getByRole('button', { name: 'Open search' })
-  const filters = page.getByRole('button', { name: 'Filters' })
+  const filters = page.getByRole('button', { name: 'Filters', exact: true })
   const filterPosition = await filters.boundingBox()
   const buttonPosition = await open.boundingBox()
   expect(buttonPosition!.x).toBeGreaterThan(page.viewportSize()!.width / 2)
@@ -72,21 +72,21 @@ test('cancelling preparation stops the busy indicator even with paused jobs', as
   let cancelled = false
   await page.route('**/api/indexing', route => route.fulfill({ json: { libraries: [{ id: 1, latestScanId: 901 }] } }))
   await page.route('**/api/scans/901', route => route.fulfill({ json: { id: 901, libraryId: 1, state: cancelled ? 'cancelled' : 'completed', discovered: 1500, ready: 1000, pending: 500, processing: 0, failed: 0 } }))
-  await page.route('**/api/scans/901/cancel', async route => { cancelled = true; await route.fulfill({ status: 202, json: { id: 901 } }) })
+  await page.route('**/api/tasks', route => route.fulfill({ json: cancelled ? [] : [{ id: 'scan-901', kind: 'indexing', state: 'running', processed: 1000, pending: 500, failed: 0 }] }))
+  await page.route('**/api/tasks/scan-901/cancel', async route => { cancelled = true; await route.fulfill({ status: 204 }) })
   // Opening status triggers the shared query without waiting for its polling interval.
   await page.getByRole('button', { name: 'Rescan Sample library', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByRole('button', { name: 'Cancel scan' })).toBeVisible()
   await dialog.getByRole('button', { name: 'Cancel scan' }).click()
+  await expect.poll(() => cancelled).toBe(true)
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Rescan Sample library', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'View scan progress for Sample library' })).toHaveCount(0)
-  expect(cancelled).toBe(true)
 })
 
 test('selection is visible and its full checkbox target can be tapped', async ({ page }) => {
-  await page.getByRole('button', { name: 'Select media', exact: true }).click()
-  const done = page.getByRole('button', { name: 'Done selecting', exact: true })
-  await expect(done).toHaveAttribute('aria-pressed', 'true')
+  await (await galleryAction(page, 'Select media')).click()
   const checkbox = page.getByRole('checkbox').first()
   const bounds = await checkbox.boundingBox()
   expect(bounds!.width).toBeGreaterThanOrEqual(44)
@@ -94,9 +94,8 @@ test('selection is visible and its full checkbox target can be tapped', async ({
   await checkbox.click({ position: { x: 3, y: 3 } })
   await expect(checkbox).toBeChecked()
   await page.screenshot({ animations: 'disabled', path: `test-results/selection-${test.info().project.name}.png` })
-  await done.click()
+  await (await galleryAction(page, 'Done selecting')).click()
   await expect(page.getByRole('checkbox')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Select media', exact: true })).toHaveAttribute('aria-pressed', 'false')
 })
 
 test('Collections favourites clear browse filters and keeps a persisted like across refresh and navigation', async ({ page }) => {
@@ -116,7 +115,7 @@ test('Collections favourites clear browse filters and keeps a persisted like acr
   await expect(page).not.toHaveURL(/folderId|libraryId/)
   const saved = page.locator(`button[data-media-id="${id}"]`)
   await expect(saved).toBeVisible()
-  await page.getByRole('button', { name: 'Refresh collection' }).click()
+  await (await galleryAction(page, 'Refresh collection')).click()
   await expect(saved).toBeVisible()
   await nav.getByRole('button', { name: 'Settings', exact: true }).click()
   await nav.getByRole('button', { name: 'Collections', exact: true }).click()
@@ -127,16 +126,16 @@ test('Collections favourites clear browse filters and keeps a persisted like acr
 })
 
 test('dialog motion supports entering, exiting and reduced motion', async ({ page }) => {
-  await page.getByRole('button', { name: 'Filters' }).click()
+  await page.getByRole('button', { name: 'Filters', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Filters and sorting' })
   await expect(dialog.getByRole('combobox', { name: 'Media type' })).toBeVisible()
   await expect(dialog.locator('[data-motion-panel]')).toHaveCSS('animation-duration', '0.18s')
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
-  await expect(page.getByRole('button', { name: 'Filters' })).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Filters', exact: true })).toBeFocused()
   await expect(page.locator('.motion-overlay')).toHaveCount(0)
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.getByRole('button', { name: 'Filters' }).click()
+  await page.getByRole('button', { name: 'Filters', exact: true }).click()
   await expect(dialog.locator('[data-motion-panel]')).toHaveCSS('animation-name', 'none')
   await expect(dialog.getByRole('combobox', { name: 'Media type' })).toBeVisible()
   await page.keyboard.press('Escape')
@@ -190,7 +189,7 @@ test('requires confirmation before starting a rescan and exposes mobile progress
   await page.route('**/api/scans/900', route => route.fulfill({ json: { id: 900, libraryId: 1, state: 'running', discovered: 1500, ready: 1000, pending: 500, processing: 0, failed: 0 } }))
   const rescan = page.getByRole('button', { name: 'Rescan Sample library', exact: true })
   await rescan.click()
-  const confirmation = page.getByRole('dialog', { name: 'Rescan Sample library?' })
+  const confirmation = page.getByRole('dialog', { name: 'Background tasks' })
   await expect(confirmation).toContainText('significant disk and CPU resources')
   expect(requested).toBe(false)
   await confirmation.getByRole('button', { name: 'Not now' }).click()
@@ -201,7 +200,7 @@ test('requires confirmation before starting a rescan and exposes mobile progress
   await expect(progress).toBeVisible()
   expect(requested).toBe(true)
   await progress.click()
-  await expect(page.getByRole('dialog', { name: 'Library scan progress' }).getByRole('status')).toContainText('Checking folders for changes')
+  await expect(page.getByRole('dialog', { name: 'Background tasks' }).getByRole('status')).toContainText('Checking folders for changes')
   await page.screenshot({ animations: 'disabled', path: `test-results/scanning-${testInfo.project.name}.png` })
 })
 
@@ -249,7 +248,7 @@ test('browses cached media, navigates the viewer, and restores position and focu
 
 test('keeps the mobile filter sheet inside the viewport', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile', 'Mobile-specific layout check')
-  await page.getByRole('button', { name: 'Filters' }).click()
+  await page.getByRole('button', { name: 'Filters', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Filters and sorting' })
   await expect(dialog).toBeVisible()
   await page.screenshot({ animations: 'disabled', path: `test-results/filters-${testInfo.project.name}.png`, fullPage: true })
@@ -287,7 +286,7 @@ test('searches and edits tags with keyboard-accessible controls', async ({ page 
   await expect(page).toHaveURL(/q=holiday/)
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Select media', exact: true }).click()
+  await (await galleryAction(page, 'Select media')).click()
   await page.getByRole('checkbox').first().check()
   await page.getByRole('button', { name: 'Edit tags' }).click()
   const editor = page.getByRole('dialog', { name: /Tag 1 items/ })

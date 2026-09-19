@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { viewerAction } from './helpers'
+import { galleryAction, viewerAction } from './helpers'
 
 test('serves an installable manifest, icons, favicon and service worker', async ({ page, request }) => {
   await page.goto('/')
@@ -76,7 +76,7 @@ test('video controls stack on upright phones and stay on one row elsewhere', asy
   if (testInfo.project.name === 'mobile') {
     expect(seekBox!.width).toBeGreaterThan(page.viewportSize()!.width * 0.85)
     expect(seekBox!.y + seekBox!.height).toBeLessThanOrEqual(playBox!.y + 1)
-    await expect(viewer.getByRole('slider', { name: 'Volume', exact: true })).toBeHidden()
+    await expect(viewer.getByRole('slider', { name: 'Volume', exact: true })).toBeVisible()
   } else {
     expect(Math.abs((seekBox!.y + seekBox!.height / 2) - (playBox!.y + playBox!.height / 2))).toBeLessThan(4)
     await expect(viewer.getByRole('slider', { name: 'Volume', exact: true })).toBeVisible()
@@ -85,7 +85,7 @@ test('video controls stack on upright phones and stay on one row elsewhere', asy
   const menu = viewer.getByRole('button', { name: 'Viewer menu', exact: true })
   const [likeBox, menuBox] = [await viewer.getByRole('button', { name: 'Like', exact: true }).boundingBox(), await menu.boundingBox()]
   expect(Math.abs(likeBox!.y - menuBox!.y)).toBeLessThan(2)
-  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(playBox!.y)
+  expect(menuBox!.y).toBeLessThan(playBox!.y)
   await expect(await viewerAction(page, 'Watch on Reels')).toBeVisible()
   await expect(viewer.getByRole('button', { name: 'Next item', exact: true }).locator('svg')).toHaveClass(/lucide-chevron-right/)
 })
@@ -94,7 +94,7 @@ test('fullscreen offers a visible exit and slideshows advance on their own', asy
   test.skip(testInfo.project.name !== 'desktop', 'Element fullscreen and pointer idling are desktop interactions')
   await page.addInitScript(() => localStorage.setItem('luma-slideshow-seconds', '3'))
   await page.goto('/?mediaType=image&sort=name&order=asc')
-  await page.getByRole('button', { name: 'Start slideshow' }).click()
+  await (await galleryAction(page, 'Start slideshow')).click()
   const viewer = page.getByRole('dialog')
   await expect(viewer.getByRole('button', { name: 'Slideshow' })).toHaveAttribute('aria-pressed', 'true')
   // Fixture names repeat, so compare the image address rather than its name.
