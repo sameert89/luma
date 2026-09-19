@@ -558,7 +558,7 @@ it('organizes settings under consistent headings without an installation panel',
   emptyApi()
   renderApp()
   await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
-  for (const name of ['Theme & appearance', 'Random media URL', 'Metadata exchange', 'Libraries', 'Hidden folders', 'Missing-file checks', 'Help', 'About']) {
+  for (const name of ['Theme & appearance', 'Random media URL', 'Metadata exchange', 'Libraries', 'Hidden folders', 'Help', 'About']) {
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
   }
   expect(screen.getAllByRole('heading', { name: 'Metadata exchange' })).toHaveLength(1)
@@ -673,6 +673,18 @@ describe('folder actions', () => {
     expect(await screen.findByRole('dialog', { name: 'nested.jpg' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Slideshow' })).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes('/neighbors?') && String(url).includes('recursive=true'))).toBe(true))
+  })
+
+  it('includes media in subfolders when switching from a folder to Reels', async () => {
+    const fetch = folderApi()
+    renderFolder()
+    await screen.findByRole('heading', { name: 'Trips' })
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reels' })[0])
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => {
+      const value = String(url)
+      return value.startsWith('/api/media?') && value.includes('folderId=2') && value.includes('recursive=true') && value.includes('mediaType=motion')
+    })).toBe(true))
+    expect(new URLSearchParams(window.location.search).get('recursive')).toBe('true')
   })
 
   it('rescans a folder and everything inside it from its menu, only after confirmation', async () => {

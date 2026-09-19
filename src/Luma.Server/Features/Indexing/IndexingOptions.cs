@@ -23,7 +23,6 @@ public sealed class IndexingOptions
     public long CacheQuotaBytes { get; set; } = 20L * 1024 * 1024 * 1024;
     public long ReserveFreeBytes { get; set; } = 1024L * 1024 * 1024;
     public int VerificationIntervalSeconds { get; set; } = 300;
-    public int SourceVerificationIntervalSeconds { get; set; } = 10;
     public const int EncoderVersion = 1;
 
     public void Validate(string contentRoot, string databasePath)
@@ -31,7 +30,7 @@ public sealed class IndexingOptions
         if (new[] { DiscoveryWorkers, ImageWorkers, VideoWorkers, ProcessingWorkers }.Any(x => x is < 1 or > 4)
             || ImageWorkers > ProcessingWorkers || VideoWorkers > ProcessingWorkers
             || QueueCapacity is < 16 or > 1024 || CacheQuotaBytes < 1024L * 1024 * 1024
-            || ReserveFreeBytes < 1024L * 1024 * 1024 || VerificationIntervalSeconds < 1 || SourceVerificationIntervalSeconds < 1)
+            || ReserveFreeBytes < 1024L * 1024 * 1024 || VerificationIntervalSeconds < 1)
             throw new InvalidOperationException("Invalid indexing resource limits.");
         CachePath = Path.GetFullPath(CachePath, contentRoot);
         foreach (var root in Libraries)

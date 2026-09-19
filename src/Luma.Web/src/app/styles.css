@@ -31,8 +31,8 @@
   .pb-safe-2 { padding-bottom: calc(var(--spacing) * 2 + env(safe-area-inset-bottom, 0px)); }
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
-  .tag-tone { background-color: var(--tag-background); border-color: var(--tag-border); color: var(--tag-foreground); }
-  .tag-tone:hover { background-color: color-mix(in srgb, var(--tag-background) 82%, var(--tag-border)); }
+  .tag-tone { background-color: color-mix(in srgb, var(--tag-accent) 14%, transparent); border-color: color-mix(in srgb, var(--tag-accent) 34%, transparent); color: color-mix(in srgb, var(--tag-accent) 82%, var(--color-ink)); }
+  .tag-tone:hover { background-color: color-mix(in srgb, var(--tag-accent) 22%, transparent); }
 }
 
 .motion-overlay[data-state='closed'] { pointer-events: none; }

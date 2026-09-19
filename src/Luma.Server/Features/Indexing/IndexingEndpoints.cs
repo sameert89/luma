@@ -18,7 +18,6 @@ public sealed record ScanProgress(long Id, long LibraryId, string State, long Di
 public sealed record IndexingLibrary(long Id, string Name, string Availability, long? LatestScanId);
 public sealed record IndexingStatus(IReadOnlyList<IndexingLibrary> Libraries, bool CachePressure, long CacheBytes,
     int DiscoveryWorkers, int ProcessingWorkers, int ImageWorkers, int VideoWorkers, int QueueCapacity);
-public sealed record SourceVerificationSetting(bool Enabled);
 public sealed record LibraryMetadataMode(string MetadataMode);
 public sealed record LibraryRoot(long FolderId);
 
@@ -26,18 +25,6 @@ public static class IndexingEndpoints
 {
     public static void MapIndexing(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/settings/source-verification", async (SourceVerificationPreference preference, CancellationToken ct) =>
-        {
-            await preference.InitializeAsync(ct);
-            return TypedResults.Ok(new SourceVerificationSetting(preference.Enabled));
-        }).WithName("GetSourceVerificationSetting");
-        app.MapPut("/api/settings/source-verification", async (SourceVerificationSetting request,
-            SourceVerificationPreference preference, CancellationToken ct) =>
-        {
-            await preference.SetEnabledAsync(request.Enabled, ct);
-            return TypedResults.NoContent();
-        }).WithName("SetSourceVerificationSetting");
-
         app.MapGet("/api/libraries/{id:long}/refresh-settings", async Task<Results<Ok<LibraryRefreshSettings>, ProblemHttpResult>>
             (long id, Database database, HttpContext context, CancellationToken ct) =>
         {

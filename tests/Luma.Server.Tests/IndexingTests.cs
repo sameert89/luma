@@ -180,52 +180,6 @@ public sealed class IndexingTests
     }
 
     [Fact]
-    public async Task Background_presence_checks_hide_deleted_paths_but_preserve_unavailable_roots()
-    {
-        await using var f = await PipelineFixture.CreateAsync();
-        await f.CreateImageAsync("deleted.png");
-        await f.CreateImageAsync("retained.png");
-        await f.ScanAsync();
-        using var worker = new SourcePresenceWorker(f.Database, f.Options, new SourceVerificationPreference(f.Database), NullLogger<SourcePresenceWorker>.Instance);
-        File.Delete(Path.Combine(f.Root.Path, "deleted.png"));
-        await worker.CheckBatchAsync(default);
-        await using var db = await f.Database.OpenAsync(default);
-        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE FileName='deleted.png'"));
-        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE FileName='retained.png'"));
-        var original = f.Root.Path;
-        f.Root.Path = Path.Combine(f.DirectoryPath, "unmounted");
-        await worker.CheckBatchAsync(default);
-        f.Root.Path = original;
-        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE FileName='retained.png'"));
-    }
-
-    [Fact]
-    public async Task Presence_checks_materialize_ineligible_rows_and_skip_active_scans_and_disabled_libraries()
-    {
-        await using var f = await PipelineFixture.CreateAsync();
-        using var worker = new SourcePresenceWorker(f.Database, f.Options, new SourceVerificationPreference(f.Database), NullLogger<SourcePresenceWorker>.Instance);
-        await worker.CheckBatchAsync(default);
-        await f.CreateImageAsync("deleted.png");
-        await f.ScanAsync();
-        File.Delete(Path.Combine(f.Root.Path, "deleted.png"));
-        await using var db = await f.Database.OpenAsync(default);
-
-        await db.ExecuteAsync("UPDATE Libraries SET Enabled=0");
-        await worker.CheckBatchAsync(default);
-        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media"));
-
-        await db.ExecuteAsync("UPDATE Libraries SET Enabled=1; UPDATE Scans SET State='running'");
-        await worker.CheckBatchAsync(default);
-        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media"));
-
-        await db.ExecuteAsync("UPDATE Scans SET State='completed'");
-        await worker.CheckBatchAsync(default);
-        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media"));
-        await worker.CheckBatchAsync(default);
-        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media"));
-    }
-
-    [Fact]
     public async Task Cache_write_failure_is_retryable_and_does_not_report_source_loss()
     {
         await using var f = await PipelineFixture.CreateAsync();
@@ -637,12 +591,6 @@ public sealed class IndexingTests
             .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Fixture")
             .UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path).UseSetting("Luma:Indexing:Libraries:0:ScanOnStartup", "false"));
         using var client = host.CreateClient();
-        var sourceVerification = await client.GetFromJsonAsync<SourceVerificationSetting>("/api/settings/source-verification");
-        Assert.False(sourceVerification!.Enabled);
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PutAsJsonAsync("/api/settings/source-verification", new SourceVerificationSetting(true))).StatusCode);
-        Assert.True((await client.GetFromJsonAsync<SourceVerificationSetting>("/api/settings/source-verification"))!.Enabled);
-        await using (var db = await f.Database.OpenAsync(default))
-            Assert.Equal("1", await db.ExecuteScalarAsync<string>("SELECT Value FROM ApplicationState WHERE Key='sourceVerificationEnabled'"));
         var beforeScan = await client.GetFromJsonAsync<IndexingStatus>("/api/indexing");
         Assert.Null(Assert.Single(beforeScan!.Libraries).LatestScanId);
         var scan = await f.NewScanAsync(); // Holds root ownership without a discovery worker claiming it.

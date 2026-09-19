@@ -16,22 +16,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/source-verification": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetSourceVerificationSetting"];
-        put: operations["SetSourceVerificationSetting"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/libraries/{id}/refresh-settings": {
         parameters: {
             query?: never;
@@ -1003,9 +987,6 @@ export interface components {
             /** Format: int64 */
             libraryId?: number | null;
         };
-        SourceVerificationSetting: {
-            enabled: boolean;
-        };
         StartScanRequest: {
             /** @default false */
             force: boolean;
@@ -1084,48 +1065,6 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ApiProblem"];
                 };
-            };
-        };
-    };
-    GetSourceVerificationSetting: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SourceVerificationSetting"];
-                };
-            };
-        };
-    };
-    SetSourceVerificationSetting: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SourceVerificationSetting"];
-            };
-        };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
