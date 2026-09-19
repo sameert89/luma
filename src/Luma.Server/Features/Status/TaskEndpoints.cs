@@ -59,6 +59,8 @@ public static class TaskEndpoints
         }).WithName("QueueBackgroundTaskAgain");
         app.MapGet("/api/tasks",async(Database database,CancellationToken ct)=> {
             await using var db=await database.OpenAsync(ct);
+            // On-demand preview work re-attaches to a library's latest completed scan, even one already
+            // cleared from the queue; such a scan is listed again while that work runs, or it would be invisible.
             // Computed columns report no type when SQLite has no row to infer from (an empty or
             // freshly cleared queue), so rows map by property rather than by constructor.
             return TypedResults.Ok((await db.QueryAsync<TaskRow>(new CommandDefinition("""
@@ -74,7 +76,8 @@ public static class TaskEndpoints
                   (SELECT COUNT(*) FROM ProcessingJobs WHERE ScanId=s.Id AND State='failed'),
                   CASE WHEN s.State IN ('queued','running','completed') THEN (SELECT COUNT(*) FROM ProcessingJobs WHERE ScanId=s.Id AND State IN ('pending','running')) ELSE 0 END,
                   COALESCE(NULLIF(f.RelativePath,''),l.Name)
-                FROM (SELECT * FROM Scans WHERE QueueDismissed=0 ORDER BY Id DESC LIMIT 50) s
+                FROM (SELECT * FROM Scans WHERE QueueDismissed=0 OR State='completed' AND
+                  EXISTS(SELECT 1 FROM ProcessingJobs WHERE ScanId=Scans.Id AND State IN ('pending','running')) ORDER BY Id DESC LIMIT 50) s
                 LEFT JOIN Libraries l ON l.Id=s.LibraryId LEFT JOIN Folders f ON f.Id=s.FolderId
                 ORDER BY CreatedAt DESC LIMIT 100
                 """,cancellationToken:ct))).Select(x=>new BackgroundTask(x.Id,x.Kind,x.State,x.CreatedAt,x.Processed,x.Failed,x.Pending,x.Scope)).ToArray());

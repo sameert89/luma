@@ -146,6 +146,20 @@ public sealed class BrowsingTests
     }
 
     [Fact]
+    public async Task Media_of_a_library_removed_from_configuration_drops_out_of_unscoped_queries()
+    {
+        await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("image.png");await f.ScanAsync();
+        await using var host=new WebApplicationFactory<Program>().WithWebHostBuilder(builder=>builder.UseEnvironment("Testing")
+            .UseSetting("Luma:DatabasePath",f.Database.Path).UseSetting("Luma:Indexing:CachePath",f.Options.CachePath));
+        using var client=host.CreateClient();
+        await using var db=await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Libraries SET Enabled=1");
+        Assert.Single((await client.GetFromJsonAsync<MediaPage>("/api/media"))!.Items);
+        await db.ExecuteAsync("UPDATE Libraries SET Enabled=0");
+        Assert.Empty((await client.GetFromJsonAsync<MediaPage>("/api/media"))!.Items);
+    }
+
+    [Fact]
     public async Task Browsing_and_cache_work_with_sources_absent_and_missing_cache_only_queues_work()
     {
         await using var f=await PipelineFixture.CreateAsync();await f.CreateImageAsync("image.png");await f.ScanAsync();await f.RequestPreviewsAsync();await f.ProcessAllAsync();

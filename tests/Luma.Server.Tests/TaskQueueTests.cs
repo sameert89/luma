@@ -73,6 +73,23 @@ public sealed class TaskQueueTests
     }
 
     [Fact]
+    public async Task A_cleared_scan_is_listed_as_running_again_while_new_preview_work_runs_under_it()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await BrowsingTests.SeedAsync(f, 1);
+        await using var host = Host(f);
+        using var client = host.CreateClient();
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/api/tasks/clear-finished", null)).StatusCode);
+        Assert.DoesNotContain((await client.GetFromJsonAsync<BackgroundTask[]>("/api/tasks"))!, x => x.Id == "scan-1");
+
+        await using (var db = await f.Database.OpenAsync(default))
+            await db.ExecuteAsync("""
+                INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt) VALUES(1,0,@version,1,'image','pending','9999');
+                """, new { version = Luma.Server.Features.Indexing.IndexingOptions.EncoderVersion });
+        Assert.Contains((await client.GetFromJsonAsync<BackgroundTask[]>("/api/tasks"))!, x => x.Id == "scan-1" && x.State == "running");
+    }
+
+    [Fact]
     public async Task Queue_again_creates_a_new_task_and_retires_the_stopped_one()
     {
         await using var f = await PipelineFixture.CreateAsync();

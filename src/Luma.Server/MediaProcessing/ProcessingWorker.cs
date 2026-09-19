@@ -153,7 +153,10 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
         finally
         {
             await monitorStop.CancelAsync();
-            try { await monitor; } catch (OperationCanceledException) { }
+            // A failed monitor must not skip the cleanup below, or the cache reservation leaks for good.
+            try { await monitor; }
+            catch (OperationCanceledException) { }
+            catch (Exception error) { logger.LogWarning(error, "Scan monitor failed while processing media {MediaId}", job.MediaId); }
             foreach (var temporary in temporaries)
                 try { File.Delete(temporary); }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)

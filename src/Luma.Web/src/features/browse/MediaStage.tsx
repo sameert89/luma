@@ -46,6 +46,7 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
   autoPlayRef.current = autoPlay
   const navigateRef = useRef(onNavigate)
   navigateRef.current = onNavigate
+  const keyRef = useRef<(event: KeyboardEvent) => void>(() => {})
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastWheel = useRef(0)
   const gesture = useRef({ x: 0, y: 0, distance: 0 })
@@ -307,29 +308,32 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         navigator.mediaSession.setPositionState({ duration: player.duration, playbackRate: player.playbackRate, position: Math.min(player.currentTime, player.duration) })
     } catch { /* position state is best effort */ }
   }
+  // The listener is added once and reads the latest handler, which closes over this render's state.
+  keyRef.current = key
   useEffect(() => {
-    function key(event: KeyboardEvent) {
-      const dialog = host.current?.closest('[role="dialog"]'); const dialogs = document.querySelectorAll('[role="dialog"]'); if (dialogs.length && dialogs[dialogs.length - 1] !== dialog) return
-      if (event.ctrlKey || event.metaKey || event.altKey) return
-      if (event.target instanceof HTMLElement && event.target.closest('input,select,textarea,video,button,a,[contenteditable="true"]')) return
-      if (!reels) {
-        if (event.key === '+' || event.key === '=') { event.preventDefault(); scale(zoom * 1.25) }
-        if (event.key === '-') { event.preventDefault(); scale(zoom / 1.25) }
-        if (event.key === '1') actualSize()
-        if (event.key.toLowerCase() === 'r') setRotation(value => (value + 90) % 360)
-      }
-      if (event.key.toLowerCase() === 'f') void fullscreen()
-      if (!isVideo) return
-      if (event.key === ' ' || event.key.toLowerCase() === 'k') { event.preventDefault(); togglePlay() }
-      if (event.key.toLowerCase() === 'j') skipBy(-skipSeconds)
-      if (event.key.toLowerCase() === 'l') skipBy(skipSeconds)
-      if (event.key.toLowerCase() === 'm' && !reels) toggleMute()
-      // Reels move between items vertically, which leaves Left and Right for seeking.
-      if (reels && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) { event.preventDefault(); skipBy(event.key === 'ArrowLeft' ? -5 : 5) }
+    const listener = (event: KeyboardEvent) => keyRef.current(event)
+    window.addEventListener('keydown', listener)
+    return () => window.removeEventListener('keydown', listener)
+  }, [])
+  function key(event: KeyboardEvent) {
+    const dialog = host.current?.closest('[role="dialog"]'); const dialogs = document.querySelectorAll('[role="dialog"]'); if (dialogs.length && dialogs[dialogs.length - 1] !== dialog) return
+    if (event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.target instanceof HTMLElement && event.target.closest('input,select,textarea,video,button,a,[contenteditable="true"]')) return
+    if (!reels) {
+      if (event.key === '+' || event.key === '=') { event.preventDefault(); scale(zoom * 1.25) }
+      if (event.key === '-') { event.preventDefault(); scale(zoom / 1.25) }
+      if (event.key === '1') actualSize()
+      if (event.key.toLowerCase() === 'r') setRotation(value => (value + 90) % 360)
     }
-    window.addEventListener('keydown', key)
-    return () => window.removeEventListener('keydown', key)
-  })
+    if (event.key.toLowerCase() === 'f') void fullscreen()
+    if (!isVideo) return
+    if (event.key === ' ' || event.key.toLowerCase() === 'k') { event.preventDefault(); togglePlay() }
+    if (event.key.toLowerCase() === 'j') skipBy(-skipSeconds)
+    if (event.key.toLowerCase() === 'l') skipBy(skipSeconds)
+    if (event.key.toLowerCase() === 'm' && !reels) toggleMute()
+    // Reels move between items vertically, which leaves Left and Right for seeking.
+    if (reels && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) { event.preventDefault(); skipBy(event.key === 'ArrowLeft' ? -5 : 5) }
+  }
   const exitVisible = isFullscreen && !(isVideo && !reels)
   return <div className="relative flex h-full min-h-0 w-full flex-col">
     <div ref={host} className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden bg-black ${chromeHidden ? 'cursor-none' : ''}`}
@@ -416,12 +420,16 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
     </div>
     {failure && !reels && <p role="status" className="bg-canvas px-3 py-2 text-sm text-ink">{failure}</p>}
     <Modal open={optionsOpen} onOpenChange={setOptionsOpen} title="View options" description="Fit, playback and download actions for this item." sheet>
-      <div className="flex flex-wrap gap-2 p-5">
+      {/* Labeled settings sit in their own row: mixed into the button row, their taller
+          label + control stack stretched every pill beside them to the same height. */}
+      {isVideo && <div className="grid gap-4 px-5 pt-5 sm:grid-cols-2">
+        {reels && <Field label="Volume"><Range min={0} max={1} step={0.05} value={volume} className="w-full" onChange={event => changeVolume(Number(event.target.value))} /></Field>}
+        <Field label="Playback speed"><Select value={rate} onChange={event => { const value = Number(event.target.value); setRate(value); if (video.current) video.current.playbackRate = value }}><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></Select></Field>
+      </div>}
+      <div className="flex flex-wrap items-center gap-2 p-5">
         <QuietButton onClick={() => { toggleFill() }}>{fill ? 'Fit' : 'Fill'}</QuietButton>
         {zoomable && <><QuietButton aria-label="Zoom out" onClick={() => scale(zoom / 1.25)}>−</QuietButton><QuietButton aria-label="Reset zoom" onClick={() => scale(1)}>{Math.round(zoom * 100)}%</QuietButton><QuietButton aria-label="Zoom in" onClick={() => scale(zoom * 1.25)}>+</QuietButton><QuietButton onClick={actualSize}>Actual size</QuietButton><QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>Rotate</QuietButton></>}
         {reels && onOpenViewer && <QuietButton onClick={() => { const player = video.current; if (player) { resumePlayback.current ||= !player.paused; player.pause() }; onOpenViewer(item); setOptionsOpen(false) }}>Open in viewer</QuietButton>}
-        {isVideo && reels && <Field label="Volume"><Range min={0} max={1} step={0.05} value={volume} className="w-32" onChange={event => changeVolume(Number(event.target.value))} /></Field>}
-        {isVideo && <div className="w-32 shrink-0"><Select aria-label="Playback speed" value={rate} onChange={event => { const value = Number(event.target.value); setRate(value); if (video.current) video.current.playbackRate = value }}><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></Select></div>}
         {isVideo && pictureInPictureAvailable && <QuietButton onClick={() => { void pictureInPicture(); setOptionsOpen(false) }}><PictureInPicture2 className="size-4" />Picture in picture</QuietButton>}
         <QuietButton onClick={() => { void fullscreen(); setOptionsOpen(false) }}><Maximize className="size-4" />Fullscreen</QuietButton>
         <QuietLink href={`${originalUrl}?download=true`}><Download className="size-4" />Download</QuietLink>

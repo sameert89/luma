@@ -142,7 +142,7 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
             if(await repair.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')",transaction:tx,cancellationToken:ct))<16) {
                 var scan=await repair.QuerySingleOrDefaultAsync<ScanRow>(new CommandDefinition("SELECT s.* FROM Scans s JOIN Libraries l ON l.Id=s.LibraryId WHERE l.Enabled=1 AND s.MetadataQueued=0 AND s.MetadataMode<>'none' AND s.State IN ('queued','running','completed') ORDER BY s.Id LIMIT 1",transaction:tx,cancellationToken:ct));
                 if(scan is not null) {
-                    var request=new MetadataJobRequest(Query:new MediaQuery{LibraryId=scan.LibraryId,FolderId=scan.FolderId}.Normalize(),IncludeSidecars:scan.MetadataMode=="xmp",Automatic:true,ScanId:scan.Id);
+                    var request=new MetadataJobRequest(Query:new MediaQuery{LibraryId=scan.LibraryId,FolderId=scan.FolderId,Recursive=scan.Recursive}.Normalize(),IncludeSidecars:scan.MetadataMode=="xmp",Automatic:true,ScanId:scan.Id);
                     await repair.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,ScanId) VALUES('import','queued',@request,@now,@scanId); UPDATE Scans SET MetadataQueued=1 WHERE Id=@scanId",new{scanId=scan.Id,request=JsonSerializer.Serialize(request),now=DateTimeOffset.UtcNow.ToString("O")},transaction:tx,cancellationToken:ct));
                 }
             }
@@ -222,8 +222,7 @@ public sealed class MetadataJobs(Database database,IndexingOptions options,ILogg
         await db.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM SchemaMigrations",transaction:tx,cancellationToken:ct));
         var snapshot=DateTimeOffset.UtcNow.ToString("O");
         await using(var writer=await database.OpenAsync(ct)) await writer.ExecuteAsync(new CommandDefinition("UPDATE MetadataJobs SET SnapshotAt=@snapshot WHERE Id=@Id",new{job.Id,snapshot},cancellationToken:ct));
-        var (predicate,p)=(request.Query! with {Availability="all",Preference=job.Kind=="dislikes"?"disliked":request.Query.Preference}).Predicate();
-        if(job.Kind!="dislikes") (predicate,p)=request.Query.Predicate();
+        var (predicate,p)=(job.Kind=="dislikes" ? request.Query! with {Availability="all",Preference="disliked"} : request.Query!).Predicate();
         if(request.MediaIds is not null) { predicate+=" AND m.Id IN (SELECT value FROM json_each(@ids))"; p.Add("ids",JsonSerializer.Serialize(request.MediaIds)); }
         var used=await db.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COALESCE(SUM(ContentBytes),0) FROM MetadataJobs",transaction:tx,cancellationToken:ct));
         long written=0,after=0;

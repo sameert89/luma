@@ -96,6 +96,8 @@ public sealed record MediaQuery
         if (Availability != "all") Add("m.Availability=@availability", "availability", Availability);
         Add("m.LibraryId=@libraryId", "libraryId", LibraryId);
         Add(Recursive == true ? "m.FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@folderId)" : "m.FolderId=@folderId", "folderId", FolderId);
+        // A library removed from the configuration keeps its rows but is gone from every view.
+        conditions.Add("m.LibraryId IN (SELECT Id FROM Libraries WHERE Enabled=1)");
         // Hidden folders drop out of every view, including their descendants.
         conditions.Add($"m.FolderId NOT IN ({Libraries.HiddenFolders.Descendants})");
         // GIFs are indexed as images; "motion" is the Reels set of videos plus animated GIFs.

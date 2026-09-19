@@ -92,8 +92,6 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
             var position=query.Cursor is null ? null : cursors.Decode(query.Cursor,fingerprint);
             var backward=position?.Backward==true;
             var ordering=new MediaOrdering(query);
-            if(position is not null) predicate+=" AND "+ordering.Seek(position,p,backward);
-            p.Add("limit",query.Limit!.Value+1);
             List<MediaRow> rows;
             if(query.Sort == "shuffle")
             {
@@ -171,7 +169,12 @@ public sealed class MediaBrowser(Database database,CursorSigner cursors)
                 var (typePredicate,parameters)=query.Predicate();
                 rows=await TypeRowsAsync(db,tx,query,typePredicate,parameters,position,backward,query.Limit.Value+1,deadline.Token);
             }
-            else rows=(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {predicate} ORDER BY {ordering.Order(backward)} LIMIT @limit",p,tx,cancellationToken:deadline.Token))).ToList();
+            else {
+                // Only plain sorts page by a cursor seek; the branches above build their own predicates.
+                if(position is not null) predicate+=" AND "+ordering.Seek(position,p,backward);
+                p.Add("limit",query.Limit!.Value+1);
+                rows=(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {predicate} ORDER BY {ordering.Order(backward)} LIMIT @limit",p,tx,cancellationToken:deadline.Token))).ToList();
+            }
             var more=rows.Count>query.Limit;
             if(more) rows.RemoveAt(rows.Count-1);
             if(backward) rows.Reverse();
