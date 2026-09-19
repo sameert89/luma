@@ -18,11 +18,24 @@ public sealed record ScanProgress(long Id, long LibraryId, string State, long Di
 public sealed record IndexingLibrary(long Id, string Name, string Availability, long? LatestScanId);
 public sealed record IndexingStatus(IReadOnlyList<IndexingLibrary> Libraries, bool CachePressure, long CacheBytes,
     int DiscoveryWorkers, int ProcessingWorkers, int ImageWorkers, int VideoWorkers, int QueueCapacity);
+public sealed record SourceVerificationSetting(bool Enabled);
 
 public static class IndexingEndpoints
 {
     public static void MapIndexing(this WebApplication app)
     {
+        app.MapGet("/api/settings/source-verification", async (SourceVerificationPreference preference, CancellationToken ct) =>
+        {
+            await preference.InitializeAsync(ct);
+            return TypedResults.Ok(new SourceVerificationSetting(preference.Enabled));
+        }).WithName("GetSourceVerificationSetting");
+        app.MapPut("/api/settings/source-verification", async (SourceVerificationSetting request,
+            SourceVerificationPreference preference, CancellationToken ct) =>
+        {
+            await preference.SetEnabledAsync(request.Enabled, ct);
+            return TypedResults.NoContent();
+        }).WithName("SetSourceVerificationSetting");
+
         app.MapPost("/api/folders/{id:long}/index", async Task<Results<Accepted<ScanAccepted>, NoContent, ProblemHttpResult>>
             (long id, Database database, ScanWorker worker, HttpContext context, CancellationToken ct) =>
         {

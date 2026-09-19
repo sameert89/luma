@@ -4,17 +4,61 @@ using System.Text.Json;
 
 namespace Luma.Server.Features.Indexing;
 
+public sealed class SourceVerificationPreference(Database database)
+{
+    private const string Key = "sourceVerificationEnabled";
+    private readonly SemaphoreSlim gate = new(1, 1);
+    private volatile bool enabled;
+    private volatile bool initialized;
+
+    public bool Enabled => enabled;
+
+    public async Task InitializeAsync(CancellationToken ct)
+    {
+        if (initialized) return;
+        await gate.WaitAsync(ct);
+        try
+        {
+            if (initialized) return;
+            await using var db = await database.OpenAsync(ct);
+            enabled = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
+                "SELECT Value FROM ApplicationState WHERE Key=@Key", new { Key }, cancellationToken: ct)) == "1";
+            initialized = true;
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task SetEnabledAsync(bool value, CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try
+        {
+            await using var db = await database.OpenAsync(ct);
+            await db.ExecuteAsync(new CommandDefinition("""
+                INSERT INTO ApplicationState(Key,Value) VALUES(@Key,@Value)
+                ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value
+                """, new { Key, Value = value ? "1" : "0" }, cancellationToken: ct));
+            enabled = value;
+            initialized = true;
+        }
+        finally { gate.Release(); }
+    }
+}
+
 // Checks existing indexed paths in bounded batches; never enumerates directories.
-public sealed class SourcePresenceWorker(Database database, IndexingOptions options, ILogger<SourcePresenceWorker> logger) : BackgroundService
+public sealed class SourcePresenceWorker(Database database, IndexingOptions options, SourceVerificationPreference preference,
+    ILogger<SourcePresenceWorker> logger) : BackgroundService
 {
     private long cursor;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (options.Libraries.Count == 0) return;
+        await preference.InitializeAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(TimeSpan.FromSeconds(options.SourceVerificationIntervalSeconds), stoppingToken);
+            if (!preference.Enabled) continue;
             try { await CheckBatchAsync(stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception error) { logger.LogWarning(error, "Source presence check will retry"); }

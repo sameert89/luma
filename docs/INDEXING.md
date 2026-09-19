@@ -48,7 +48,7 @@ On graceful shutdown, active processing returns to the durable queue and incompl
 
 ## Deleted originals
 
-A separate background worker checks 100 known paths every 10 seconds without enumerating directories. Missing paths under accessible roots are hidden by default and retain their tags/cache. Active scans and disabled roots are skipped; unavailable roots are not treated as deleted. At 177,000 records, a complete pass takes roughly five hours plus I/O time. Configure `Luma:Indexing:SourceVerificationIntervalSeconds` to change the interval. Explicit scans discover additions, replacements and restored paths and reconcile deletions sooner. Normal browsing remains SQLite/cache-only.
+An opt-in background worker checks 100 known paths every 10 seconds without enumerating directories. It is disabled by default and can be enabled under Settings → Missing-file checks. While enabled, missing paths under accessible roots are hidden by default and retain their tags/cache. Active scans and disabled roots are skipped; unavailable roots are not treated as deleted. At 177,000 records, a complete pass takes roughly five hours plus I/O time. Configure `Luma:Indexing:SourceVerificationIntervalSeconds` to change the interval. Explicit scans discover additions, replacements and restored paths and reconcile deletions regardless of this setting. Normal browsing remains SQLite/cache-only.
 
 ## Stage 8 metadata stage
 

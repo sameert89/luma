@@ -194,6 +194,7 @@ export const guideSections: GuideSection[] = [
         { icons: [Shuffle], name: 'Random media URL', where: 'Settings', what: 'Builds a reusable link that returns a random cached photo or GIF preview matching your current browsing filters. It does not serve random videos.' },
         { label: 'Export XMP', name: 'Export XMP / Export disliked paths', where: 'Settings → Metadata exchange', what: 'Prepares downloads of your tags as XMP, or a list of disliked file paths. Download export appears when ready.' },
         { icons: [Eye], name: 'Show', where: 'Settings → Hidden folders', what: 'Brings a hidden folder back into browsing and indexing.' },
+        { label: 'Missing-file checks', name: 'Missing-file checks', where: 'Settings', what: 'Optionally checks known source paths in small background batches and hides files deleted from an available library. It is off by default; rescans still reconcile deletions.' },
         { icons: [CircleHelp], name: 'Help', where: 'Settings, and beside Your libraries', what: 'Opens this guide.' },
         { label: 'About', name: 'About', where: 'End of Settings', what: 'Shows the installed Luma version, project link and creator credit. The version also appears at the bottom-left of desktop navigation.' },
       ] },

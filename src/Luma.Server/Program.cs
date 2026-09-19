@@ -44,6 +44,7 @@ builder.Services.AddSingleton<IndexingSetup>();
 builder.Services.AddSingleton<MediaProcessor>();
 builder.Services.AddSingleton<GeneratedCache>();
 builder.Services.AddSingleton<ScanWorker>();
+builder.Services.AddSingleton<SourceVerificationPreference>();
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
     builder.Services.AddHostedService(services => services.GetRequiredService<ScanWorker>());

@@ -35,6 +35,47 @@
         }
       }
     },
+    "/api/settings/source-verification": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetSourceVerificationSetting",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceVerificationSetting"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetSourceVerificationSetting",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceVerificationSetting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/folders/{id}/index": {
       "post": {
         "tags": [
@@ -3312,6 +3353,17 @@
             "type": "integer",
             "format": "int64",
             "nullable": true
+          }
+        }
+      },
+      "SourceVerificationSetting": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         }
       },

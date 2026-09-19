@@ -152,7 +152,7 @@ public sealed class IndexingTests
         await f.CreateImageAsync("deleted.png");
         await f.CreateImageAsync("retained.png");
         await f.ScanAsync();
-        using var worker = new SourcePresenceWorker(f.Database, f.Options, NullLogger<SourcePresenceWorker>.Instance);
+        using var worker = new SourcePresenceWorker(f.Database, f.Options, new SourceVerificationPreference(f.Database), NullLogger<SourcePresenceWorker>.Instance);
         File.Delete(Path.Combine(f.Root.Path, "deleted.png"));
         await worker.CheckBatchAsync(default);
         await using var db = await f.Database.OpenAsync(default);
@@ -169,7 +169,7 @@ public sealed class IndexingTests
     public async Task Presence_checks_materialize_ineligible_rows_and_skip_active_scans_and_disabled_libraries()
     {
         await using var f = await PipelineFixture.CreateAsync();
-        using var worker = new SourcePresenceWorker(f.Database, f.Options, NullLogger<SourcePresenceWorker>.Instance);
+        using var worker = new SourcePresenceWorker(f.Database, f.Options, new SourceVerificationPreference(f.Database), NullLogger<SourcePresenceWorker>.Instance);
         await worker.CheckBatchAsync(default);
         await f.CreateImageAsync("deleted.png");
         await f.ScanAsync();
@@ -603,6 +603,12 @@ public sealed class IndexingTests
             .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Fixture")
             .UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path).UseSetting("Luma:Indexing:Libraries:0:ScanOnStartup", "false"));
         using var client = host.CreateClient();
+        var sourceVerification = await client.GetFromJsonAsync<SourceVerificationSetting>("/api/settings/source-verification");
+        Assert.False(sourceVerification!.Enabled);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PutAsJsonAsync("/api/settings/source-verification", new SourceVerificationSetting(true))).StatusCode);
+        Assert.True((await client.GetFromJsonAsync<SourceVerificationSetting>("/api/settings/source-verification"))!.Enabled);
+        await using (var db = await f.Database.OpenAsync(default))
+            Assert.Equal("1", await db.ExecuteScalarAsync<string>("SELECT Value FROM ApplicationState WHERE Key='sourceVerificationEnabled'"));
         var beforeScan = await client.GetFromJsonAsync<IndexingStatus>("/api/indexing");
         Assert.Null(Assert.Single(beforeScan!.Libraries).LatestScanId);
         var scan = await f.NewScanAsync(); // Holds root ownership without a discovery worker claiming it.
