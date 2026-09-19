@@ -221,6 +221,101 @@
         }
       }
     },
+    "/api/libraries/{id}/metadata-mode": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "SetLibraryMetadataMode",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryMetadataMode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{id}/root": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "PrepareLibraryRoot",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryRoot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/folders/{id}/scans": {
       "post": {
         "tags": [
@@ -2870,6 +2965,29 @@
           }
         }
       },
+      "LibraryMetadataMode": {
+        "required": [
+          "metadataMode"
+        ],
+        "type": "object",
+        "properties": {
+          "metadataMode": {
+            "type": "string"
+          }
+        }
+      },
+      "LibraryRoot": {
+        "required": [
+          "folderId"
+        ],
+        "type": "object",
+        "properties": {
+          "folderId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "LibrarySummary": {
         "required": [
           "id",
@@ -2909,6 +3027,10 @@
               "$ref": "#/components/schemas/CoverImage"
             },
             "nullable": true
+          },
+          "metadataMode": {
+            "type": "string",
+            "default": "embedded"
           }
         }
       },

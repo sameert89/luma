@@ -34,7 +34,7 @@ Copy-Item .env.example .env
 
 For a normal Windows NTFS library, set `LUMA_CASE_SENSITIVE=false`. Open <http://127.0.0.1:5080> after the container starts. Compose mounts originals read-only at `/media` and stores the database and generated cache in the `luma-data` volume.
 
-Luma does not start an expensive full scan unless you request one (or explicitly enable startup scanning). Open the configured library and choose the indexing metadata mode to begin.
+Luma does not start an expensive full scan unless you request one (or explicitly enable startup scanning). Open the configured library, choose which tags to import, and either index folders as you open them (no background scan) or index everything now.
 
 See the [deployment guide](docs/DEPLOYMENT.md) for upgrades, HTTPS/PWA setup, backups, restoration, cache recovery, health checks, and direct Docker operation.
 

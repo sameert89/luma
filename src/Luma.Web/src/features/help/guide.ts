@@ -26,7 +26,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Load more', name: 'Load more', where: 'Bottom of a long gallery', what: 'Loads the next page of results; scrolling to the end does the same.' },
       ] },
       { title: 'Indexing', entries: [
-        { label: 'Start indexing', name: 'Initial indexing', where: 'Opens when you choose a library that has not been indexed yet', what: 'Starts the first scan. Choose Index only, Index + embedded metadata, or Index + embedded metadata + XMP to decide which tags are read while indexing.' },
+        { label: 'Index folders as I open them', name: 'Set up library', where: 'Opens when you choose a library that has not been indexed yet', what: 'Choose which tags to import (none, embedded metadata, or embedded metadata + XMP sidecars), then either index folders as you open them, which starts no background work, or index everything now with a full scan. The tag choice is remembered for the library; change it in Settings → Libraries.' },
         { icons: [RefreshCw], name: 'Background jobs', where: 'Beside Help on Your libraries, and in the header of an open library', what: 'Opens the list of indexing, import and export jobs. The icon spins while any job runs.' },
       ] },
       { title: 'Folder and gallery menus', entries: [
@@ -36,7 +36,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Start slideshow', name: 'Start slideshow', where: 'Folder or gallery actions menu', what: 'Opens the first result in the viewer and advances through the rest automatically. A folder that only contains subfolders plays everything inside them.' },
         { label: 'Refresh collection', name: 'Refresh collection', where: 'Folder or gallery actions menu', what: 'Reloads what is shown from Luma’s index. It never rescans; use Rescan folder for that.' },
         { icons: [Info], name: 'Folder information', where: 'Folder actions menu', what: 'Shows the folder’s name, library and location.' },
-        { icons: [FileInput], name: 'Import folder metadata', where: 'Folder actions menu', what: 'Merges EXIF/XMP tags from every indexed file directly in this folder, regardless of the current filters. Originals are never changed.' },
+        { icons: [FileInput], name: 'Import folder metadata', where: 'Folder actions menu', what: 'Merges EXIF/XMP tags from every indexed file in this folder and the folders inside it, regardless of the current filters. Originals are never changed.' },
         { icons: [ImageMinus], name: 'Reset album cover', where: 'Folder actions menu, when you picked the folder’s cover yourself', what: 'Forgets your cover choice so the folder goes back to an automatic cover in your Settings style. No photos change.' },
         { icons: [EyeOff], name: 'Hide folder', where: 'Folder actions menu, for folders inside a library (not the library itself)', what: 'Leaves the folder and everything in it out of browsing, search, Reels, slideshows and indexing. Nothing is deleted; show it again from Settings.' },
         { label: 'Use as folder cover', name: 'Use as folder cover / Use as library cover', where: 'Media details in the viewer', what: 'Makes the open item the cover art for its folder or library.' },
@@ -173,7 +173,7 @@ export const guideSections: GuideSection[] = [
         { icons: [RefreshCw], name: 'Background jobs', where: 'Beside Help on Your libraries, and in the header of an open library', what: 'Opens the jobs list. Start a rescan from a folder or library card’s Folder actions menu.' },
       ] },
       { title: 'Queue actions', entries: [
-        { label: 'Cancel', name: 'Cancel / Cancel scan', where: 'On a queued or running task', what: 'Stops the task. Work already finished, such as prepared previews and imported tags, is kept.' },
+        { label: 'Cancel', name: 'Cancel / Cancel scan', where: 'On a queued or running task', what: 'Stops the task. Work already finished, such as prepared previews and imported tags, is kept. Indexing asks first: folders you open afterwards are finished then, including their tags if the library imports tags.' },
         { label: 'Queue again', name: 'Queue again', where: 'On a cancelled, failed or interrupted task', what: 'Runs the task again as a new task, which replaces the stopped one in the list.' },
         { label: 'Clear', name: 'Clear', where: 'On any task that is no longer active', what: 'Removes that one entry from the list.' },
         { label: 'Clear finished', name: 'Clear finished', where: 'Top of the queue', what: 'Removes every completed, cancelled, failed and interrupted entry and leaves active ones in place.' },
@@ -187,7 +187,7 @@ export const guideSections: GuideSection[] = [
     ],
   },
   {
-    id: 'settings', title: 'Settings', summary: 'Theme, album covers, random media links, exports and hidden folders',
+    id: 'settings', title: 'Settings', summary: 'Theme, album covers, random media links, exports, library tag import and hidden folders',
     groups: [
       { title: 'Settings sections', entries: [
         { icons: [Settings], name: 'Settings', where: 'Bottom bar or side navigation', what: 'Opens Settings. Your current filters stay in place for when you return.' },
@@ -195,6 +195,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Album covers', name: 'Album covers', where: 'Settings', what: 'Smart covers show a mosaic for albums with three or more photos and fit single photos to the card; Cropped covers fill the card with one photo. Covers you picked yourself keep their photo either way.' },
         { icons: [Shuffle], name: 'Random media URL', where: 'Settings', what: 'Builds a reusable link that returns a random cached photo or GIF preview matching your current browsing filters. It does not serve random videos.' },
         { label: 'Export XMP', name: 'Export XMP / Export disliked paths', where: 'Settings → Metadata exchange', what: 'Prepares downloads of your tags as XMP, or a list of disliked file paths. Download export appears when ready.' },
+        { label: 'Libraries', name: 'Tag import', where: 'Settings → Libraries', what: 'Chooses which tags Luma imports for each library: none, embedded metadata, or embedded metadata + XMP sidecars. Opening a folder whose files were indexed without tags imports them in the background using this choice.' },
         { icons: [Eye], name: 'Show', where: 'Settings → Hidden folders', what: 'Brings a hidden folder back into browsing and indexing.' },
         { label: 'Missing-file checks', name: 'Missing-file checks', where: 'Settings', what: 'Optionally checks known source paths in small background batches and hides files deleted from an available library. It is off by default; rescans still reconcile deletions.' },
         { icons: [CircleHelp], name: 'Help', where: 'Settings, and beside Your libraries', what: 'Opens this guide.' },

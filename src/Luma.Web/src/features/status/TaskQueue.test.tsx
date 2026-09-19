@@ -77,3 +77,21 @@ it('clears every finished entry, retains active work and disables clearing when 
   expect(screen.getByRole('button', { name: 'Clear finished' })).toBeDisabled()
   expect(fetcher.mock.calls.filter(([url]) => url === '/api/tasks/clear-finished')).toHaveLength(1)
 })
+
+it('explains what stopping indexing means before cancelling it', async () => {
+  let state = 'running'
+  const fetcher = vi.fn((url: string) => {
+    if (url.endsWith('/cancel')) state = 'cancelled'
+    return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [task('scan-1', state, 'indexing')] : {})))
+  })
+  vi.stubGlobal('fetch', fetcher)
+  renderQueue()
+  const cancelled = () => fetcher.mock.calls.some(([url]) => url.endsWith('/cancel'))
+  await userEvent.click(await screen.findByRole('button', { name: 'Cancel Indexing' }))
+  expect(screen.getByText(/Each folder you open is finished then/)).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Keep running' }))
+  expect(cancelled()).toBe(false)
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel Indexing' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Stop indexing' }))
+  expect(await screen.findByRole('article', { name: 'Indexing, Cancelled' })).toBeVisible()
+})

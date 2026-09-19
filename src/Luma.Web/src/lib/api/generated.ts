@@ -80,6 +80,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/libraries/{id}/metadata-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetLibraryMetadataMode"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/libraries/{id}/root": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PrepareLibraryRoot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/folders/{id}/scans": {
         parameters: {
             query?: never;
@@ -731,6 +763,13 @@ export interface components {
             mediaId: number;
             code: string;
         };
+        LibraryMetadataMode: {
+            metadataMode: string;
+        };
+        LibraryRoot: {
+            /** Format: int64 */
+            folderId: number;
+        };
         LibrarySummary: {
             /** Format: int64 */
             id: number;
@@ -742,6 +781,8 @@ export interface components {
             /** @default false */
             coverOverride: boolean;
             coverImages?: components["schemas"]["CoverImage"][] | null;
+            /** @default embedded */
+            metadataMode: string;
         };
         MediaNeighbors: {
             previous: components["schemas"]["MediaSummary"] | null;
@@ -1162,6 +1203,79 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblem"];
+                };
+            };
+        };
+    };
+    SetLibraryMetadataMode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryMetadataMode"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblem"];
+                };
+            };
+        };
+    };
+    PrepareLibraryRoot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryRoot"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

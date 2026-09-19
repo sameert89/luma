@@ -1,20 +1,24 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EllipsisVertical, EyeOff, FileInput, ImageMinus, Info, RefreshCw } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Button } from '../../components/ui/Button'
-import { Field, IconButton, QuietButton, Select } from '../../components/ui/Controls'
+import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { MetadataExchange } from '../tags/MetadataExchange'
 import { hiddenFolderQueries } from './HiddenFolders'
-import { errorMessage, request, type FolderPage } from './api'
+import { MetadataModeSelect } from './LibrarySetup'
+import { errorMessage, request, type FolderPage, type Library } from './api'
 
 export function FolderActions({ folder, libraryName, ancestors = [], onHidden, extraActions, tone }: {
   folder: FolderPage['current']; libraryName?: string; ancestors?: FolderPage['ancestors']; onHidden?: () => void; extraActions?: (close: () => void) => ReactNode; tone?: 'overlay'
 }) {
   const [panel, setPanel] = useState<'actions' | 'info' | 'import' | 'hide' | 'rescan' | null>(null)
-  const [metadataMode, setMetadataMode] = useState('embedded')
+  const [chosenMode, setChosenMode] = useState<string | null>(null)
   const [queued, setQueued] = useState(false)
   const client = useQueryClient()
+  const libraries = useQuery({ queryKey: ['libraries'], queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal), enabled: panel === 'rescan' })
+  // A rescan starts from the library's current setting until the person picks another.
+  const metadataMode = chosenMode ?? libraries.data?.find(item => item.id === folder.libraryId)?.metadataMode ?? 'embedded'
   // A library's root folder is the library itself, so rescanning it rescans the whole library.
   const root = !folder.parentId
   const rescan = useMutation({ mutationKey: ['background-task'], mutationFn: () => request(`/api/folders/${folder.id}/scans`, undefined, 'POST', { metadataMode }),
@@ -26,9 +30,9 @@ export function FolderActions({ folder, libraryName, ancestors = [], onHidden, e
     onSuccess: async () => { setPanel(null); await Promise.all([client.invalidateQueries({ queryKey: ['folders'] }), client.invalidateQueries({ queryKey: ['libraries'] })]) } })
   const title = panel === 'info' ? 'Folder information' : panel === 'import' ? 'Import folder metadata' : panel === 'hide' ? 'Hide folder' : panel === 'rescan' ? root ? 'Rescan library' : 'Rescan folder' : root ? 'Library actions' : 'Folder actions'
   return <>
-    <IconButton label={`Folder actions for ${folder.name}`} tone={tone} onClick={() => { setPanel('actions'); setQueued(false); rescan.reset() }}><EllipsisVertical className="size-4" /></IconButton>
+    <IconButton label={`Folder actions for ${folder.name}`} tone={tone} onClick={() => { setPanel('actions'); setQueued(false); setChosenMode(null); rescan.reset() }}><EllipsisVertical className="size-4" /></IconButton>
     <Modal open={panel !== null} onOpenChange={open => { if (!open) setPanel(null) }} title={title}
-      description={panel === 'import' ? 'Merge EXIF/XMP tags from every indexed photo and video directly in this folder, regardless of the current filters. Originals stay unchanged.' : folder.name} sheet>
+      description={panel === 'import' ? 'Merge EXIF/XMP tags from every indexed photo and video in this folder and the folders inside it, regardless of the current filters. Originals stay unchanged.' : folder.name} sheet>
       <div className="space-y-4 overflow-auto p-5">
         {panel === 'actions' && <div className="flex flex-wrap gap-2">{extraActions?.(() => setPanel(null))}
           <QuietButton onClick={() => setPanel('rescan')}><RefreshCw className="size-4" />{root ? 'Rescan library' : 'Rescan folder'}</QuietButton>
@@ -51,16 +55,15 @@ export function FolderActions({ folder, libraryName, ancestors = [], onHidden, e
           <p className="text-sm leading-relaxed text-muted">{root
             ? 'Checks every folder in this library for new, changed or removed photos and videos. On a large library this can take a long time and use significant disk and CPU.'
             : `Checks “${folder.name}” and every folder inside it for new, changed or removed photos and videos.`}</p>
-          <Field label="Metadata during indexing"><Select value={metadataMode} onChange={event => setMetadataMode(event.target.value)}>
-            <option value="none">Index only</option><option value="embedded">Index + embedded metadata</option><option value="xmp">Index + embedded metadata + XMP</option>
-          </Select></Field>
+          <MetadataModeSelect value={metadataMode} onChange={setChosenMode} />
+          <p className="text-sm leading-relaxed text-muted">This also becomes the library’s tag import setting, which you can change in Settings.</p>
           <div className="flex flex-wrap gap-2">
             <Button disabled={rescan.isPending} onClick={() => rescan.mutate()}><RefreshCw className="mr-2 size-4" />{rescan.isPending ? 'Starting…' : 'Start rescan'}</Button>
             <QuietButton onClick={() => setPanel('actions')}>Cancel</QuietButton>
           </div>
           {rescan.isError && <p role="alert" className="text-sm text-danger">{errorMessage(rescan.error)}</p>}
         </>)}
-        {panel === 'import' && <MetadataExchange key={folder.id} filters={{ libraryId: folder.libraryId, folderId: folder.id }} exports={false} />}
+        {panel === 'import' && <MetadataExchange key={folder.id} filters={{ libraryId: folder.libraryId, folderId: folder.id, recursive: true }} exports={false} />}
         {panel === 'hide' && <>
           <p className="text-sm leading-relaxed text-muted">“{folder.name}” and everything inside it will disappear from the library, search, reels and slideshows, and will no longer be indexed. Nothing is deleted; show it again from Settings at any time.</p>
           <div className="flex flex-wrap gap-2">

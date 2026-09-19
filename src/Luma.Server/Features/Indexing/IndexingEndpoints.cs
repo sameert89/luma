@@ -19,6 +19,8 @@ public sealed record IndexingLibrary(long Id, string Name, string Availability, 
 public sealed record IndexingStatus(IReadOnlyList<IndexingLibrary> Libraries, bool CachePressure, long CacheBytes,
     int DiscoveryWorkers, int ProcessingWorkers, int ImageWorkers, int VideoWorkers, int QueueCapacity);
 public sealed record SourceVerificationSetting(bool Enabled);
+public sealed record LibraryMetadataMode(string MetadataMode);
+public sealed record LibraryRoot(long FolderId);
 
 public static class IndexingEndpoints
 {
@@ -51,7 +53,12 @@ public static class IndexingEndpoints
                   AND NOT EXISTS(SELECT 1 FROM ProcessingJobs j JOIN Scans s ON s.Id=j.ScanId
                     WHERE j.MediaId=m.Id AND j.SourceRevision=m.SourceRevision AND j.EncoderVersion=@version
                       AND j.State IN ('pending','running') AND s.State IN ('running','completed')))
-                """, new { id, version = IndexingOptions.EncoderVersion }, tx, cancellationToken: ct))) return TypedResults.NoContent();
+                """, new { id, version = IndexingOptions.EncoderVersion }, tx, cancellationToken: ct)))
+            {
+                await QueueMissingMetadataAsync(db, tx, folder.LibraryId, id, folder.MetadataMode, ct);
+                tx.Commit();
+                return TypedResults.NoContent();
+            }
             if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND FolderId IS NULL AND State IN ('queued','running'))", folder, tx, cancellationToken: ct)))
             {
                 worker.PrioritizeFolder(folder.LibraryId, id);
@@ -86,6 +93,36 @@ public static class IndexingEndpoints
             return scanId is null ? Problem(404, context) : TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId.Value));
         }).WithName("StartScan").Produces<ApiProblem>(400, "application/problem+json")
             .Produces<ApiProblem>(404, "application/problem+json").Produces<ApiProblem>(409, "application/problem+json");
+
+        // The library's metadata mode, used by startup and folder-demand scans and by the tag
+        // catch-up when an indexed folder is opened. It never starts work by itself.
+        app.MapPut("/api/libraries/{id:long}/metadata-mode", async Task<Results<NoContent, ProblemHttpResult>>
+            (long id, LibraryMetadataMode request, Database database, HttpContext context, CancellationToken ct) =>
+        {
+            if(request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400,context);
+            await using var db = await database.OpenAsync(ct);
+            var changed = await db.ExecuteAsync(new CommandDefinition("UPDATE Libraries SET MetadataMode=@MetadataMode WHERE Id=@id AND Enabled=1",
+                new { id, request.MetadataMode }, cancellationToken: ct));
+            return changed == 0 ? Problem(404, context) : TypedResults.NoContent();
+        }).WithName("SetLibraryMetadataMode").Produces<ApiProblem>(400, "application/problem+json").Produces<ApiProblem>(404, "application/problem+json");
+
+        // Makes a never-scanned library browsable without a full scan: the root folder is
+        // recorded, and each folder is then indexed (direct entries only) when first opened.
+        app.MapPost("/api/libraries/{id:long}/root", async Task<Results<Ok<LibraryRoot>, ProblemHttpResult>>
+            (long id, Database database, HttpContext context, CancellationToken ct) =>
+        {
+            await using var db = await database.OpenAsync(ct);
+            using var tx = db.BeginTransaction();
+            if (!await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Libraries WHERE Id=@id AND Enabled=1)", new { id }, tx, cancellationToken: ct)))
+                return Problem(404, context);
+            var root = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
+                INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey) VALUES(@id,NULL,'','') ON CONFLICT(LibraryId,PathKey) DO NOTHING;
+                INSERT OR IGNORE INTO FolderAncestry SELECT Id,Id FROM Folders WHERE LibraryId=@id AND PathKey='';
+                SELECT Id FROM Folders WHERE LibraryId=@id AND PathKey='';
+                """, new { id }, tx, cancellationToken: ct));
+            tx.Commit();
+            return TypedResults.Ok(new LibraryRoot(root));
+        }).WithName("PrepareLibraryRoot").Produces<ApiProblem>(404, "application/problem+json");
 
         // Rescan from a folder's menu: the folder and everything beneath it. A library's root
         // folder is the library, so rescanning it is a full library scan.
@@ -168,6 +205,33 @@ public static class IndexingEndpoints
         if(await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')",transaction:tx,cancellationToken:ct))>=16) throw new ApiRequestException(429,"rate_limited","The metadata job queue is full.");
         var request=new MetadataJobRequest(Query:new MediaQuery{LibraryId=libraryId,FolderId=folderId,Recursive=folderId is null || recursive},IncludeSidecars:mode=="xmp",Automatic:true,ScanId:scanId);
         await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,ScanId) VALUES('import','queued',@request,@now,@scanId); UPDATE Scans SET MetadataQueued=1 WHERE Id=@scanId",new{scanId,request=JsonSerializer.Serialize(request with {Query=request.Query!.Normalize()}),now=DateTimeOffset.UtcNow.ToString("O")},tx,cancellationToken:ct));
+    }
+
+    // An indexed folder whose media never had tags imported (indexed while the library imported
+    // none, or its scan's metadata stage was cancelled) gets a direct-only import when opened,
+    // provided the library imports metadata. Media an import already attempted with the same
+    // sidecar setting is not retried, so a file that fails to import cannot re-queue on every visit.
+    // A full queue skips the catch-up instead of failing the visit; the next visit tries again.
+    private static async Task QueueMissingMetadataAsync(SqliteConnection db, SqliteTransaction tx, long libraryId, long folderId, string mode, CancellationToken ct)
+    {
+        if (mode == "none") return;
+        var sidecars = mode == "xmp";
+        if (!await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
+            SELECT EXISTS(SELECT 1 FROM Media m WHERE m.FolderId=@folderId AND m.Availability='present'
+                AND NOT EXISTS(SELECT 1 FROM MetadataRevisions r WHERE r.MediaId=m.Id AND r.IncludeSidecars>=@sidecars)
+                AND NOT EXISTS(SELECT 1 FROM MetadataJobItems i JOIN MetadataJobs j ON j.Id=i.JobId
+                  WHERE i.MediaId=m.Id AND j.Kind='import' AND json_extract(j.Request,'$.IncludeSidecars')>=@sidecars))
+              AND NOT EXISTS(SELECT 1 FROM MetadataJobs j WHERE j.Kind='import' AND j.State IN ('queued','running')
+                AND json_extract(j.Request,'$.Query.LibraryId')=@libraryId
+                AND (json_extract(j.Request,'$.Query.FolderId') IS NULL OR json_extract(j.Request,'$.Query.FolderId')=@folderId
+                  OR json_extract(j.Request,'$.Query.Recursive') AND json_extract(j.Request,'$.Query.FolderId') IN
+                    (SELECT AncestorId FROM FolderAncestry WHERE DescendantId=@folderId)))
+              AND (SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running'))<16
+            """, new { libraryId, folderId, sidecars }, tx, cancellationToken: ct))) return;
+        var request = new MetadataJobRequest(Query: new MediaQuery { LibraryId = libraryId, FolderId = folderId, Recursive = false }.Normalize(),
+            IncludeSidecars: sidecars, Automatic: true);
+        await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt) VALUES('import','queued',@request,@now)",
+            new { request = JsonSerializer.Serialize(request), now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
     }
 
     private static ProblemHttpResult Problem(int status, HttpContext context) =>

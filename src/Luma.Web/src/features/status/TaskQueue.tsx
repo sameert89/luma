@@ -1,4 +1,5 @@
 import { useQuery, useIsMutating, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
 import { errorMessage, request, type IndexingStatus } from '../browse/api'
 import type { components } from '../../lib/api/generated'
@@ -58,6 +59,8 @@ function TaskRow({ task }: { task: Task }) {
   const action = useMutation({ mutationKey: ['task-action', task.id], mutationFn: (operation: 'cancel' | 'queue' | 'clear') => request(`/api/tasks/${task.id}/${operation}`, undefined, 'POST'), onSuccess: () => refresh(client) })
   const name = label(task)
   const busy = action.isPending
+  // Stopping indexing changes what gets indexed later, so it says so before it happens.
+  const [confirming, setConfirming] = useState(false)
   return <article aria-label={`${name}, ${stateLabels[task.state] ?? task.state}`} className="rounded-lg border border-line p-3">
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
@@ -69,7 +72,14 @@ function TaskRow({ task }: { task: Task }) {
     <p className="mt-1 text-sm text-muted">{progress(task)}</p>
     <div className="mt-2 flex flex-wrap gap-2">
       {isActive(task)
-        ? <QuietButton aria-label={`Cancel ${name}`} disabled={busy} onClick={() => action.mutate('cancel')}>{busy ? 'Cancelling…' : 'Cancel'}</QuietButton>
+        ? confirming ? <div className="space-y-2">
+          <p className="text-sm leading-relaxed">Files found so far stay in your library, and their previews are made as you view them. Each folder you open is finished then, including its tags if the library imports tags.</p>
+          <div className="flex flex-wrap gap-2">
+            <QuietButton disabled={busy} onClick={() => action.mutate('cancel')}>{busy ? 'Stopping…' : 'Stop indexing'}</QuietButton>
+            <QuietButton disabled={busy} onClick={() => setConfirming(false)}>Keep running</QuietButton>
+          </div>
+        </div>
+        : <QuietButton aria-label={`Cancel ${name}`} disabled={busy} onClick={() => task.kind === 'indexing' ? setConfirming(true) : action.mutate('cancel')}>{busy ? 'Cancelling…' : 'Cancel'}</QuietButton>
         : <>
           {canQueueAgain(task) && <QuietButton aria-label={`Queue ${name} again`} disabled={busy} onClick={() => action.mutate('queue')}>Queue again</QuietButton>}
           <QuietButton aria-label={`Clear ${name}`} disabled={busy} onClick={() => action.mutate('clear')}>Clear</QuietButton>

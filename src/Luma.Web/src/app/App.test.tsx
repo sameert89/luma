@@ -113,7 +113,7 @@ describe('browsing shell', () => {
     expect(window.location.search).toBe('?libraryId=1&folderId=2')
     await userEvent.click(screen.getByRole('button', { name: 'Import folder metadata' }))
     await userEvent.click(screen.getByRole('button', { name: 'Import folder metadata tags' }))
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/imports/tags', expect.objectContaining({ method: 'POST', body: JSON.stringify({ query: { libraryId: 1, folderId: 3 }, includeSidecars: false }) })))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/imports/tags', expect.objectContaining({ method: 'POST', body: JSON.stringify({ query: { libraryId: 1, folderId: 3, recursive: true }, includeSidecars: false }) })))
   })
 
   it('opens favourites on mobile without activating the search field, while explicitly opening Search focuses it', async () => {
@@ -209,9 +209,44 @@ describe('browsing shell', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Include adjacent XMP sidecars' }))
     await userEvent.click(screen.getByRole('button', { name: 'Import folder metadata tags' }))
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/imports/tags', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ query: { libraryId: 1, folderId: 2 }, includeSidecars: true }),
+      method: 'POST', body: JSON.stringify({ query: { libraryId: 1, folderId: 2, recursive: true }, includeSidecars: true }),
     })))
     expect(await screen.findByRole('status')).toHaveTextContent('700 processed')
+  })
+
+  it('sets up a never-indexed library to index folders as they are opened, without a full scan', async () => {
+    let rootFolderId: number | null = null
+    const fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/libraries/1/root') rootFolderId = 5
+      const data = url === '/api/tasks' ? [] : url === '/api/libraries' ? [{ id: 1, name: 'Photos', availability: 'unknown', rootFolderId, metadataMode: 'embedded' }]
+        : url === '/api/libraries/1/root' ? { folderId: 5 }
+          : url.startsWith('/api/folders?') ? { current: { id: 5, libraryId: 1, name: 'Photos' }, ancestors: [], items: [] }
+            : url.startsWith('/api/indexing') ? { libraries: [] } : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(init?.method === 'PUT' ? new Response(null, { status: 204 }) : new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderApp()
+    await userEvent.click(await screen.findByRole('button', { name: 'Open Photos' }))
+    const dialog = screen.getByRole('dialog', { name: 'Set up library' })
+    expect(dialog).toHaveTextContent('Change it any time in Settings')
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Tag import' }), 'none')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Index folders as I open them' }))
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('folderId')).toBe('5'))
+    const writes = fetch.mock.calls.filter(([url, init]) => String(url).startsWith('/api/libraries/') && init?.method !== 'GET').map(([url, init]) => [url, init.body ?? null])
+    expect(writes).toEqual([['/api/libraries/1/metadata-mode', JSON.stringify({ metadataMode: 'none' })], ['/api/libraries/1/root', null]])
+  })
+
+  it('changes the tag import setting of a library from Settings', async () => {
+    const fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT' ? new Response(null, { status: 204 })
+      : new Response(JSON.stringify(url === '/api/tasks' ? [] : url === '/api/libraries' ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1, metadataMode: 'embedded' }]
+        : { libraries: [] }), { headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetch)
+    renderApp()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
+    const setting = await screen.findByRole('combobox', { name: 'Tag import for Photos' })
+    expect(setting).toHaveValue('embedded')
+    await userEvent.selectOptions(setting, 'xmp')
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/libraries/1/metadata-mode', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ metadataMode: 'xmp' }) })))
   })
 
   it('shows libraries on home without fetching the combined media feed', async () => {
@@ -456,7 +491,7 @@ it('organizes settings under consistent headings without an installation panel',
   emptyApi()
   renderApp()
   await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
-  for (const name of ['Theme & appearance', 'Random media URL', 'Metadata exchange', 'Hidden folders', 'Missing-file checks', 'Help', 'About']) {
+  for (const name of ['Theme & appearance', 'Random media URL', 'Metadata exchange', 'Libraries', 'Hidden folders', 'Missing-file checks', 'Help', 'About']) {
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
   }
   expect(screen.getAllByRole('heading', { name: 'Metadata exchange' })).toHaveLength(1)
@@ -544,7 +579,7 @@ describe('folder actions', () => {
   function folderApi() {
     const fetch = vi.fn().mockImplementation((url: string) => {
       const text = String(url)
-      const data = text === '/api/tasks' ? [] : text === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+      const data = text === '/api/tasks' ? [] : text === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1, metadataMode: 'xmp' }]
         : text.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, parentId: 1, name: 'Trips' }, ancestors: [], items: [{ id: 3, libraryId: 1, name: 'Beach' }] }
           : text.startsWith('/api/indexing') ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
             : text.includes('/neighbors?') ? { previous: null, next: null }
@@ -586,7 +621,9 @@ describe('folder actions', () => {
     const dialog = screen.getByRole('dialog', { name: 'Rescan folder' })
     expect(dialog).toHaveTextContent('every folder inside it')
     expect(posted()).toHaveLength(0)
-    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Metadata during indexing' }), 'none')
+    // The choice starts from the library's own setting.
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Tag import' })).toHaveValue('xmp'))
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Tag import' }), 'none')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Start rescan' }))
     await waitFor(() => expect(posted()).toHaveLength(1))
     expect(posted()[0][0]).toBe('/api/folders/2/scans')

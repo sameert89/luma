@@ -78,6 +78,7 @@ test('cancelling preparation stops the busy indicator even with paused jobs', as
   const dialog = page.getByRole('dialog', { name: 'Background jobs' })
   await expect(dialog.getByRole('button', { name: 'Cancel Indexing' })).toBeVisible()
   await dialog.getByRole('button', { name: 'Cancel Indexing' }).click()
+  await dialog.getByRole('button', { name: 'Stop indexing' }).click()
   await expect.poll(() => cancelled).toBe(true)
   await dialog.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Background jobs', exact: true })).toBeVisible()

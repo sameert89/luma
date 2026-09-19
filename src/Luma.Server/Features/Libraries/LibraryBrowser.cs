@@ -11,7 +11,7 @@ public sealed record CoverRequest(long? MediaId);
 // chooses. CoverOverride: the person picked a cover; while it stays eligible it is the only image
 // returned. Otherwise CoverImages holds up to five automatic candidates, newest first.
 public sealed record CoverImage(string Url,int Width,int Height);
-public sealed record LibrarySummary(long Id,string Name,string Availability,long? RootFolderId,string? CoverUrl,bool CoverOverride = false,IReadOnlyList<CoverImage>? CoverImages = null);
+public sealed record LibrarySummary(long Id,string Name,string Availability,long? RootFolderId,string? CoverUrl,bool CoverOverride = false,IReadOnlyList<CoverImage>? CoverImages = null,string MetadataMode = "embedded");
 public sealed record FolderSummary(long Id,long LibraryId,long? ParentId,string Name,string? CoverUrl,bool CoverOverride = false,IReadOnlyList<CoverImage>? CoverImages = null);
 public sealed record FolderVisibilityRequest(bool Hidden);
 public sealed record HiddenFolderSummary(long Id,long LibraryId,string LibraryName,string Path);
@@ -28,7 +28,7 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
     {
         await using var db=await database.OpenAsync(ct);
         var rows=await db.QueryAsync<LibraryRow>(new CommandDefinition($"""
-            SELECT l.Id,l.Name,l.Availability,(SELECT Id FROM Folders WHERE LibraryId=l.Id AND PathKey='') RootFolderId,
+            SELECT l.Id,l.Name,l.Availability,l.MetadataMode,(SELECT Id FROM Folders WHERE LibraryId=l.Id AND PathKey='') RootFolderId,
             (SELECT CoverMediaId IS NOT NULL FROM Folders WHERE LibraryId=l.Id AND PathKey='') CoverOverride,
             COALESCE((SELECT json_array({CoverJson})
              FROM Folders root JOIN Media m ON m.Id=root.CoverMediaId JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
@@ -38,7 +38,7 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
              WHERE m.LibraryId=l.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
              ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverCandidates}))) CoverJson FROM Libraries l WHERE Enabled=1 ORDER BY l.Id
             """,new { encoder=IndexingOptions.EncoderVersion },cancellationToken:ct));
-        return rows.Select(x=>{var images=CoverImages(x.CoverJson);return new LibrarySummary(x.Id,x.Name,x.Availability,x.RootFolderId,images.FirstOrDefault()?.Url,x.CoverOverride,images);}).ToArray();
+        return rows.Select(x=>{var images=CoverImages(x.CoverJson);return new LibrarySummary(x.Id,x.Name,x.Availability,x.RootFolderId,images.FirstOrDefault()?.Url,x.CoverOverride,images,x.MetadataMode);}).ToArray();
     }
     public async Task<FolderPage> FoldersAsync(long? libraryId,long? parentId,int? limit,string? cursor,CancellationToken ct,string? sort = null,string? sortOrder = null)
     {
@@ -137,5 +137,5 @@ public sealed class LibraryBrowser(Database database,CursorSigner cursors)
     private static IReadOnlyList<CoverImage> CoverImages(string? json)=>json is null?[]:System.Text.Json.JsonSerializer.Deserialize<CoverImage[]>(json,CoverJsonOptions)??[];
     private sealed class FolderRow {public long Id{get;set;}public long LibraryId{get;set;}public long? ParentId{get;set;}public string RelativePath{get;set;}="";public string SortKey{get;set;}="";public long ModifiedTicks{get;set;}public string LibraryName{get;set;}="";public bool CoverOverride{get;set;}public string? CoverJson{get;set;}}
     private sealed record FolderParent(long? ParentId);
-    private sealed class LibraryRow {public long Id{get;set;}public string Name{get;set;}="";public string Availability{get;set;}="";public long? RootFolderId{get;set;}public bool CoverOverride{get;set;}public string? CoverJson{get;set;}}
+    private sealed class LibraryRow {public long Id{get;set;}public string Name{get;set;}="";public string Availability{get;set;}="";public string MetadataMode{get;set;}="embedded";public long? RootFolderId{get;set;}public bool CoverOverride{get;set;}public string? CoverJson{get;set;}}
 }

@@ -9,7 +9,9 @@ type Accepted = operations['IndexFolder']['responses'][202]['content']['applicat
 export function useFolderIndexing(folderId?: number) {
   const client = useQueryClient()
   const start = useQuery({ queryKey: ['folder-indexing', folderId], enabled: !!folderId, gcTime: 0,
-    queryFn: async ({ signal }) => { const result = await request<Accepted | undefined>(`/api/folders/${folderId}/index`, signal, 'POST') ?? null; if (result) void client.invalidateQueries({ queryKey: ['tasks'] }); return result },
+    queryFn: async ({ signal }) => { const result = await request<Accepted | undefined>(`/api/folders/${folderId}/index`, signal, 'POST') ?? null
+      // An indexed folder can still queue a tag import for files indexed without tags.
+      void client.invalidateQueries({ queryKey: ['tasks'] }); return result },
     retry: (count, error) => (error instanceof ApiError && error.status === 409) || count < 2,
     retryDelay: 3000, refetchOnWindowFocus: false })
   const scan = useQuery({ queryKey: ['scan', start.data?.id], enabled: !!start.data?.id, gcTime: 0,
