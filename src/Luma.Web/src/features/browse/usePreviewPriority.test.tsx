@@ -34,6 +34,15 @@ it('requests preparation for pending previews in the order they are shown', asyn
   expect(JSON.parse(String(fetch.mock.calls[1][1].body))).toEqual({ ids: [1, 7, 4], previews: false })
 })
 
+it('sends an item once when grouping shows it under several headings', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  // Tag grouping lists an item under each of its tags, so the visible window can repeat it.
+  render(<Probe items={[media(4, 'pending'), media(1, 'pending'), media(4, 'pending')]} />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+  expect(JSON.parse(String(fetch.mock.calls[0][1].body))).toEqual({ ids: [4, 1], previews: false })
+})
+
 it('stays quiet when every preview is ready and retries a failed batch a bounded number of times', async () => {
   const fetch = vi.fn().mockRejectedValue(new Error('offline'))
   vi.stubGlobal('fetch', fetch)

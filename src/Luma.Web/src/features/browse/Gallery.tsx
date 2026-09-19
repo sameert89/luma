@@ -8,6 +8,8 @@ import { errorMessage, isGif, mediaPage, type Filters, type Media } from './api'
 import { useFolderIndexing } from './useFolderIndexing'
 import { usePreviewPriority } from './usePreviewPriority'
 
+const cellKey = (item: Media) => `${item.groupKey ?? ''}:${item.id}`
+
 export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent, scopePending = false, scopeError }: {
   filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode; scopePending?: boolean; scopeError?: Error | null
 }) {
@@ -16,7 +18,9 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
     initialPageParam: undefined as string | undefined, getNextPageParam: page => page.nextCursor ?? undefined, getPreviousPageParam: page => page.previousCursor ?? undefined,
     maxPages: 5, gcTime: 0, retry: 1,
     refetchInterval: state => indexing.waiting || state.state.data?.pages.some(page => page.items.some(item => !['ready', 'failed'].includes(item.thumbnail.status))) ? 3000 : false })
-  const items = [...new Map((query.data?.pages.flatMap(page => page.items) ?? []).map(item => [item.id, item])).values()]
+  // Tag grouping lists an item under each of its tags, so a cell is identified by its group and item,
+  // not by the item alone: pages that overlap still collapse, repeats under other headers stay.
+  const items = [...new Map((query.data?.pages.flatMap(page => page.items) ?? []).map(item => [cellKey(item), item])).values()]
   const gridRef = useRef<HTMLDivElement>(null)
   const leadingRef = useRef<HTMLDivElement>(null)
   const [leadingHeight, setLeadingHeight] = useState(0)
@@ -55,19 +59,19 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
     return () => observer.disconnect()
   }, [])
   useLayoutEffect(() => { virtual.measure() }, [columns, rowHeight, layoutKey, virtual])
-  const anchor = useRef<{ id: number; offset: number; data: typeof query.data } | null>(null)
+  const anchor = useRef<{ key: string; offset: number; data: typeof query.data } | null>(null)
   const loading = useRef(false)
   const load = useCallback(async (backward: boolean) => {
     if (loading.current || query.isFetching) return
     const top = scrollerRef.current?.scrollTop ?? 0
     const row = [...gridRows].reverse().find(row => row.offset <= top - leadingHeight) ?? gridRows[0]
-    if (row) anchor.current = { id: row.items[0].id, offset: top - leadingHeight - row.offset, data: query.data }
+    if (row) anchor.current = { key: cellKey(row.items[0]), offset: top - leadingHeight - row.offset, data: query.data }
     loading.current = true
     try { if (backward) await query.fetchPreviousPage(); else await query.fetchNextPage() } finally { loading.current = false }
   }, [query, gridRows, leadingHeight, scrollerRef])
   useLayoutEffect(() => {
     if (!anchor.current || !scrollerRef.current || query.data === anchor.current.data) return
-    const row = gridRows.find(row => row.items.some(item => item.id === anchor.current?.id))
+    const row = gridRows.find(row => row.items.some(item => cellKey(item) === anchor.current?.key))
     if (row) scrollerRef.current.scrollTop = leadingHeight + row.offset + anchor.current.offset
     anchor.current = null
   }, [query.data, gridRows, leadingHeight, scrollerRef])
@@ -93,7 +97,7 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
         {visible.map(row => <div key={row.index} className="absolute left-0 top-0 w-full pb-3" style={{ height: row.size, transform: `translateY(${row.start - leadingHeight}px)` }}>
           {gridRows[row.index].header && <h2 className="flex h-9 items-center text-sm font-semibold">{gridRows[row.index].header}</h2>}
           <div className="grid w-full gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-          {gridRows[row.index].items.map(item => <article key={item.id} className={`relative min-w-0 overflow-hidden rounded-md border ${selected.has(item.id) ? 'border-accent' : 'border-transparent'}`} data-testid="media-cell">
+          {gridRows[row.index].items.map(item => <article key={cellKey(item)} className={`relative min-w-0 overflow-hidden rounded-md border ${selected.has(item.id) ? 'border-accent' : 'border-transparent'}`} data-testid="media-cell">
             <button data-media-id={item.id} className="block w-full text-left" aria-label={`Open ${item.fileName}`} onClick={() => onOpen(item)}>
               <CachedImage key={`${item.thumbnail.url}:${item.thumbnail.status}`} url={item.thumbnail.url} status={item.thumbnail.status} alt="" className="aspect-square w-full bg-surface object-cover" />
               <span className="block truncate px-1 py-2 text-xs text-muted">{item.fileName}</span>
