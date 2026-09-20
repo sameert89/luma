@@ -27,6 +27,7 @@ jobs:
         if: runner.os == 'Linux'
       - run: choco install ffmpeg --no-progress -y
         if: runner.os == 'Windows'
+      - run: dotnet format Luma.slnx --verify-no-changes --no-restore
       - run: dotnet build Luma.slnx -c Release --no-restore
       - run: dotnet test Luma.slnx -c Release --no-build
       - run: npm ci

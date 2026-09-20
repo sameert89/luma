@@ -76,14 +76,29 @@ public sealed record MediaQuery
         if (Tag?.Length > 50 || Extension?.Length > 20) throw ApiRequestException.Invalid("Too many tags or extensions.");
         var extensions = Extension?.Select(x => x.Trim().TrimStart('.').ToLowerInvariant()).Where(x => x.Length > 0).Distinct().Order().ToArray() ?? [];
         if (extensions.Any(x => x.Length > 16 || !x.All(char.IsAsciiLetterOrDigit))) throw ApiRequestException.Invalid("Invalid extension.");
-        return this with { Limit = Limit ?? 60, Q = Text(Q), Path = Text(Path), StartsWith = Text(StartsWith), EndsWith = Text(EndsWith),
+        return this with
+        {
+            Limit = Limit ?? 60,
+            Q = Text(Q),
+            Path = Text(Path),
+            StartsWith = Text(StartsWith),
+            EndsWith = Text(EndsWith),
             CollectionTag = string.IsNullOrWhiteSpace(CollectionTag) ? null : Tags.TagText.Normalize(CollectionTag).Key,
-            Tag = Tag?.Select(Tags.TagText.Normalize).Select(x => x.Key).Distinct().Order().ToArray() ?? [], Extension = extensions,
-            MediaType = Choice(MediaType,"image","video","gif","motion"), Orientation = Choice(Orientation,"landscape","portrait","square"),
-            Preference = Choice(Preference,"neutral","liked","disliked"), Availability = Choice(Availability,"present","missing","all") ?? "present",
+            Tag = Tag?.Select(Tags.TagText.Normalize).Select(x => x.Key).Distinct().Order().ToArray() ?? [],
+            Extension = extensions,
+            MediaType = Choice(MediaType, "image", "video", "gif", "motion"),
+            Orientation = Choice(Orientation, "landscape", "portrait", "square"),
+            Preference = Choice(Preference, "neutral", "liked", "disliked"),
+            Availability = Choice(Availability, "present", "missing", "all") ?? "present",
             Seed = Seed ?? (Sort == "shuffle" ? Guid.NewGuid().ToString("N") : null),
-            Sort = Choice(Sort,"modified","captured","name","type","size","shuffle") ?? "modified", Order = Choice(Order,"asc","desc") ?? "desc", GroupBy = Choice(GroupBy,"none","folder","date","type","tag") ?? "none",
-            TagMode = Choice(TagMode,"all","any") ?? "all", Recursive = Recursive ?? false, DateFrom = from, DateTo = to };
+            Sort = Choice(Sort, "modified", "captured", "name", "type", "size", "shuffle") ?? "modified",
+            Order = Choice(Order, "asc", "desc") ?? "desc",
+            GroupBy = Choice(GroupBy, "none", "folder", "date", "type", "tag") ?? "none",
+            TagMode = Choice(TagMode, "all", "any") ?? "all",
+            Recursive = Recursive ?? false,
+            DateFrom = from,
+            DateTo = to
+        };
     }
 
     public string Fingerprint() => JsonSerializer.Serialize(this with { Limit = null, Cursor = null });
@@ -92,7 +107,7 @@ public sealed record MediaQuery
     {
         var conditions = new List<string>();
         var p = new DynamicParameters();
-        void Add(string sql, string name, object? value) { if (value is null) return; conditions.Add(sql); p.Add(name,value); }
+        void Add(string sql, string name, object? value) { if (value is null) return; conditions.Add(sql); p.Add(name, value); }
         if (Availability != "all") Add("m.Availability=@availability", "availability", Availability);
         Add("m.LibraryId=@libraryId", "libraryId", LibraryId);
         Add(Recursive == true ? "m.FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@folderId)" : "m.FolderId=@folderId", "folderId", FolderId);
@@ -104,7 +119,7 @@ public sealed record MediaQuery
         if (MediaType == "gif") conditions.Add("m.Extension='.gif'");
         else if (MediaType == "motion") conditions.Add("(m.MediaType='video' OR m.Extension='.gif')");
         else Add("m.MediaType=@mediaType", "mediaType", MediaType);
-        Add("m.Id IN (SELECT mt.MediaId FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE t.NormalizedKey=@collectionTag)","collectionTag",CollectionTag);
+        Add("m.Id IN (SELECT mt.MediaId FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE t.NormalizedKey=@collectionTag)", "collectionTag", CollectionTag);
         Add("m.Preference=@preference", "preference", Preference);
         Add("m.Orientation=@orientation", "orientation", Orientation);
         Add("m.SizeBytes>=@minSize", "minSize", MinSizeBytes); Add("m.SizeBytes<=@maxSize", "maxSize", MaxSizeBytes);
@@ -127,7 +142,7 @@ public sealed record MediaQuery
                       AND (instr(NameKey,@{name})>0 OR instr(SearchPath,@{name})>0)
                       UNION {tagged})
                     """, name, text);
-                p.Add(name+"Fts", "\"" + text.Replace("\"","\"\"") + "\"");
+                p.Add(name + "Fts", "\"" + text.Replace("\"", "\"\"") + "\"");
             }
             else Add($"(instr(m.NameKey,@{name})>0 OR instr(m.SearchPath,@{name})>0 OR m.Id IN ({tagged}))", name, text);
         }
@@ -136,18 +151,18 @@ public sealed record MediaQuery
             Add("instr(m.SearchPath,@path)>0", "path", Path);
             if (Path.EnumerateRunes().Count() >= 3)
                 Add("m.Id IN (SELECT rowid FROM MediaSearch WHERE MediaSearch MATCH @pathFts)", "pathFts",
-                    "SearchPath:\"" + Path.Replace("\"","\"\"") + "\"");
+                    "SearchPath:\"" + Path.Replace("\"", "\"\"") + "\"");
         }
-        if (StartsWith is not null) { Add("m.NameKey>=@prefix AND m.NameKey<@prefixEnd AND instr(m.NameKey,@prefix)=1", "prefix", StartsWith); p.Add("prefixEnd", StartsWith+"\U0010FFFF"); }
-        if (EndsWith is not null) { var reverse=SearchText.Reverse(EndsWith); Add("m.ReversedName>=@suffix AND m.ReversedName<@suffixEnd AND instr(m.ReversedName,@suffix)=1", "suffix", reverse); p.Add("suffixEnd",reverse+"\U0010FFFF"); }
-        if (Tagged is not null) conditions.Add((Tagged == true ? "" : "NOT ")+"EXISTS(SELECT 1 FROM MediaTags mt WHERE mt.MediaId=m.Id)");
+        if (StartsWith is not null) { Add("m.NameKey>=@prefix AND m.NameKey<@prefixEnd AND instr(m.NameKey,@prefix)=1", "prefix", StartsWith); p.Add("prefixEnd", StartsWith + "\U0010FFFF"); }
+        if (EndsWith is not null) { var reverse = SearchText.Reverse(EndsWith); Add("m.ReversedName>=@suffix AND m.ReversedName<@suffixEnd AND instr(m.ReversedName,@suffix)=1", "suffix", reverse); p.Add("suffixEnd", reverse + "\U0010FFFF"); }
+        if (Tagged is not null) conditions.Add((Tagged == true ? "" : "NOT ") + "EXISTS(SELECT 1 FROM MediaTags mt WHERE mt.MediaId=m.Id)");
         if (Tag?.Length > 0)
         {
-            p.Add("tags",JsonSerializer.Serialize(Tag));
+            p.Add("tags", JsonSerializer.Serialize(Tag));
             conditions.Add(TagMode == "any" || Tag.Length == 1
                 ? "m.Id IN (SELECT mt.MediaId FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE t.NormalizedKey IN (SELECT value FROM json_each(@tags)))"
                 : "m.Id IN (SELECT mt.MediaId FROM MediaTags mt JOIN Tags t ON t.Id=mt.TagId WHERE t.NormalizedKey IN (SELECT value FROM json_each(@tags)) GROUP BY mt.MediaId HAVING COUNT(*)=json_array_length(@tags))");
         }
-        return (conditions.Count == 0 ? "1=1" : string.Join(" AND ",conditions),p);
+        return (conditions.Count == 0 ? "1=1" : string.Join(" AND ", conditions), p);
     }
 }

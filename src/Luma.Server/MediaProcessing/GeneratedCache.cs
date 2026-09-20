@@ -45,9 +45,19 @@ public sealed class GeneratedCache(Database database, IndexingOptions options)
         {
             await using var stream = File.OpenRead(variant.TemporaryPath);
             var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, ct));
-            entries.Add(new CacheEntry { MediaId = job.MediaId, SourceRevision = job.SourceRevision, Variant = variant.Variant,
-                EncoderVersion = IndexingOptions.EncoderVersion, State = "ready", SizeBytes = stream.Length, Width = variant.Width, Height = variant.Height,
-                ContentHash = hash, RelativePath = Path.GetRelativePath(options.CachePath, FilePath(job.MediaId, job.SourceRevision, variant.Variant)) });
+            entries.Add(new CacheEntry
+            {
+                MediaId = job.MediaId,
+                SourceRevision = job.SourceRevision,
+                Variant = variant.Variant,
+                EncoderVersion = IndexingOptions.EncoderVersion,
+                State = "ready",
+                SizeBytes = stream.Length,
+                Width = variant.Width,
+                Height = variant.Height,
+                ContentHash = hash,
+                RelativePath = Path.GetRelativePath(options.CachePath, FilePath(job.MediaId, job.SourceRevision, variant.Variant))
+            });
         }
         await gate.WaitAsync(ct);
         try
@@ -76,9 +86,19 @@ public sealed class GeneratedCache(Database database, IndexingOptions options)
                 UPDATE ProcessingJobs SET State=CASE WHEN WantPreview=1 AND NOT @previewed THEN 'pending' ELSE 'ready' END,
                   Claim=NULL,LeaseUntil=NULL,FailureCode=NULL
                   WHERE MediaId=@MediaId AND SourceRevision=@SourceRevision AND EncoderVersion=@EncoderVersion AND Claim=@Claim;
-                """, new { job.MediaId, job.SourceRevision, job.EncoderVersion, job.Claim, metadata.Width, metadata.Height, metadata.DurationMs, metadata.CapturedAt,
-                    // A preview requested while a thumbnail-only job was running stays queued (at its priority).
-                    previewed = variants.Any(x => x.Variant == "preview") }, tx, cancellationToken: ct));
+                """, new
+            {
+                job.MediaId,
+                job.SourceRevision,
+                job.EncoderVersion,
+                job.Claim,
+                metadata.Width,
+                metadata.Height,
+                metadata.DurationMs,
+                metadata.CapturedAt,
+                // A preview requested while a thumbnail-only job was running stays queued (at its priority).
+                previewed = variants.Any(x => x.Variant == "preview")
+            }, tx, cancellationToken: ct));
             tx.Commit();
             return true;
         }

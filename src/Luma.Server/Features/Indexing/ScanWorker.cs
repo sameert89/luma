@@ -169,8 +169,14 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                       SourceModifiedTicks=CASE WHEN Id=@FolderId OR (@FolderId IS NULL AND ParentId IS NULL)
                         THEN @sourceModifiedTicks ELSE SourceModifiedTicks END
                       WHERE LibraryId=@LibraryId AND (((@FolderId IS NULL OR @Recursive) AND LastSeenScanId=@Id) OR Id=@FolderId);
-                    """, new { scan.Id, scan.LibraryId, scan.FolderId, scan.Recursive,
-                        sourceModifiedTicks = Directory.GetLastWriteTimeUtc(directoryPath).Ticks }, tx, cancellationToken: ct));
+                    """, new
+                {
+                    scan.Id,
+                    scan.LibraryId,
+                    scan.FolderId,
+                    scan.Recursive,
+                    sourceModifiedTicks = Directory.GetLastWriteTimeUtc(directoryPath).Ticks
+                }, tx, cancellationToken: ct));
             tx.Commit();
         }
         finally
@@ -273,9 +279,22 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 WHERE Media.LastSeenScanId<>@scanId OR Media.SizeBytes<>excluded.SizeBytes
                   OR Media.ModifiedAt<>excluded.ModifiedAt OR Media.Availability<>'present'
                 RETURNING Id;
-                """, new { rootId = root.Id, folderId, entry.RelativePath, key, name = Path.GetFileName(entry.RelativePath),
-                    type = format.Type, mime = format.Mime, extension = Path.GetExtension(entry.RelativePath).ToLowerInvariant(),
-                    entry.Size, entry.ModifiedAt, now, scanId = scan.Id, force = scan.Force }, tx, cancellationToken: ct));
+                """, new
+            {
+                rootId = root.Id,
+                folderId,
+                entry.RelativePath,
+                key,
+                name = Path.GetFileName(entry.RelativePath),
+                type = format.Type,
+                mime = format.Mime,
+                extension = Path.GetExtension(entry.RelativePath).ToLowerInvariant(),
+                entry.Size,
+                entry.ModifiedAt,
+                now,
+                scanId = scan.Id,
+                force = scan.Force
+            }, tx, cancellationToken: ct));
             if (mediaId is null) return;
             await db.ExecuteAsync(new CommandDefinition("""
                 UPDATE ProcessingJobs SET State='obsolete',Claim=NULL WHERE MediaId=@mediaId
@@ -290,8 +309,15 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                     WHEN @priority AND ProcessingJobs.State='pending' AND ProcessingJobs.NextAttemptAt>@next THEN @next
                     ELSE ProcessingJobs.NextAttemptAt END;
                 UPDATE Scans SET Discovered=Discovered+1 WHERE Id=@scanId;
-                """, new { mediaId, version = IndexingOptions.EncoderVersion, scanId = scan.Id,
-                    next = priority ? DateTimeOffset.UtcNow.AddYears(-1).ToString("O") : now, priority, retry = scan.RetryFailures }, tx, cancellationToken: ct));
+                """, new
+            {
+                mediaId,
+                version = IndexingOptions.EncoderVersion,
+                scanId = scan.Id,
+                next = priority ? DateTimeOffset.UtcNow.AddYears(-1).ToString("O") : now,
+                priority,
+                retry = scan.RetryFailures
+            }, tx, cancellationToken: ct));
         }
     }
 
@@ -360,12 +386,18 @@ public static class MediaFormats
     {
         format = Path.GetExtension(path).ToLowerInvariant() switch
         {
-            ".jpg" or ".jpeg" => new("image", "image/jpeg"), ".png" => new("image", "image/png"),
-            ".webp" => new("image", "image/webp"), ".gif" => new("image", "image/gif"),
-            ".bmp" => new("image", "image/bmp"), ".tif" or ".tiff" => new("image", "image/tiff"),
-            ".mp4" or ".m4v" => new("video", "video/mp4"), ".mov" => new("video", "video/quicktime"),
-            ".mkv" => new("video", "video/x-matroska"), ".webm" => new("video", "video/webm"),
-            ".avi" => new("video", "video/x-msvideo"), _ => null!
+            ".jpg" or ".jpeg" => new("image", "image/jpeg"),
+            ".png" => new("image", "image/png"),
+            ".webp" => new("image", "image/webp"),
+            ".gif" => new("image", "image/gif"),
+            ".bmp" => new("image", "image/bmp"),
+            ".tif" or ".tiff" => new("image", "image/tiff"),
+            ".mp4" or ".m4v" => new("video", "video/mp4"),
+            ".mov" => new("video", "video/quicktime"),
+            ".mkv" => new("video", "video/x-matroska"),
+            ".webm" => new("video", "video/webm"),
+            ".avi" => new("video", "video/x-msvideo"),
+            _ => null!
         };
         return format is not null;
     }

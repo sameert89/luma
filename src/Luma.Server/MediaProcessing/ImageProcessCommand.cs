@@ -83,7 +83,7 @@ public static class ImageProcessCommand
             writingCache = true;
             var variants = new List<GeneratedVariant>();
             using (var thumbnail = source.Clone(x => x.Resize(new ResizeOptions
-                   { Size = new Size(Math.Min(source.Width, ThumbnailEdge), Math.Min(source.Height, ThumbnailEdge)), Mode = ResizeMode.Max })))
+            { Size = new Size(Math.Min(source.Width, ThumbnailEdge), Math.Min(source.Height, ThumbnailEdge)), Mode = ResizeMode.Max })))
             {
                 // Level2 effort is ~3x faster than the default for the same size at thumbnail scale.
                 await thumbnail.SaveAsync(args[2], new WebpEncoder { Quality = 75, Method = WebpEncodingMethod.Level2 }, ct);

@@ -5,8 +5,13 @@ internal static class SourceTraversal
     // Depth-first enumeration retains one directory handle per level, never a breadth-sized queue.
     public static IEnumerable<FileSystemInfo> Enumerate(string root, bool recursive = true, Func<string, bool>? skipDirectory = null)
     {
-        var options = new EnumerationOptions { RecurseSubdirectories = false, IgnoreInaccessible = false,
-            AttributesToSkip = FileAttributes.ReparsePoint, ReturnSpecialDirectories = false };
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = false,
+            IgnoreInaccessible = false,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            ReturnSpecialDirectories = false
+        };
         var stack = new Stack<IEnumerator<FileSystemInfo>>();
         stack.Push(new DirectoryInfo(root).EnumerateFileSystemInfos("*", options).GetEnumerator());
         try

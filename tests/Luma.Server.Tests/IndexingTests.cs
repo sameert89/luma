@@ -637,7 +637,10 @@ public sealed class IndexingTests
     }
 
     [Theory]
-    [InlineData(0, 128)] [InlineData(5, 128)] [InlineData(2, 15)] [InlineData(2, 1025)]
+    [InlineData(0, 128)]
+    [InlineData(5, 128)]
+    [InlineData(2, 15)]
+    [InlineData(2, 1025)]
     public void Invalid_worker_and_queue_limits_are_rejected(int workers, int capacity)
     {
         var options = new IndexingOptions { ProcessingWorkers = workers, QueueCapacity = capacity };
