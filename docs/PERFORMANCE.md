@@ -35,3 +35,31 @@ Client test on a 4 GiB Android device and desktop Chromium, 60 Hz: first visible
 4. Repeat with a representative initial scan and incremental scan running at defaults. Sample process/child RSS, CPU, disk I/O and queue depth every second for 10 minutes. Report peaks and 60-second averages. Verify originals-unavailable browsing and instrument forbidden source/tool calls.
 5. Scroll for 30 minutes through 10k items on desktop and mobile. Collect frame-time/drop metrics, heap snapshots at 0/15/30 minutes, DOM cell counts, retained query pages, network requests and active videos. Exercise viewer open/close and back navigation.
 6. Publish raw samples, exact commands, fixture manifest, query plans, percentile calculation and pass/fail table under `docs/performance/`. Repeat three times, report worst run. Stage 2 only establishes infrastructure; these targets are validated in stages 4–7, not represented as already achieved.
+
+## Query statistics
+
+SQLite chooses between a seek over a sort index and a scan of the library from
+`sqlite_stat1`. Luma's indexes are designed around that choice, so the numbers
+recorded there are part of the performance contract rather than an incidental
+detail.
+
+Migrations 0010, 0011 and 0022 run `ANALYZE Media`, but on a fresh install they
+run before anything is indexed, and statistics describing an empty table would
+otherwise stand for the life of the install. `ScanWorker` therefore re-analyses
+Media after a scan completes, once the recorded row count and the real one
+differ by an order of magnitude. `PRAGMA analysis_limit=400` samples each index
+rather than reading it whole, keeping the refresh bounded on a library of any
+size.
+
+To check an install, compare what the planner believes against what is there:
+
+```sql
+SELECT (SELECT COUNT(*) FROM Media) AS actual,
+       (SELECT MAX(CAST(stat AS INTEGER)) FROM sqlite_stat1 WHERE tbl='Media') AS planned;
+```
+
+A `planned` of 0 against a populated library means every browse query is being
+costed against an empty table. Statistics that are wrong in this direction cost
+little while the pages are in the OS cache and a great deal when they have to be
+read from a disk that has spun down, so the symptom is a first request after
+idle that takes tens of seconds while later ones return immediately.

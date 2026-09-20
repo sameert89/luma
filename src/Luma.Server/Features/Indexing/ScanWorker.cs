@@ -188,6 +188,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                     sourceModifiedTicks = Directory.GetLastWriteTimeUtc(directoryPath).Ticks
                 }, tx, cancellationToken: ct));
             tx.Commit();
+            await RefreshStatisticsAsync(db, ct);
         }
         finally
         {
@@ -195,6 +196,44 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             try { await producer; } catch (Exception) when (linked.IsCancellationRequested) { }
         }
     }
+
+    /// <summary>
+    /// Keeps the planner's idea of how big Media is within reach of the truth.
+    /// </summary>
+    /// <remarks>
+    /// SQLite plans every browse query from sqlite_stat1, and the migrations that wrote it ran
+    /// before the first file was indexed. Left at those numbers the planner costs a seek over an
+    /// established sort index against a table it believes is empty, and prefers to walk the
+    /// library instead: barely noticeable while the pages are cached, minutes off a disk that has
+    /// spun down. Re-reading it after every scan would be waste, so this only runs once the count
+    /// has drifted by an order of magnitude, which in practice means after the first index and
+    /// after a library grows or shrinks substantially. analysis_limit samples each index rather
+    /// than reading it whole, so the refresh itself stays bounded on a library of any size.
+    /// </remarks>
+    private async Task RefreshStatisticsAsync(SqliteConnection db, CancellationToken ct)
+    {
+        try
+        {
+            // A partial index legitimately holds fewer rows than the table, so the largest count
+            // recorded for Media is the one to compare: it comes from an index covering all of it.
+            var counts = await db.QuerySingleAsync<StatisticsCounts>(new CommandDefinition("""
+                SELECT (SELECT COUNT(*) FROM Media) AS Actual,
+                       (SELECT MAX(CAST(stat AS INTEGER)) FROM sqlite_stat1 WHERE tbl='Media') AS Planned
+                """, cancellationToken: ct));
+            if (counts.Planned is { } planned && planned * 10 >= counts.Actual && counts.Actual * 10 >= planned) return;
+            await database.YieldToForegroundAsync(ct);
+            await db.ExecuteAsync(new CommandDefinition("PRAGMA analysis_limit=400; ANALYZE Media;", cancellationToken: ct));
+            logger.LogInformation("Refreshed query statistics for {Count} media rows (planner assumed {Planned}).",
+                counts.Actual, counts.Planned);
+        }
+        catch (SqliteException error) when (Database.IsBusy(error))
+        {
+            // The scan is already recorded as complete; the next one refreshes these instead.
+            logger.LogDebug(error, "Query statistics left for a later scan.");
+        }
+    }
+
+    private sealed record StatisticsCounts(long Actual, long? Planned);
 
     // A stopped scan's in-flight batch must not land after its state changed: that would count
     // progress on a terminal task, or stamp media with a scan a newer one has replaced.
