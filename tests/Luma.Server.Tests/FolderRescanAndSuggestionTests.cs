@@ -6,6 +6,7 @@ using Luma.Server.Features.Media;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
 
 namespace Luma.Server.Tests;
@@ -107,6 +108,45 @@ public sealed class FolderRescanAndSuggestionTests
         Assert.Equal("xmp", await check.ExecuteScalarAsync<string>("SELECT MetadataMode FROM Libraries WHERE Id=1"));
         // A second scan for the same library is refused while one is queued.
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/folders/{root}/scans", new { metadataMode = "none" })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Refreshing_a_folder_a_running_scan_covers_prioritizes_it_instead_of_failing()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        foreach (var path in new[] { "a/one.jpg", "a/b/two.jpg", "c/other.jpg" })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(f.Root.Path, path))!);
+            await File.WriteAllTextAsync(Path.Combine(f.Root.Path, path), "x");
+        }
+        await f.ScanAsync();
+        long Folder(SqliteConnection db, string path) => db.ExecuteScalar<long>("SELECT Id FROM Folders WHERE RelativePath=@path", new { path });
+        long a, b, c;
+        await using (var db = await f.Database.OpenAsync(default))
+        {
+            a = Folder(db, "a");
+            b = Folder(db, "a/b");
+            c = Folder(db, "c");
+        }
+        // Without workers the first scan stays queued, so a second request meets a scan in flight.
+        await using var host = Host(f).WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            foreach (var worker in services.Where(service => service.ServiceType == typeof(IHostedService)).ToArray()) services.Remove(worker);
+        }));
+        using var client = host.CreateClient();
+        var running = (await (await client.PostAsJsonAsync($"/api/folders/{a}/scans", new { metadataMode = "none" })).Content.ReadFromJsonAsync<ScanAccepted>())!;
+
+        // The folder in view is inside that scan: it joins it rather than being refused.
+        var response = await client.PostAsJsonAsync($"/api/folders/{b}/scans", new { metadataMode = "none", prioritize = true });
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal(running.Id, (await response.Content.ReadFromJsonAsync<ScanAccepted>())!.Id);
+        await using (var check = await f.Database.OpenAsync(default))
+            Assert.Equal(1, await check.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans WHERE State='queued'"));
+
+        // A folder that scan will never reach still says a scan is already running.
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/folders/{c}/scans", new { metadataMode = "none", prioritize = true })).StatusCode);
+        // And the rescan dialog, which does not ask to prioritize, keeps saying so for any folder.
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/folders/{b}/scans", new { metadataMode = "none" })).StatusCode);
     }
 
     [Fact]

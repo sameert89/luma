@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowDown, Check, Film, Heart, Images, LoaderCircle, RefreshCw } from 'lucide-react'
+import { Check, Film, Heart, Images, LoaderCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Checkbox, QuietButton } from '../../components/ui/Controls'
@@ -159,11 +159,24 @@ export function Gallery({
     })
     return () => cancelAnimationFrame(frame)
   }, [query.isPending, restoreScrollTop, scrollerRef])
+  // One indicator at a time. Checking the folder is the most specific thing that can be
+  // happening; otherwise the collection's first load speaks for an empty screen. A background
+  // refetch says nothing at all: its spinner used to flash over the grid every few seconds.
+  const folderIndexing = indexing.waiting
+  const firstLoad = !items.length && !folderIndexing && (query.isPending || scopePending)
+  const nothingToShow =
+    query.isSuccess &&
+    !items.length &&
+    !folderIndexing &&
+    !firstLoad &&
+    !indexing.error &&
+    !scopeError &&
+    !leadingContent
   return (
     <div
       ref={scrollerRef}
       tabIndex={-1}
-      className="min-h-0 flex-1 overflow-auto p-4 focus-visible:outline-2 focus-visible:outline-accent"
+      className="relative min-h-0 flex-1 overflow-auto p-4 focus-visible:outline-2 focus-visible:outline-accent"
       data-testid="gallery-scroll"
       data-scroll-restore
       onScroll={event => {
@@ -171,28 +184,36 @@ export function Gallery({
         if (event.currentTarget.scrollTop < rowHeight && query.hasPreviousPage && !query.isFetching) void load(true)
       }}
     >
+      {/* The pull indicator floats over the collection instead of pushing it down: a disc that
+          turns with the finger and keeps spinning while the folder is checked. */}
+      {(pull.distance > 0 || pull.refreshing) && (
+        <div
+          role="status"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center"
+          style={{
+            transform: `translateY(${pull.refreshing ? pullThreshold : Math.max(pull.distance, 12)}px)`,
+            opacity: pull.refreshing ? 1 : Math.min(1, pull.distance / pullThreshold),
+          }}
+        >
+          <span className="flex size-10 items-center justify-center rounded-full border border-line bg-surface shadow-lg">
+            <RefreshCw
+              aria-hidden="true"
+              className={`size-5 text-accent ${pull.refreshing ? 'motion-safe:animate-spin' : ''}`}
+              style={pull.refreshing ? undefined : { transform: `rotate(${(pull.distance / pullThreshold) * 270}deg)` }}
+            />
+          </span>
+          <span className="sr-only">
+            {pull.refreshing
+              ? 'Refreshing this folder…'
+              : pull.distance >= pullThreshold
+                ? 'Release to refresh'
+                : 'Pull to refresh'}
+          </span>
+        </div>
+      )}
       <div ref={gridRef} className="w-full">
-        {(pull.distance > 0 || pull.refreshing) && (
-          <div
-            role="status"
-            className="pointer-events-none flex items-center justify-center gap-2 overflow-hidden text-sm text-muted"
-            style={{ height: pull.refreshing ? 40 : pull.distance }}
-          >
-            {pull.refreshing ? (
-              <>
-                <RefreshCw className="size-4 motion-safe:animate-spin" aria-hidden="true" />
-                Checking this folder for changes…
-              </>
-            ) : (
-              <>
-                <ArrowDown className="size-4" aria-hidden="true" />
-                {pull.distance >= pullThreshold ? 'Release to refresh' : 'Pull to refresh'}
-              </>
-            )}
-          </div>
-        )}
         <div ref={leadingRef}>{leadingContent}</div>
-        {indexing.waiting && (
+        {folderIndexing && (
           <p role="status" className="flex items-center gap-2 pb-3 text-sm text-muted">
             <LoaderCircle className="size-4 motion-safe:animate-spin" />
             Checking this folder and preparing previews…
@@ -208,7 +229,7 @@ export function Gallery({
             {errorMessage(indexing.error)}
           </p>
         )}
-        {(query.isPending || ((query.isFetching || scopePending) && !items.length)) && (
+        {firstLoad && (
           <div role="status" className="flex items-center justify-center gap-3 py-20 text-muted">
             <LoaderCircle className="size-5 animate-spin" />
             Loading your collection…
@@ -220,23 +241,16 @@ export function Gallery({
             <QuietButton onClick={() => void query.refetch()}>Try again</QuietButton>
           </div>
         )}
-        {query.isSuccess &&
-          !query.isFetching &&
-          !indexing.waiting &&
-          !indexing.error &&
-          !scopePending &&
-          !scopeError &&
-          items.length === 0 &&
-          !leadingContent && (
-            <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center">
-              <Images className="size-12 text-muted" />
-              <h2 className="text-xl font-semibold">No media to show</h2>
-              <p className="text-sm leading-relaxed text-muted">
-                Try another folder or adjust your filters. If this is a new library, start a scan to add your photos and
-                videos.
-              </p>
-            </div>
-          )}
+        {nothingToShow && (
+          <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center">
+            <Images className="size-12 text-muted" />
+            <h2 className="text-xl font-semibold">No media to show</h2>
+            <p className="text-sm leading-relaxed text-muted">
+              Try another folder or adjust your filters. If this is a new library, start a scan to add your photos and
+              videos.
+            </p>
+          </div>
+        )}
         {query.hasPreviousPage && (
           <QuietButton
             className="sr-only focus:not-sr-only focus:absolute focus:z-10"

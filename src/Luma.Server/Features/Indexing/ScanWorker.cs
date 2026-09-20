@@ -9,13 +9,20 @@ namespace Luma.Server.Features.Indexing;
 public sealed class ScanWorker(Database database, IndexingOptions options, ILogger<ScanWorker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<long, CancellationTokenSource> active = new();
-    private readonly Dictionary<long, Channel<long>> folderPriority = options.Libraries.ToDictionary(x => x.Id,
-        _ => Channel.CreateBounded<long>(new BoundedChannelOptions(options.QueueCapacity)
+    private readonly Dictionary<long, Channel<PriorityFolder>> folderPriority = options.Libraries.ToDictionary(x => x.Id,
+        _ => Channel.CreateBounded<PriorityFolder>(new BoundedChannelOptions(options.QueueCapacity)
         { SingleReader = true, FullMode = BoundedChannelFullMode.Wait }));
 
-    public void PrioritizeFolder(long libraryId, long folderId)
+    /// <summary>A folder the running scan should discover next, ahead of where its traversal is.</summary>
+    /// <param name="Force">
+    /// Re-read a folder that was already indexed. Opening a folder only asks for one that was never
+    /// indexed; asking for it explicitly means the folder in view, whatever it was last seen as.
+    /// </param>
+    private readonly record struct PriorityFolder(long Id, bool Force);
+
+    public void PrioritizeFolder(long libraryId, long folderId, bool force = false)
     {
-        if (folderPriority.TryGetValue(libraryId, out var queue)) queue.Writer.TryWrite(folderId);
+        if (folderPriority.TryGetValue(libraryId, out var queue)) queue.Writer.TryWrite(new PriorityFolder(folderId, force));
     }
     public void Cancel(long id) { if (active.TryGetValue(id, out var source)) source.Cancel(); }
     /// <summary>True while a worker still owns this scan, including while it is stopping.</summary>
@@ -131,9 +138,12 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             await using var db = await database.OpenAsync(ct);
             while (await channel.Reader.WaitToReadAsync(ct))
             {
-                if (scan.FolderId is null && folderPriority.TryGetValue(root.Id, out var priority)
-                    && priority.Reader.TryRead(out var requestedFolder))
-                    await DiscoverPriorityFolderAsync(db, scan, root, requestedFolder, ct);
+                // A folder rescan can serve a priority request too, as long as the folder is inside
+                // the subtree it owns: the person browsing into a subfolder of a running rescan is
+                // waiting on exactly that folder.
+                if (folderPriority.TryGetValue(root.Id, out var priority) && priority.Reader.TryRead(out var requested)
+                    && await CoversAsync(db, scan, requested.Id, ct))
+                    await DiscoverPriorityFolderAsync(db, scan, root, requested, ct);
                 await database.YieldToForegroundAsync(ct);
                 using (var batch = db.BeginTransaction())
                 {
@@ -196,11 +206,22 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
     }
     private sealed class ScanStoppedException : Exception;
 
-    private async Task DiscoverPriorityFolderAsync(SqliteConnection db, ScanRow scan, LibraryOptions root, long folderId, CancellationToken ct)
+    /// <summary>
+    /// A library scan covers every folder; a folder rescan covers its own subtree. A request for
+    /// anything else is dropped, and the caller asks again while it still wants that folder.
+    /// </summary>
+    private static async Task<bool> CoversAsync(SqliteConnection db, ScanRow scan, long folderId, CancellationToken ct) =>
+        scan.FolderId is null || scan.FolderId == folderId
+        || (scan.Recursive && await db.ExecuteScalarAsync<bool>(new CommandDefinition(
+            "SELECT EXISTS(SELECT 1 FROM FolderAncestry WHERE AncestorId=@ancestor AND DescendantId=@folderId)",
+            new { ancestor = scan.FolderId, folderId }, cancellationToken: ct)));
+
+    private async Task DiscoverPriorityFolderAsync(SqliteConnection db, ScanRow scan, LibraryOptions root, PriorityFolder requested, CancellationToken ct)
     {
+        var folderId = requested.Id;
         var relative = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
-            "SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId AND DirectIndexedAt IS NULL",
-            new { folderId, scan.LibraryId }, cancellationToken: ct));
+            "SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId AND (@force OR DirectIndexedAt IS NULL)",
+            new { folderId, scan.LibraryId, force = requested.Force }, cancellationToken: ct));
         if (relative is null) return;
         try
         {

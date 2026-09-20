@@ -6,6 +6,17 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '1.0.7',
+    date: '2026-09-20',
+    headline: 'Refreshing a folder behaves',
+    changes: [
+      'Refreshing a folder while a scan is already running moves that folder to the front of it, so what you are looking at is checked first, instead of refusing with an error.',
+      'Messages about a refresh or a selection appear briefly at the bottom of the screen and go away by themselves, instead of staying in red above the collection for the rest of the session.',
+      'Pull to refresh shows the turning disc phones use, floating over the collection rather than pushing it down.',
+      'The gallery shows one status at a time: “Loading your collection” no longer flashes every few seconds over a folder that is already saying it is being checked.',
+    ],
+  },
+  {
     version: '1.0.6',
     date: '2026-09-20',
     headline: 'Refresh to update, pull to rescan, and a quieter gallery',

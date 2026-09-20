@@ -858,7 +858,8 @@ export const gestures: Gesture[] = [
   {
     gesture: 'Pull down from the top',
     where: 'Gallery',
-    result: 'Rescans the folder in view for new, changed and removed files, using the library’s tag-import setting.',
+    result:
+      'Rescans the folder in view for new, changed and removed files, using the library’s tag-import setting. While a scan is already running, this folder moves to the front of it.',
   },
   {
     gesture: 'Swipe up or down',

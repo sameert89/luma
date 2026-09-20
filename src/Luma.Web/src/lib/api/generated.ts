@@ -994,6 +994,8 @@ export interface components {
             retryFailures: boolean;
             /** @default embedded */
             metadataMode: string;
+            /** @default false */
+            prioritize: boolean;
         };
         StatusResponse: {
             status: string;
