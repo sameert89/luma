@@ -462,8 +462,11 @@ export function App() {
     mutationKey: ['background-task'],
     mutationFn: async () => {
       if (rescanFolderId)
+        // prioritize: this is the folder in view, so a scan already on its way to it moves it
+        // to the front rather than refusing the request.
         await request(`/api/folders/${rescanFolderId}/scans`, undefined, 'POST', {
           metadataMode: library?.metadataMode ?? 'embedded',
+          prioritize: true,
         })
     },
     onSuccess: async () => {

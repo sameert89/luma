@@ -1402,3 +1402,58 @@ it('remembers filter-row visibility separately for Reels', async () => {
     vi.restoreAllMocks()
   }
 })
+
+it('pulls the folder in view to the front of a running scan, and says a refusal in a toast', async () => {
+  const rescans: string[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/index') && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
+      if (url.includes('/scans') && init?.method === 'POST') {
+        rescans.push(String(init.body))
+        // A scan the running one will never reach still refuses, which is what the person sees.
+        return Promise.resolve(
+          new Response(JSON.stringify({ code: 'conflict', title: 'A scan for this library is already running.' }), {
+            status: 409,
+            headers: { 'Content-Type': 'application/problem+json' },
+          }),
+        )
+      }
+      const data =
+        url === '/api/libraries'
+          ? [{ id: 1, name: 'Photos', rootFolderId: 1, metadataMode: 'xmp' }]
+          : url.startsWith('/api/folders?')
+            ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
+            : url.startsWith('/api/indexing')
+              ? { libraries: [] }
+              : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(
+        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }),
+  )
+  window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
+  resetStorage()
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      <App />
+    </QueryClientProvider>,
+  )
+  await screen.findByRole('heading', { name: 'Trips' })
+  const scroller = screen.getByTestId('gallery-scroll')
+  fireEvent.touchStart(scroller, { touches: [{ clientY: 0 }] })
+  fireEvent.touchMove(scroller, { touches: [{ clientY: 200 }] })
+  await act(async () => {
+    fireEvent.touchEnd(scroller)
+  })
+
+  // The folder in view, its library's own tag setting, and a request to be moved to the front.
+  expect(JSON.parse(rescans[0])).toEqual({ metadataMode: 'xmp', prioritize: true })
+  const toast = await screen.findByRole('alert')
+  expect(toast).toHaveTextContent('already running')
+  // In a toast that can be closed, not pinned above the collection.
+  await userEvent.click(within(toast).getByRole('button', { name: 'Dismiss' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
