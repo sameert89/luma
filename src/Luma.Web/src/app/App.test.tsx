@@ -1449,8 +1449,8 @@ it('pulls the folder in view to the front of a running scan, and says a refusal 
     fireEvent.touchEnd(scroller)
   })
 
-  // The folder in view, its library's own tag setting, and a request to be moved to the front.
-  expect(JSON.parse(rescans[0])).toEqual({ metadataMode: 'xmp', prioritize: true })
+  // The folder in view, its library's own tag setting, one directory deep, moved to the front.
+  expect(JSON.parse(rescans[0])).toEqual({ metadataMode: 'xmp', prioritize: true, shallow: true })
   const toast = await screen.findByRole('alert')
   expect(toast).toHaveTextContent('already running')
   // In a toast that can be closed, not pinned above the collection.

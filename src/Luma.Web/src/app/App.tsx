@@ -466,11 +466,13 @@ export function App() {
     mutationKey: ['background-task'],
     mutationFn: async () => {
       if (rescanFolderId)
-        // prioritize: this is the folder in view, so a scan already on its way to it moves it
-        // to the front rather than refusing the request.
+        // shallow: a gesture can only cost one directory listing, where Rescan folder in the
+        // menu says what it costs and walks everything below. prioritize: this is the folder in
+        // view, so a scan already on its way to it moves it to the front rather than refusing.
         await request(`/api/folders/${rescanFolderId}/scans`, undefined, 'POST', {
           metadataMode: library?.metadataMode ?? 'embedded',
           prioritize: true,
+          shallow: true,
         })
     },
     onSuccess: async () => {

@@ -11,6 +11,7 @@ export const releases: Release[] = [
     headline: 'Refreshing a folder behaves',
     changes: [
       'Refreshing a folder while a scan is already running moves that folder to the front of it, so what you are looking at is checked first, instead of refusing with an error.',
+      'Pulling to refresh checks the folder you are looking at and stops there, so it costs the same however much sits below it. Rescan folder, which says what it costs, still covers everything inside.',
       'Messages about a refresh or a selection appear briefly at the bottom of the screen and go away by themselves, instead of staying in red above the collection for the rest of the session.',
       'Pull to refresh shows the turning disc phones use, floating over the collection rather than pushing it down.',
       'The gallery shows one status at a time: “Loading your collection” no longer flashes every few seconds over a folder that is already saying it is being checked.',

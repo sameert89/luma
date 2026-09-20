@@ -3739,6 +3739,10 @@
           "prioritize": {
             "type": "boolean",
             "default": false
+          },
+          "shallow": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

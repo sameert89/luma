@@ -996,6 +996,8 @@ export interface components {
             metadataMode: string;
             /** @default false */
             prioritize: boolean;
+            /** @default false */
+            shallow: boolean;
         };
         StatusResponse: {
             status: string;
