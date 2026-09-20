@@ -3735,6 +3735,10 @@
           "metadataMode": {
             "type": "string",
             "default": "embedded"
+          },
+          "prioritize": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

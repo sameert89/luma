@@ -9,7 +9,11 @@ using Microsoft.Data.Sqlite;
 
 namespace Luma.Server.Features.Indexing;
 
-public sealed record StartScanRequest(bool Force = false, bool RetryFailures = false, string MetadataMode = "embedded");
+/// <param name="Prioritize">
+/// Refresh of the folder in view: a scan already covering it discovers it next rather than the
+/// request failing. The rescan dialog leaves this alone, so asking for a second scan still says so.
+/// </param>
+public sealed record StartScanRequest(bool Force = false, bool RetryFailures = false, string MetadataMode = "embedded", bool Prioritize = false);
 public sealed record ScanAccepted(long Id);
 public sealed record ScanFailure(long Id, long? MediaId, string Code, string OccurredAt);
 public sealed record ScanProgress(long Id, long LibraryId, string State, long Discovered, long Skipped,
@@ -191,13 +195,27 @@ public static class IndexingEndpoints
         // Rescan from a folder's menu: the folder and everything beneath it. A library's root
         // folder is the library, so rescanning it is a full library scan.
         app.MapPost("/api/folders/{id:long}/scans", async Task<Results<Accepted<ScanAccepted>, ProblemHttpResult>>
-            (long id, StartScanRequest request, Database database, HttpContext context, CancellationToken ct) =>
+            (long id, StartScanRequest request, Database database, ScanWorker worker, HttpContext context, CancellationToken ct) =>
         {
             if (request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400, context);
             await using var db = await database.OpenAsync(ct);
             var folder = await db.QuerySingleOrDefaultAsync<FolderScanRow>(new CommandDefinition(
                 "SELECT LibraryId,ParentId FROM Folders WHERE Id=@id", new { id }, cancellationToken: ct));
             if (folder is null) return Problem(404, context);
+            // A scan already on its way to this folder is not a conflict. Asking for the folder in
+            // view means wanting it now, so that scan discovers it next and prepares its previews
+            // first, instead of the request failing until the scan finishes.
+            var covering = !request.Prioritize ? null : await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition("""
+                SELECT Id FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running')
+                  AND (FolderId IS NULL OR FolderId=@id
+                    OR Recursive=1 AND EXISTS(SELECT 1 FROM FolderAncestry WHERE AncestorId=Scans.FolderId AND DescendantId=@id))
+                ORDER BY Id LIMIT 1
+                """, new { folder.LibraryId, id }, cancellationToken: ct));
+            if (request.Prioritize && covering is { } running)
+            {
+                worker.PrioritizeFolder(folder.LibraryId, id, force: true);
+                return TypedResults.Accepted($"/api/scans/{running}", new ScanAccepted(running));
+            }
             var scanId = await StartScanAsync(db, folder.LibraryId, folder.ParentId is null ? null : id, request, ct);
             return scanId is null ? Problem(404, context) : TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId.Value));
         }).WithName("RescanFolder").Produces<ApiProblem>(400, "application/problem+json")
