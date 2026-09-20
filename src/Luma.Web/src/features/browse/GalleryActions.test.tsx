@@ -6,7 +6,14 @@ import { GalleryActions } from './GalleryActions'
 it('keeps slideshow and filter controls inside the three-dot panel and toggles filter visibility', async () => {
   const toggle = vi.fn()
   const slideshow = vi.fn()
-  const props = { onSlideshow: slideshow, onRefresh: vi.fn(), filtersVisible: true, onToggleFilters: toggle, onFilters: vi.fn(), onClearFilters: vi.fn() }
+  const props = {
+    onSlideshow: slideshow,
+    onRefresh: vi.fn(),
+    filtersVisible: true,
+    onToggleFilters: toggle,
+    onFilters: vi.fn(),
+    onClearFilters: vi.fn(),
+  }
   const { rerender } = render(<GalleryActions {...props} />)
   expect(screen.queryByRole('button', { name: 'Start slideshow' })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Gallery actions' }))

@@ -2,17 +2,91 @@ import { QuietButton } from '../../components/ui/Controls'
 import { tagTone } from '../../components/ui/TagTone'
 import { type Filters } from './api'
 
-export function ActiveFilters({ filters, onApply, libraryName, folderName }: { libraryName?: string; folderName?: string; filters: Filters; onApply: (value: Filters) => void }) {
-  const labels: Record<string, string> = { libraryId: 'Library', folderId: 'Folder', q: 'Search', tag: 'Tags', collectionTag: 'Tag collection', mediaType: 'Media type', groupBy: 'Grouping', tagMode: 'Tag matching', tagged: 'Tagged', recursive: 'Include subfolders', preference: 'Favourite state', sort: 'Sort', order: 'Direction' }
-  function shown(key: string, value: unknown) { return key === 'libraryId' ? libraryName ?? String(value) : key === 'folderId' ? folderName ?? String(value) : Array.isArray(value) ? value.join(', ') : String(value) }
-  const active = Object.entries(filters).filter(([key, value]) => !['cursor', 'limit'].includes(key) && value !== undefined && value !== '' && value !== null && (!Array.isArray(value) || value.length))
+export function ActiveFilters({
+  filters,
+  onApply,
+  libraryName,
+  folderName,
+}: {
+  libraryName?: string
+  folderName?: string
+  filters: Filters
+  onApply: (value: Filters) => void
+}) {
+  const labels: Record<string, string> = {
+    libraryId: 'Library',
+    folderId: 'Folder',
+    q: 'Search',
+    tag: 'Tags',
+    collectionTag: 'Tag collection',
+    mediaType: 'Media type',
+    groupBy: 'Grouping',
+    tagMode: 'Tag matching',
+    tagged: 'Tagged',
+    recursive: 'Include subfolders',
+    preference: 'Favourite state',
+    sort: 'Sort',
+    order: 'Direction',
+  }
+  function shown(key: string, value: unknown) {
+    return key === 'libraryId'
+      ? (libraryName ?? String(value))
+      : key === 'folderId'
+        ? (folderName ?? String(value))
+        : Array.isArray(value)
+          ? value.join(', ')
+          : String(value)
+  }
+  const active = Object.entries(filters).filter(
+    ([key, value]) =>
+      !['cursor', 'limit'].includes(key) &&
+      value !== undefined &&
+      value !== '' &&
+      value !== null &&
+      (!Array.isArray(value) || value.length),
+  )
   if (!active.length) return null
   // A band a shade lighter than the canvas holds the chips together, so neither the row nor
   // each chip needs an outline of its own. Clear all filters is the one that carries a colour.
-  return <nav aria-label="Active filters" className="no-scrollbar flex shrink-0 items-center gap-1.5 overflow-x-auto bg-surface/50 px-4 py-2">
-    {active.flatMap(([key, value]) => key === 'tag' && Array.isArray(value)
-      ? value.map(name => <QuietButton compact variant="plain" key={`${key}:${name}`} className="tag-tone shrink-0" style={tagTone(String(name))} aria-label={`Clear tag filter ${name}`} onClick={() => onApply({ ...filters, tag: value.filter(item => item !== name) })}>{name} ×</QuietButton>)
-      : [<QuietButton compact variant="plain" key={key} className={`shrink-0 ${key === 'collectionTag' ? 'tag-tone' : ''}`} style={key === 'collectionTag' ? tagTone(String(value)) : undefined} aria-label={`Clear ${key} filter`} onClick={() => onApply({ ...filters, [key]: undefined, ...(key === 'libraryId' ? { folderId: undefined } : {}) })}>{labels[key] ?? key}: {shown(key, value)} ×</QuietButton>])}
-    <QuietButton compact variant="accent" className="ml-1 shrink-0" onClick={() => onApply({})}>Clear all filters</QuietButton>
-  </nav>
+  return (
+    <nav
+      aria-label="Active filters"
+      className="no-scrollbar flex shrink-0 items-center gap-1.5 overflow-x-auto bg-surface/50 px-4 py-2"
+    >
+      {active.flatMap(([key, value]) =>
+        key === 'tag' && Array.isArray(value)
+          ? value.map(name => (
+              <QuietButton
+                compact
+                variant="plain"
+                key={`${key}:${name}`}
+                className="tag-tone shrink-0"
+                style={tagTone(String(name))}
+                aria-label={`Clear tag filter ${name}`}
+                onClick={() => onApply({ ...filters, tag: value.filter(item => item !== name) })}
+              >
+                {name} ×
+              </QuietButton>
+            ))
+          : [
+              <QuietButton
+                compact
+                variant="plain"
+                key={key}
+                className={`shrink-0 ${key === 'collectionTag' ? 'tag-tone' : ''}`}
+                style={key === 'collectionTag' ? tagTone(String(value)) : undefined}
+                aria-label={`Clear ${key} filter`}
+                onClick={() =>
+                  onApply({ ...filters, [key]: undefined, ...(key === 'libraryId' ? { folderId: undefined } : {}) })
+                }
+              >
+                {labels[key] ?? key}: {shown(key, value)} ×
+              </QuietButton>,
+            ],
+      )}
+      <QuietButton compact variant="accent" className="ml-1 shrink-0" onClick={() => onApply({})}>
+        Clear all filters
+      </QuietButton>
+    </nav>
+  )
 }

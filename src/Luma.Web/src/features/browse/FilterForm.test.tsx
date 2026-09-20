@@ -5,10 +5,21 @@ import { expect, it, vi } from 'vitest'
 import { FilterForm } from './FilterForm'
 
 it('lifts Apply and Reset to the bottom edge as soon as a filter changes', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response('[]', { headers: { 'Content-Type': 'application/json' } }))))
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response('[]', { headers: { 'Content-Type': 'application/json' } })),
+      ),
+  )
   const apply = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
-  render(<QueryClientProvider client={client}><FilterForm value={{ sort: 'name' }} onApply={apply} /></QueryClientProvider>)
+  render(
+    <QueryClientProvider client={client}>
+      <FilterForm value={{ sort: 'name' }} onApply={apply} />
+    </QueryClientProvider>,
+  )
 
   // Nothing edited yet: the buttons stay at the end of the form.
   const actions = screen.getByTestId('filter-actions')

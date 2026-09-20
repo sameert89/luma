@@ -6,11 +6,24 @@ import { UpdateNotice, UpdateSettings, WhatsNew, appVersion, unseenRelease } fro
 import { currentRelease } from '../help/changelog'
 
 function withClient(node: React.ReactNode) {
-  return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>{node}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      {node}
+    </QueryClientProvider>
+  )
 }
 function serverVersion(version: string) {
   // A Response body can only be read once, so every call gets its own.
-  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ status: 'ready', schemaVersion: 1, version }), { headers: { 'Content-Type': 'application/json' } }))))
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ status: 'ready', schemaVersion: 1, version }), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    ),
+  )
 }
 
 it('offers the update once per server release and keeps it in settings after Not now', async () => {

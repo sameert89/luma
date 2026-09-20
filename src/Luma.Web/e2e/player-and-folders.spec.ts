@@ -42,7 +42,10 @@ test('folders can be hidden from every view and shown again from settings', asyn
 
 test('reels keep rating and the menu within thumb reach and loop by default', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Reels', exact: true })
+    .click()
   await expect(page).toHaveURL(/mediaType=motion/)
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
   await expect(reels.locator('video')).toHaveJSProperty('loop', true)
@@ -52,7 +55,11 @@ test('reels keep rating and the menu within thumb reach and loop by default', as
   await expect(like).toBeVisible()
   await expect(dislike).toBeVisible()
   const viewport = page.viewportSize()!
-  const [likeBox, dislikeBox, menuBox] = [await like.boundingBox(), await dislike.boundingBox(), await menu.boundingBox()]
+  const [likeBox, dislikeBox, menuBox] = [
+    await like.boundingBox(),
+    await dislike.boundingBox(),
+    await menu.boundingBox(),
+  ]
   expect(menuBox!.x + menuBox!.width).toBeGreaterThan(viewport.width * 0.8)
   expect(menuBox!.y).toBeGreaterThan(viewport.height * 0.5)
   // Dislike sits directly beside Like on the same row.
@@ -78,16 +85,21 @@ test('video controls stack on upright phones and stay on one row elsewhere', asy
     expect(seekBox!.y + seekBox!.height).toBeLessThanOrEqual(playBox!.y + 1)
     await expect(viewer.getByRole('slider', { name: 'Volume', exact: true })).toBeVisible()
   } else {
-    expect(Math.abs((seekBox!.y + seekBox!.height / 2) - (playBox!.y + playBox!.height / 2))).toBeLessThan(4)
+    expect(Math.abs(seekBox!.y + seekBox!.height / 2 - (playBox!.y + playBox!.height / 2))).toBeLessThan(4)
     await expect(viewer.getByRole('slider', { name: 'Volume', exact: true })).toBeVisible()
   }
   // One action row for photos and videos: rating beside the menu, navigation inside it.
   const menu = viewer.getByRole('button', { name: 'Viewer menu', exact: true })
-  const [likeBox, menuBox] = [await viewer.getByRole('button', { name: 'Like', exact: true }).boundingBox(), await menu.boundingBox()]
+  const [likeBox, menuBox] = [
+    await viewer.getByRole('button', { name: 'Like', exact: true }).boundingBox(),
+    await menu.boundingBox(),
+  ]
   expect(Math.abs(likeBox!.y - menuBox!.y)).toBeLessThan(2)
   expect(menuBox!.y).toBeLessThan(playBox!.y)
   await expect(await viewerAction(page, 'Watch on Reels')).toBeVisible()
-  await expect(viewer.getByRole('button', { name: 'Next item', exact: true }).locator('svg')).toHaveClass(/lucide-chevron-right/)
+  await expect(viewer.getByRole('button', { name: 'Next item', exact: true }).locator('svg')).toHaveClass(
+    /lucide-chevron-right/,
+  )
 })
 
 test('fullscreen offers a visible exit and slideshows advance on their own', async ({ page }, testInfo) => {
@@ -109,7 +121,10 @@ test('fullscreen offers a visible exit and slideshows advance on their own', asy
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
 
   await (await viewerAction(page, 'View options')).click()
-  await page.getByRole('dialog', { name: 'View options' }).getByRole('button', { name: 'Fullscreen', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: 'View options' })
+    .getByRole('button', { name: 'Fullscreen', exact: true })
+    .click()
   const exit = viewer.getByRole('button', { name: 'Exit fullscreen' })
   await expect(exit).toBeVisible()
   expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(true)

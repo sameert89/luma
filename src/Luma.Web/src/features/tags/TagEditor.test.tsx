@@ -6,17 +6,31 @@ import { TagEditor } from './TagEditor'
 
 function api() {
   const fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-    if (url === '/api/tags' && init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ id: 9, name: 'Beach day' })))
+    if (url === '/api/tags' && init?.method === 'POST')
+      return Promise.resolve(new Response(JSON.stringify({ id: 9, name: 'Beach day' })))
     if (url === '/api/media/tags') return Promise.resolve(new Response(null, { status: 204 }))
-    return Promise.resolve(new Response(JSON.stringify([{ id: 1, name: 'Beach' }, { id: 2, name: 'Beaches' }])))
+    return Promise.resolve(
+      new Response(
+        JSON.stringify([
+          { id: 1, name: 'Beach' },
+          { id: 2, name: 'Beaches' },
+        ]),
+      ),
+    )
   })
   vi.stubGlobal('fetch', fetch)
   return fetch
 }
-const renderEditor = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
-  <TagEditor mediaIds={[7]} tags={[{ id: 1, name: 'Beach' }]} />
-</QueryClientProvider>)
-const tagged = (fetch: ReturnType<typeof api>) => fetch.mock.calls.filter(([url]) => url === '/api/media/tags').map(([, init]) => JSON.parse(String((init as RequestInit).body)))
+const renderEditor = () =>
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      <TagEditor mediaIds={[7]} tags={[{ id: 1, name: 'Beach' }]} />
+    </QueryClientProvider>,
+  )
+const tagged = (fetch: ReturnType<typeof api>) =>
+  fetch.mock.calls
+    .filter(([url]) => url === '/api/media/tags')
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)))
 
 it('lists matching tags as it types, marks ones already on the item and adds a chosen one', async () => {
   const fetch = api()

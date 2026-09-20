@@ -11,7 +11,10 @@ const pullResistance = 0.5
  * a mouse has the actions menu, and starting the gesture requires the scroller to be at the top,
  * so ordinary scrolling is never intercepted.
  */
-export function usePullToRefresh(scrollerRef: RefObject<HTMLElement | null>, onRefresh?: () => Promise<unknown> | void) {
+export function usePullToRefresh(
+  scrollerRef: RefObject<HTMLElement | null>,
+  onRefresh?: () => Promise<unknown> | void,
+) {
   const [distance, setDistance] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const handler = useRef(onRefresh)
@@ -24,7 +27,10 @@ export function usePullToRefresh(scrollerRef: RefObject<HTMLElement | null>, onR
     let pulled = 0
     let running = false
     function begin(event: TouchEvent) {
-      if (running || event.touches.length !== 1 || element!.scrollTop > 0) { origin = null; return }
+      if (running || event.touches.length !== 1 || element!.scrollTop > 0) {
+        origin = null
+        return
+      }
       origin = event.touches[0].clientY
       pulled = 0
     }
@@ -32,7 +38,12 @@ export function usePullToRefresh(scrollerRef: RefObject<HTMLElement | null>, onR
       if (origin === null) return
       const travel = event.touches[0].clientY - origin
       // Scrolling up, or a scroller that has moved away from the top, ends the gesture.
-      if (travel <= 0 || element!.scrollTop > 0) { origin = null; pulled = 0; setDistance(0); return }
+      if (travel <= 0 || element!.scrollTop > 0) {
+        origin = null
+        pulled = 0
+        setDistance(0)
+        return
+      }
       pulled = Math.min(pullLimit, travel * pullResistance)
       setDistance(pulled)
       if (event.cancelable) event.preventDefault()
@@ -46,7 +57,12 @@ export function usePullToRefresh(scrollerRef: RefObject<HTMLElement | null>, onR
       if (!committed) return
       running = true
       setRefreshing(true)
-      try { await handler.current?.() } finally { running = false; setRefreshing(false) }
+      try {
+        await handler.current?.()
+      } finally {
+        running = false
+        setRefreshing(false)
+      }
     }
     // Not passive: a committed pull must be able to stop the browser from scrolling with it.
     element.addEventListener('touchstart', begin, { passive: true })

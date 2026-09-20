@@ -7,18 +7,49 @@ import path from 'node:path'
 
 const fixture = path.resolve('../../.local/browser-fixture-v2')
 test.beforeAll(async () => {
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=blue:s=320x240:r=24', '-t', '4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-threads', '1', '-movflags', '+faststart', path.join(fixture, 'media/stage6-video.mp4')])
+  execFileSync('ffmpeg', [
+    '-v',
+    'error',
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    'color=c=blue:s=320x240:r=24',
+    '-t',
+    '4',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-threads',
+    '1',
+    '-movflags',
+    '+faststart',
+    path.join(fixture, 'media/stage6-video.mp4'),
+  ])
   await writeFile(path.join(fixture, 'media/stage6-broken.mkv'), 'unsupported fixture')
   await copyFile(path.join(fixture, 'cache/palette-1.jpg'), path.join(fixture, 'media/stage6-image.jpg'))
   const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
   db.function('luma_key', { deterministic: true }, (value: string) => value.normalize('NFC').toUpperCase())
   db.function('luma_reverse', { deterministic: true }, (value: string) => [...value].reverse().join(''))
-  db.function('luma_ticks', { deterministic: true }, (value: string) => BigInt(Date.parse(value)) * 10000n + 621355968000000000n)
+  db.function(
+    'luma_ticks',
+    { deterministic: true },
+    (value: string) => BigInt(Date.parse(value)) * 10000n + 621355968000000000n,
+  )
   try {
-    for (const [id, name, type, mime, extension, date] of [[1499, 'stage6-image.jpg', 'image', 'image/jpeg', '.jpg', '03'], [1495, 'stage6-video.mp4', 'video', 'video/mp4', '.mp4', '02'], [1490, 'stage6-broken.mkv', 'video', 'video/x-matroska', '.mkv', '01']] as const) {
-      db.prepare('UPDATE Media SET FolderId=2,FileName=?,RelativePath=?,PathKey=?,MediaType=?,MimeType=?,Extension=?,ModifiedAt=?,EffectiveDate=? WHERE Id=?').run(name, name, name, type, mime, extension, `2026-04-${date}T00:00:00Z`, `2026-04-${date}T00:00:00Z`, id)
+    for (const [id, name, type, mime, extension, date] of [
+      [1499, 'stage6-image.jpg', 'image', 'image/jpeg', '.jpg', '03'],
+      [1495, 'stage6-video.mp4', 'video', 'video/mp4', '.mp4', '02'],
+      [1490, 'stage6-broken.mkv', 'video', 'video/x-matroska', '.mkv', '01'],
+    ] as const) {
+      db.prepare(
+        'UPDATE Media SET FolderId=2,FileName=?,RelativePath=?,PathKey=?,MediaType=?,MimeType=?,Extension=?,ModifiedAt=?,EffectiveDate=? WHERE Id=?',
+      ).run(name, name, name, type, mime, extension, `2026-04-${date}T00:00:00Z`, `2026-04-${date}T00:00:00Z`, id)
     }
-  } finally { db.close() }
+  } finally {
+    db.close()
+  }
 })
 
 test('viewer zoom, rotation, horizontal swipe and desktop motion', async ({ page }) => {
@@ -35,7 +66,9 @@ test('viewer zoom, rotation, horizontal swipe and desktop motion', async ({ page
   await page.keyboard.press('Escape')
   await expect(options).toHaveCount(0)
   await expect(viewer.getByRole('img')).toBeVisible()
-  await expect.poll(() => viewer.getByRole('img').evaluate(img => img.parentElement!.style.transform)).toContain('rotate(90deg)')
+  await expect
+    .poll(() => viewer.getByRole('img').evaluate(img => img.parentElement!.style.transform))
+    .toContain('rotate(90deg)')
   await (await viewerAction(page, 'View options')).click()
   await options.getByRole('button', { name: 'Reset zoom' }).click()
   await page.keyboard.press('Escape')
@@ -72,7 +105,9 @@ test('native video plays, seeks, changes speed and offers external access on fai
   await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(0.1)
   await video.evaluate(v => v.play())
   await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThan(0)
-  await video.evaluate(v => { v.currentTime = 2 })
+  await video.evaluate(v => {
+    v.currentTime = 2
+  })
   await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(2)
   await page.getByRole('button', { name: 'Playback speed' }).click()
   expect(await video.evaluate(v => v.playbackRate)).toBe(1.5)
@@ -87,10 +122,15 @@ test('native video plays, seeks, changes speed and offers external access on fai
   await expect(page.getByRole('link', { name: 'Open original' })).toHaveCount(0)
 })
 
-test('reels preserve query, bound media, auto-scroll, stop inactive playback and return to gallery', async ({ page }) => {
+test('reels preserve query, bound media, auto-scroll, stop inactive playback and return to gallery', async ({
+  page,
+}) => {
   await page.goto('/?q=stage6&order=desc')
   await expect(page.getByTestId('media-cell')).toHaveCount(3)
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Reels', exact: true })
+    .click()
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   await expect(page).toHaveURL(/mediaType=motion/)
@@ -114,7 +154,10 @@ test('reels preserve query, bound media, auto-scroll, stop inactive playback and
   expect(await reels.locator('img,video').count()).toBeLessThanOrEqual(1)
   expect(await reels.locator('link[rel=preload]').count()).toBeLessThanOrEqual(1)
   await page.screenshot({ path: `test-results/stage6-reels-${test.info().project.name}.png` })
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Library', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Library', exact: true })
+    .click()
   await expect(page.getByTestId('media-cell')).toHaveCount(2)
   await expect(page).toHaveURL(/q=stage6/)
   await expect(page).toHaveURL(/mediaType=motion/)
@@ -144,8 +187,20 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   const x = bounds!.x + bounds!.width / 2
   const y = bounds!.y + bounds!.height / 2
   const session = await page.context().newCDPSession(page)
-  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x - 30, y, id: 0 }, { x: x + 30, y, id: 1 }] })
-  await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - 70, y, id: 0 }, { x: x + 70, y, id: 1 }] })
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [
+      { x: x - 30, y, id: 0 },
+      { x: x + 30, y, id: 1 },
+    ],
+  })
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [
+      { x: x - 70, y, id: 0 },
+      { x: x + 70, y, id: 1 },
+    ],
+  })
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await (await viewerAction(page, 'View options')).click()
   const options = page.getByRole('dialog', { name: 'View options' })
@@ -155,7 +210,9 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 0 }] })
   await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + 40, y: y + 40, id: 0 }] })
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await expect.poll(() => viewer.getByRole('img').evaluate(img => img.parentElement!.style.transform)).not.toContain('translate(0px, 0px)')
+  await expect
+    .poll(() => viewer.getByRole('img').evaluate(img => img.parentElement!.style.transform))
+    .not.toContain('translate(0px, 0px)')
   await (await viewerAction(page, 'View options')).click()
   await options.getByRole('button', { name: 'Reset zoom' }).click()
   await page.keyboard.press('Escape')
@@ -170,15 +227,23 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await expect(viewer.locator('video')).toHaveAttribute('src', '/api/media/1490/original')
   await viewer.getByRole('button', { name: 'Close viewer', exact: true }).click()
   await expect(viewer).toBeHidden()
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Reels', exact: true })
+    .click()
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
   await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1495/original')
   const reelBounds = await reels.locator('video').boundingBox()
   const reelX = reelBounds!.x + reelBounds!.width / 2
   const reelY = reelBounds!.y + reelBounds!.height / 2
-  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: reelX, y: reelY + 80, id: 0 }] })
-  await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: reelX, y: reelY - 80, id: 0 }] })
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: reelX, y: reelY + 80, id: 0 }],
+  })
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{ x: reelX, y: reelY - 80, id: 0 }],
+  })
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1490/original')
 })
-

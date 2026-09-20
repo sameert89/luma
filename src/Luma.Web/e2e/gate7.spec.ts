@@ -13,7 +13,10 @@ test('requested themes persist across cached gallery search viewer and photo ree
     await expect(viewer.getByRole('img')).toBeVisible()
     await expect.poll(() => viewer.getByRole('img').evaluate(image => image.naturalWidth)).toBeGreaterThan(0)
     await viewer.getByRole('button', { name: 'Close viewer', exact: true }).click()
-    await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('button', { name: 'Reels', exact: true })
+      .click()
     const reels = page.getByRole('region', { name: 'Reels', exact: true })
     await reels.getByRole('button', { name: 'Reels menu' }).click()
     await reels.getByRole('button', { name: 'Filters', exact: true }).click()
@@ -28,7 +31,20 @@ test('requested themes persist across cached gallery search viewer and photo ree
 test('pages through direct child folders with a bounded card count', async ({ page }) => {
   await page.route('**/api/folders?*', route => {
     const second = new URL(route.request().url()).searchParams.get('cursor') === 'second'
-    return route.fulfill({ json: { current: { id: 1, libraryId: 1, name: 'Sample library' }, ancestors: [], items: Array.from({ length: second ? 3 : 48 }, (_, index) => ({ id: index + (second ? 50 : 2), libraryId: 1, parentId: 1, name: `Album ${index + (second ? 49 : 1)}` })), nextCursor: second ? null : 'second', previousCursor: second ? 'first' : null } })
+    return route.fulfill({
+      json: {
+        current: { id: 1, libraryId: 1, name: 'Sample library' },
+        ancestors: [],
+        items: Array.from({ length: second ? 3 : 48 }, (_, index) => ({
+          id: index + (second ? 50 : 2),
+          libraryId: 1,
+          parentId: 1,
+          name: `Album ${index + (second ? 49 : 1)}`,
+        })),
+        nextCursor: second ? null : 'second',
+        previousCursor: second ? 'first' : null,
+      },
+    })
   })
   await page.goto('/?libraryId=1&folderId=1')
   const folders = page.getByRole('region', { name: 'Folders', exact: true })
@@ -61,7 +77,10 @@ test('scopes a search and exposes all advanced sort and filter choices on mobile
 
 test('reels honour photos and mixed-media selections and navigate the active query', async ({ page }) => {
   await page.goto('/?q=photo')
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Reels', exact: true })
+    .click()
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
   await reels.getByRole('button', { name: 'Reels menu' }).click()
   await reels.getByRole('button', { name: 'Filters', exact: true }).click()
@@ -99,14 +118,20 @@ test('collections provide tags and favourites, with tag rename and delete', asyn
   await page.goBack()
   await expect(page.locator('[role=dialog]')).toHaveCount(0)
 
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Collections', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Collections', exact: true })
+    .click()
   await expect(page.getByRole('heading', { name: 'Favourites' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Tags', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Vacation', exact: true }).click()
   await expect(page).toHaveURL(/tag=Vacation/)
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Collections', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Collections', exact: true })
+    .click()
   const fixed = `Fixed-${testInfo.project.name}-${Date.now()}`
   await page.getByRole('button', { name: `Manage tag ${original}`, exact: true }).click()
   const manage = page.getByRole('dialog', { name: `Manage "${original}"` })
@@ -117,7 +142,10 @@ test('collections provide tags and favourites, with tag rename and delete', asyn
   await expect(page.getByRole('button', { name: original, exact: true })).toHaveCount(0)
 
   await page.getByRole('button', { name: `Manage tag ${fixed}`, exact: true }).click()
-  await page.getByRole('dialog', { name: `Manage "${fixed}"` }).getByRole('button', { name: 'Delete tag' }).click()
+  await page
+    .getByRole('dialog', { name: `Manage "${fixed}"` })
+    .getByRole('button', { name: 'Delete tag' })
+    .click()
   await page.getByRole('button', { name: 'Confirm', exact: true }).click()
   await expect(page.getByRole('button', { name: fixed, exact: true })).toHaveCount(0)
 })
