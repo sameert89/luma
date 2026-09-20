@@ -111,6 +111,47 @@ public sealed class FolderRescanAndSuggestionTests
     }
 
     [Fact]
+    public async Task A_pulled_refresh_reads_one_directory_where_the_menu_walks_the_subtree()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        foreach (var path in new[] { "a/one.jpg", "a/b/two.jpg" })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(f.Root.Path, path))!);
+            await File.WriteAllTextAsync(Path.Combine(f.Root.Path, path), "x");
+        }
+        await f.ScanAsync();
+        long root, a;
+        await using (var db = await f.Database.OpenAsync(default))
+        {
+            root = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE ParentId IS NULL");
+            a = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='a'");
+        }
+        // Without workers the scans stay queued, so the assertions see their shape.
+        await using var host = Host(f).WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            foreach (var worker in services.Where(service => service.ServiceType == typeof(IHostedService)).ToArray()) services.Remove(worker);
+        }));
+        using var client = host.CreateClient();
+
+        // The gesture at a library root stays in the root directory rather than walking the library.
+        var pulled = (await (await client.PostAsJsonAsync($"/api/folders/{root}/scans", new { metadataMode = "none", prioritize = true, shallow = true })).Content.ReadFromJsonAsync<ScanAccepted>())!;
+        await using (var check = await f.Database.OpenAsync(default))
+        {
+            Assert.Equal(root, await check.ExecuteScalarAsync<long?>("SELECT FolderId FROM Scans WHERE Id=@Id", pulled));
+            Assert.Equal(0, await check.ExecuteScalarAsync<int>("SELECT Recursive FROM Scans WHERE Id=@Id", pulled));
+            await check.ExecuteAsync("UPDATE Scans SET State='cancelled' WHERE Id=@Id", pulled);
+        }
+
+        // The menu, which says what it costs, still covers everything beneath the folder.
+        var menu = (await (await client.PostAsJsonAsync($"/api/folders/{a}/scans", new { metadataMode = "none" })).Content.ReadFromJsonAsync<ScanAccepted>())!;
+        await using (var check = await f.Database.OpenAsync(default))
+        {
+            Assert.Equal(a, await check.ExecuteScalarAsync<long?>("SELECT FolderId FROM Scans WHERE Id=@Id", menu));
+            Assert.Equal(1, await check.ExecuteScalarAsync<int>("SELECT Recursive FROM Scans WHERE Id=@Id", menu));
+        }
+    }
+
+    [Fact]
     public async Task Refreshing_a_folder_a_running_scan_covers_prioritizes_it_instead_of_failing()
     {
         await using var f = await PipelineFixture.CreateAsync();

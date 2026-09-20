@@ -24,7 +24,8 @@ import { IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
 import { Modal } from '../components/ui/Modal'
 import { SearchHeader, type SearchSuggestion } from '../components/ui/SearchHeader'
 import { Toast, useToast } from '../components/ui/Toast'
-import { ThemePicker, themes, type Theme } from '../components/ui/ThemePicker'
+import { ThemePicker } from '../components/ui/ThemePicker'
+import { themeManifest, themes, type Theme } from './themes'
 import { BackgroundJobsButton } from '../features/status/BackgroundJobs'
 import { UpdateNotice, UpdateSettings, WhatsNew, unseenRelease } from '../features/status/UpdateNotice'
 import { FolderActions } from '../features/browse/FolderActions'
@@ -220,9 +221,12 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('luma-theme', theme)
-    // Installed apps and mobile browsers tint their own chrome to match the theme.
-    const canvas = getComputedStyle(document.documentElement).getPropertyValue('--color-canvas').trim()
+    // Mobile browsers tint their own chrome from the meta colour as soon as this changes. An
+    // installed app reads its manifest instead, so the page also points at the one built for this
+    // theme; the app picks that up on one of its next launches, when the browser refreshes it.
+    const canvas = themes.find(item => item.id === theme)?.canvas
     if (canvas) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas)
+    document.querySelector('link[rel="manifest"]')?.setAttribute('href', themeManifest(theme))
   }, [theme])
   useEffect(() => {
     if (section === 'library' && !filters.q) libraryMemory.current = filters
@@ -462,11 +466,13 @@ export function App() {
     mutationKey: ['background-task'],
     mutationFn: async () => {
       if (rescanFolderId)
-        // prioritize: this is the folder in view, so a scan already on its way to it moves it
-        // to the front rather than refusing the request.
+        // shallow: a gesture can only cost one directory listing, where Rescan folder in the
+        // menu says what it costs and walks everything below. prioritize: this is the folder in
+        // view, so a scan already on its way to it moves it to the front rather than refusing.
         await request(`/api/folders/${rescanFolderId}/scans`, undefined, 'POST', {
           metadataMode: library?.metadataMode ?? 'embedded',
           prioritize: true,
+          shallow: true,
         })
     },
     onSuccess: async () => {

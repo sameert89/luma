@@ -13,7 +13,11 @@ namespace Luma.Server.Features.Indexing;
 /// Refresh of the folder in view: a scan already covering it discovers it next rather than the
 /// request failing. The rescan dialog leaves this alone, so asking for a second scan still says so.
 /// </param>
-public sealed record StartScanRequest(bool Force = false, bool RetryFailures = false, string MetadataMode = "embedded", bool Prioritize = false);
+/// <param name="Shallow">
+/// Read this one directory and nothing below it, which is all a refresh of the folder in view can
+/// cost. Without it a rescan walks the whole subtree, and a library's root walks the library.
+/// </param>
+public sealed record StartScanRequest(bool Force = false, bool RetryFailures = false, string MetadataMode = "embedded", bool Prioritize = false, bool Shallow = false);
 public sealed record ScanAccepted(long Id);
 public sealed record ScanFailure(long Id, long? MediaId, string Code, string OccurredAt);
 public sealed record ScanProgress(long Id, long LibraryId, string State, long Discovered, long Skipped,
@@ -193,7 +197,8 @@ public static class IndexingEndpoints
         }).WithName("PrepareLibraryRoot").Produces<ApiProblem>(404, "application/problem+json");
 
         // Rescan from a folder's menu: the folder and everything beneath it. A library's root
-        // folder is the library, so rescanning it is a full library scan.
+        // folder is the library, so rescanning it is a full library scan. A shallow request is the
+        // gesture rather than the menu: it reads the folder in view and stops there.
         app.MapPost("/api/folders/{id:long}/scans", async Task<Results<Accepted<ScanAccepted>, ProblemHttpResult>>
             (long id, StartScanRequest request, Database database, ScanWorker worker, HttpContext context, CancellationToken ct) =>
         {
@@ -216,7 +221,9 @@ public static class IndexingEndpoints
                 worker.PrioritizeFolder(folder.LibraryId, id, force: true);
                 return TypedResults.Accepted($"/api/scans/{running}", new ScanAccepted(running));
             }
-            var scanId = await StartScanAsync(db, folder.LibraryId, folder.ParentId is null ? null : id, request, ct);
+            var scanId = request.Shallow
+                ? await StartScanAsync(db, folder.LibraryId, id, request, ct, recursive: false)
+                : await StartScanAsync(db, folder.LibraryId, folder.ParentId is null ? null : id, request, ct);
             return scanId is null ? Problem(404, context) : TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId.Value));
         }).WithName("RescanFolder").Produces<ApiProblem>(400, "application/problem+json")
             .Produces<ApiProblem>(404, "application/problem+json").Produces<ApiProblem>(409, "application/problem+json");
@@ -260,8 +267,9 @@ public static class IndexingEndpoints
         }).WithName("CancelScan").Produces<ApiProblem>(404, "application/problem+json");
     }
 
-    // A library scan (folderId null) or a recursive folder rescan; null when the library is not enabled.
-    private static async Task<long?> StartScanAsync(SqliteConnection db, long libraryId, long? folderId, StartScanRequest request, CancellationToken ct)
+    // A library scan (folderId null), a recursive folder rescan, or one directory on its own;
+    // null when the library is not enabled.
+    private static async Task<long?> StartScanAsync(SqliteConnection db, long libraryId, long? folderId, StartScanRequest request, CancellationToken ct, bool recursive = true)
     {
         try
         {
@@ -269,12 +277,13 @@ public static class IndexingEndpoints
             var scanId = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition("""
                 INSERT INTO Scans(LibraryId,FolderId,Recursive,State,Force,RetryFailures,StartedAt,MetadataMode)
                 SELECT Id,@folderId,@recursive,'queued',@Force,@RetryFailures,@now,@MetadataMode FROM Libraries WHERE Id=@libraryId AND Enabled=1 RETURNING Id
-                """, new { libraryId, folderId, recursive = folderId is not null, request.Force, request.RetryFailures, request.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+                """, new { libraryId, folderId, recursive = folderId is not null && recursive, request.Force, request.RetryFailures, request.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
             if (scanId is { } accepted)
             {
                 // The library remembers the choice for startup and folder-demand scans.
                 await db.ExecuteAsync(new CommandDefinition("UPDATE Libraries SET MetadataMode=@MetadataMode WHERE Id=@libraryId", new { libraryId, request.MetadataMode }, tx, cancellationToken: ct));
-                await QueueMetadataAsync(db, tx, accepted, libraryId, folderId, request.MetadataMode, ct, recursive: true);
+                // Tags follow the same ground the scan covers.
+                await QueueMetadataAsync(db, tx, accepted, libraryId, folderId, request.MetadataMode, ct, recursive);
             }
             tx.Commit();
             return scanId;
