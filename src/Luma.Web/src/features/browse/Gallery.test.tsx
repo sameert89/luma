@@ -4,7 +4,7 @@ import { createRef } from 'react'
 import { expect, it, vi } from 'vitest'
 import { Gallery } from './Gallery'
 
-it('shows loading instead of an empty library until the request succeeds, including refetches', async () => {
+it('shows loading until the first answer, then keeps it through background refetches', async () => {
   let finish: (value: Response) => void = () => {}
   vi.stubGlobal(
     'fetch',
@@ -34,11 +34,15 @@ it('shows loading instead of an empty library until the request succeeds, includ
     finish(new Response(JSON.stringify({ items: [], nextCursor: null, previousCursor: null })))
   })
   expect(await screen.findByText('No media to show')).toBeVisible()
+
+  // A background refetch keeps what it already knows on screen. Flashing the loader over an
+  // answered collection every few seconds is what the poll while a folder indexes used to do.
   act(() => {
     void client.invalidateQueries({ queryKey: ['media'] })
   })
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Loading your collection'))
-  expect(screen.queryByText('No media to show')).not.toBeInTheDocument()
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+  expect(screen.getByText('No media to show')).toBeVisible()
+  expect(screen.queryByText('Loading your collection…')).not.toBeInTheDocument()
   await act(async () => {
     finish(new Response(JSON.stringify({ items: [], nextCursor: null, previousCursor: null })))
   })
