@@ -23,6 +23,7 @@ import { Button } from '../components/ui/Button'
 import { IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
 import { Modal } from '../components/ui/Modal'
 import { SearchHeader, type SearchSuggestion } from '../components/ui/SearchHeader'
+import { Toast, useToast } from '../components/ui/Toast'
 import { ThemePicker, themes, type Theme } from '../components/ui/ThemePicker'
 import { BackgroundJobsButton } from '../features/status/BackgroundJobs'
 import { UpdateNotice, UpdateSettings, WhatsNew, unseenRelease } from '../features/status/UpdateNotice'
@@ -150,8 +151,9 @@ export function App() {
   const [selecting, setSelecting] = useState(false)
   const [selectingAll, setSelectingAll] = useState(false)
   const [selected, setSelected] = useState(new Set<number>())
-  const [selectionError, setSelectionError] = useState('')
-  const [refreshError, setRefreshError] = useState('')
+  // Selection limits and refresh failures are passing news, not part of the view: they say
+  // their piece in a toast instead of staying pinned above the collection for the rest of the session.
+  const { toast, show: showToast, dismiss: dismissToast } = useToast()
   const [active, setActive] = useState<Media | null>(null)
   const activeRef = useRef<Media | null>(null)
   activeRef.current = active
@@ -465,7 +467,6 @@ export function App() {
         })
     },
     onSuccess: async () => {
-      setRefreshError('')
       await Promise.all(
         ['tasks', 'indexing', 'scan', 'media', 'folders', 'libraries'].map(key =>
           client.invalidateQueries({ queryKey: [key] }),
@@ -473,7 +474,7 @@ export function App() {
       )
       setRefresh(value => value + 1)
     },
-    onError: (error: unknown) => setRefreshError(errorMessage(error)),
+    onError: (error: unknown) => showToast(errorMessage(error), 'danger'),
   })
   function select(id: number) {
     setSelected(old => {
@@ -481,14 +482,13 @@ export function App() {
       if (next.has(id)) next.delete(id)
       else if (next.size < 500) next.add(id)
       else {
-        setSelectionError('Select at most 500 items at a time.')
+        showToast('Select at most 500 items at a time.', 'danger')
         return old
       }
       return next
     })
   }
   async function selectAll() {
-    setSelectionError('')
     setSelectingAll(true)
     try {
       const ids = new Set<number>()
@@ -507,9 +507,9 @@ export function App() {
       } while (cursor && ids.size < 500)
       setSelected(ids)
       if (ids.size === 500 && more)
-        setSelectionError('Selected the first 500 matching items; bulk operations support up to 500.')
+        showToast('Selected the first 500 matching items; bulk operations support up to 500.')
     } catch (error) {
-      setSelectionError(errorMessage(error))
+      showToast(errorMessage(error), 'danger')
     } finally {
       setSelectingAll(false)
     }
@@ -521,7 +521,6 @@ export function App() {
     setActive(item)
   }
   async function startSlideshow() {
-    setSelectionError('')
     try {
       const scope = ungroupTags(galleryFilters)
       const first = (value: Filters) =>
@@ -533,13 +532,13 @@ export function App() {
         item = await first(nested)
       }
       if (!item) {
-        setSelectionError('There is nothing here to show in a slideshow.')
+        showToast('There is nothing here to show in a slideshow.', 'danger')
         return
       }
       setSlideshowFilters(nested)
       openViewer(item, true)
     } catch (error) {
-      setSelectionError(errorMessage(error))
+      showToast(errorMessage(error), 'danger')
     }
   }
   // Continues the viewer's current place in Reels: same scope and filters, limited to
@@ -845,7 +844,6 @@ export function App() {
                             label={selecting ? 'Done selecting' : 'Select media'}
                             onClick={() => {
                               setSelecting(!selecting)
-                              setSelectionError('')
                               if (selecting) setSelected(new Set())
                             }}
                           >
@@ -916,16 +914,6 @@ export function App() {
                         <X className="size-4" />
                       </IconButton>
                     </div>
-                  )}
-                  {selectionError && (
-                    <p role="alert" className="text-sm text-danger">
-                      {selectionError}
-                    </p>
-                  )}
-                  {refreshError && (
-                    <p role="alert" className="text-sm text-danger">
-                      {refreshError}
-                    </p>
                   )}
                 </div>
               )}
@@ -1072,6 +1060,7 @@ export function App() {
           <BackgroundJobsButton libraryId={home ? undefined : filters.libraryId} />
         </div>
       )}
+      <Toast toast={toast} onDismiss={dismissToast} />
       <UpdateNotice />
       <WhatsNew open={whatsNewOpen} onOpenChange={setWhatsNewOpen} />
       <LibrarySetup
