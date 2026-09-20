@@ -1449,11 +1449,25 @@ it('pulls the folder in view to the front of a running scan, and says a refusal 
     fireEvent.touchEnd(scroller)
   })
 
-  // The folder in view, its library's own tag setting, and a request to be moved to the front.
-  expect(JSON.parse(rescans[0])).toEqual({ metadataMode: 'xmp', prioritize: true })
+  // The folder in view, its library's own tag setting, one directory deep, moved to the front.
+  expect(JSON.parse(rescans[0])).toEqual({ metadataMode: 'xmp', prioritize: true, shallow: true })
   const toast = await screen.findByRole('alert')
   expect(toast).toHaveTextContent('already running')
   // In a toast that can be closed, not pinned above the collection.
   await userEvent.click(within(toast).getByRole('button', { name: 'Dismiss' }))
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('points the page at the manifest built for the chosen theme, and tints browser chrome with it', async () => {
+  document.head.innerHTML =
+    '<meta name="theme-color" content="#111319" /><link rel="manifest" href="/manifest.webmanifest" />'
+  emptyApi()
+  renderApp()
+  await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
+  await userEvent.click(await screen.findByRole('button', { name: 'Nord' }))
+
+  // An installed app reads the manifest, a browser tab reads the meta colour: both follow.
+  expect(document.querySelector('link[rel="manifest"]')).toHaveAttribute('href', '/manifest-nord.webmanifest')
+  expect(document.querySelector('meta[name="theme-color"]')).toHaveAttribute('content', '#2e3440')
+  expect(localStorage.getItem('luma-theme')).toBe('nord')
 })

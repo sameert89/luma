@@ -49,6 +49,14 @@ lift the service-worker restriction. Some browsers allow manually saving HTTP si
 home-screen shortcuts; their window mode depends on the browser and they remain online-only.
 Use the browser's Install app/Add to Home Screen controls; there is no installation
 panel in Settings. On iPhone/iPad use Share → Add to Home Screen.
+
+An installed app takes its status bar and splash colours from the web manifest it was
+installed with, not from the page, so the build writes one manifest per theme
+(`/manifest-<theme>.webmanifest`, identical apart from `theme_color`/`background_color`
+and sharing the same `id`) and the page points at the one for the chosen theme. Browser
+chrome follows the `theme-color` meta immediately; an installed app follows on a later
+launch, whenever the browser refreshes its copy of the manifest. iOS accepts only
+`default`, `black` and `black-translucent` for its status bar, so it stays black there.
 The server may remain HTTP behind a trusted HTTPS reverse proxy; the browser-facing URL
 is what determines PWA capability. HTTPS also enables HTTP/2, which multiplexes video range requests
 and thumbnails over one connection instead of queueing behind HTTP/1.1's six-connection

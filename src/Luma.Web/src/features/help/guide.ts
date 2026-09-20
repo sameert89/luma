@@ -128,7 +128,7 @@ export const guideSections: GuideSection[] = [
             icons: [ArrowDown],
             name: 'Pull to refresh',
             where: 'Top of a gallery, on touch screens',
-            what: 'Drag the gallery down from the top to rescan the folder you are in. It never asks about tags: the library’s own tag-import setting in Settings applies.',
+            what: 'Drag the gallery down from the top to check the folder you are in. It reads that one folder, so it costs the same whatever is inside it, and never asks about tags: the library’s own tag-import setting in Settings applies.',
           },
         ],
       },
@@ -859,7 +859,7 @@ export const gestures: Gesture[] = [
     gesture: 'Pull down from the top',
     where: 'Gallery',
     result:
-      'Rescans the folder in view for new, changed and removed files, using the library’s tag-import setting. While a scan is already running, this folder moves to the front of it.',
+      'Checks the folder in view for new, changed and removed files, using the library’s tag-import setting. It reads that one folder, not the folders inside it: Rescan folder covers those. While a scan is already running, this folder moves to the front of it.',
   },
   {
     gesture: 'Swipe up or down',
