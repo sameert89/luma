@@ -1,18 +1,18 @@
 import type { CSSProperties } from 'react'
 
-// Pastels stay deliberately light in every theme. A stable hash makes a tag's colour
-// feel random without changing between renders, browsers or places where it is shown.
+// A translucent wash preserves the surrounding theme while a stable hash gives each
+// tag a distinct accent that does not change between renders, browsers or locations.
 const tones = [
-  ['#ffe4e6', '#9f1239', '#fda4af'],
-  ['#ffedd5', '#9a3412', '#fdba74'],
-  ['#fef3c7', '#92400e', '#fcd34d'],
-  ['#ecfccb', '#3f6212', '#bef264'],
-  ['#d1fae5', '#065f46', '#6ee7b7'],
-  ['#cffafe', '#155e75', '#67e8f9'],
-  ['#e0f2fe', '#075985', '#7dd3fc'],
-  ['#e0e7ff', '#3730a3', '#a5b4fc'],
-  ['#ede9fe', '#5b21b6', '#c4b5fd'],
-  ['#fae8ff', '#86198f', '#f0abfc'],
+  '#fb7185',
+  '#fb923c',
+  '#fbbf24',
+  '#a3e635',
+  '#34d399',
+  '#22d3ee',
+  '#38bdf8',
+  '#818cf8',
+  '#a78bfa',
+  '#e879f9',
 ] as const
 
 export function tagToneIndex(name: string) {
@@ -25,6 +25,5 @@ export function tagToneIndex(name: string) {
 }
 
 export function tagTone(name: string): CSSProperties {
-  const [background, foreground, border] = tones[tagToneIndex(name)]
-  return { '--tag-background': background, '--tag-foreground': foreground, '--tag-border': border } as CSSProperties
+  return { '--tag-accent': tones[tagToneIndex(name)] } as CSSProperties
 }

@@ -28,7 +28,6 @@ export default defineConfig({
         Luma__Indexing__Libraries__0__Path: path.join(fixtureDirectory, 'media'),
         Luma__Indexing__Libraries__0__CaseSensitive: 'true',
         Luma__Indexing__Libraries__0__ScanOnStartup: 'false',
-        Luma__Indexing__SourceVerificationIntervalSeconds: '86400',
       },
     },
     { command: 'npm run preview -- --host 127.0.0.1 --port 4173', url: 'http://127.0.0.1:4173', env: { LUMA_API_URL: 'http://127.0.0.1:5180' } },

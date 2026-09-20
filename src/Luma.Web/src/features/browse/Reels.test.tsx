@@ -17,6 +17,18 @@ function clip(id: number): Media {
   }
 }
 
+it('shows a styled empty state with a direct route to filters', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], nextCursor: null, previousCursor: null }), { headers: { 'Content-Type': 'application/json' } })))
+  const filters = vi.fn()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  render(<QueryClientProvider client={client}><Reels filters={{ mediaType: 'motion' }} onFilters={filters} onOpenViewer={vi.fn()} /></QueryClientProvider>)
+  const heading = await screen.findByRole('heading', { name: 'No reels to show' })
+  expect(heading.closest('section')).toHaveClass('bg-black')
+  expect(heading.closest('section')).toHaveTextContent('No photos or videos match this view.')
+  await userEvent.click(screen.getByRole('button', { name: 'Adjust filters' }))
+  expect(filters).toHaveBeenCalledOnce()
+})
+
 it('restores the current reel, mute and auto-scroll after leaving and returning, and resets position for changed filters', async () => {
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
@@ -200,4 +212,3 @@ it('keeps like and dislike on the stage beside a bottom menu, loops by default a
     expect(load).toHaveBeenCalled()
   } finally { vi.restoreAllMocks(); vi.useRealTimers(); client.clear() }
 })
-

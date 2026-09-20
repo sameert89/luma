@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Clapperboard, Info, Settings2, SlidersHorizontal, Eye, EyeOff, Tag, Timer, Volume2, VolumeX } from 'lucide-react'
-import { IconButton } from '../../components/ui/Controls'
+import { ChevronDown, ChevronUp, Clapperboard, Info, LoaderCircle, Settings2, SlidersHorizontal, Eye, EyeOff, Tag, Timer, Volume2, VolumeX } from 'lucide-react'
+import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { MediaStage } from './MediaStage'
 import { MediaActions, actionButton } from './MediaActions'
@@ -96,7 +96,16 @@ export function Reels({ filters, startId, viewerOpen = false, onFilters, onOpenV
   useEffect(() => { function key(event: KeyboardEvent) { if (document.querySelector('[role="dialog"]') || event.target instanceof HTMLElement && event.target.closest('input,select,textarea,video,button')) return; if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const move = event.key === 'ArrowDown' ? 'next' : 'previous'; const target = neighbors.data?.[move]; if (target) { setDirection(move); setActive(target) } } }; window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key) }, [neighbors.data])
   if (first.isError) return <p role="alert" className="p-5 text-danger">{errorMessage(first.error)}</p>
   if (!item && detail.isError && !(detail.error instanceof ApiError && detail.error.status === 404)) return <p role="alert" className="p-5 text-danger">{errorMessage(detail.error)}</p>
-  if (!item) return <p role="status" className="p-5 text-muted">{first.isPending || detail.isPending && !!baseId ? 'Loading reels...' : 'No media match these filters.'}</p>
+  if (!item) {
+    const loading = first.isPending || detail.isPending && !!baseId
+    return <section aria-labelledby="reels-state-title" className="flex min-h-0 flex-1 items-center justify-center bg-black px-6 text-center text-white">
+      <div role={loading ? 'status' : undefined} className="flex max-w-sm flex-col items-center gap-4">
+        {loading ? <LoaderCircle className="size-10 text-white/60 motion-safe:animate-spin" aria-hidden="true" /> : <span className="flex size-16 items-center justify-center rounded-full border border-white/15 bg-white/10"><Clapperboard className="size-7 text-white/70" aria-hidden="true" /></span>}
+        <h1 id="reels-state-title" className="text-xl font-semibold">{loading ? 'Loading reels…' : 'No reels to show'}</h1>
+        {!loading && <><p className="text-sm leading-relaxed text-white/60">No photos or videos match this view. Adjust the filters or choose another folder.</p><QuietButton className="border-white/20 text-white hover:bg-white/10" onClick={onFilters}><SlidersHorizontal className="size-4" />Adjust filters</QuietButton></>}
+      </div>
+    </section>
+  }
   const liked = item.preference === 'liked'
   return <section ref={root} aria-label="Reels" className="relative flex min-h-0 flex-1 flex-col bg-black">
     {/* Reels loop until the person moves on; auto-scroll advances at the end instead. */}
