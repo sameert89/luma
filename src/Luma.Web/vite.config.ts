@@ -8,5 +8,10 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: { proxy: { '/api': apiTarget } },
   preview: { proxy: { '/api': apiTarget } },
-  test: { include: ['src/**/*.test.{ts,tsx}'], environment: 'jsdom', setupFiles: ['./src/test-setup.ts'], clearMocks: true },
+  test: {
+    include: ['src/**/*.test.{ts,tsx}'],
+    environment: 'jsdom',
+    setupFiles: ['./src/test-setup.ts'],
+    clearMocks: true,
+  },
 })

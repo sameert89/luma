@@ -17,12 +17,16 @@ public static class MetadataKeywords
 
     public static IReadOnlyList<string> ReadXmp(byte[] bytes)
     {
-        if(bytes.Length > MaximumMetadataBytes) throw new InvalidDataException();
+        if (bytes.Length > MaximumMetadataBytes) throw new InvalidDataException();
         using var stream = new MemoryStream(bytes);
-        using var reader = XmlReader.Create(stream,new XmlReaderSettings {
-            DtdProcessing=DtdProcessing.Prohibit, XmlResolver=null, MaxCharactersInDocument=MaximumMetadataBytes });
-        var document=XDocument.Load(reader);
-        return document.Descendants(Dc+"subject").SelectMany(x=>x.Descendants(Rdf+"li")).Select(x=>x.Value).ToArray();
+        using var reader = XmlReader.Create(stream, new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            MaxCharactersInDocument = MaximumMetadataBytes
+        });
+        var document = XDocument.Load(reader);
+        return document.Descendants(Dc + "subject").SelectMany(x => x.Descendants(Rdf + "li")).Select(x => x.Value).ToArray();
     }
 
     // A bounded head/tail scan for an embedded XMP packet: XMP is self-delimiting by
@@ -34,58 +38,58 @@ public static class MetadataKeywords
     private static readonly byte[] XpacketBegin = Encoding.ASCII.GetBytes("<?xpacket begin=");
     private static readonly byte[] XpacketEnd = Encoding.ASCII.GetBytes("<?xpacket end=");
 
-    public static async Task<IReadOnlyList<string>> ReadEmbeddedXmpPacketAsync(string path,CancellationToken ct)
+    public static async Task<IReadOnlyList<string>> ReadEmbeddedXmpPacketAsync(string path, CancellationToken ct)
     {
-        await using var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read,65536,FileOptions.Asynchronous|FileOptions.SequentialScan);
-        var length=stream.Length;
-        var packet=ExtractXmpPacket(await ReadWindowAsync(stream,0,Math.Min(length,XmpScanWindowBytes),ct));
-        if(packet is null && length>XmpScanWindowBytes)
-            packet=ExtractXmpPacket(await ReadWindowAsync(stream,length-XmpScanWindowBytes,XmpScanWindowBytes,ct));
-        return packet is null?[]:ReadXmp(packet);
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var length = stream.Length;
+        var packet = ExtractXmpPacket(await ReadWindowAsync(stream, 0, Math.Min(length, XmpScanWindowBytes), ct));
+        if (packet is null && length > XmpScanWindowBytes)
+            packet = ExtractXmpPacket(await ReadWindowAsync(stream, length - XmpScanWindowBytes, XmpScanWindowBytes, ct));
+        return packet is null ? [] : ReadXmp(packet);
     }
 
-    private static async Task<byte[]> ReadWindowAsync(FileStream stream,long offset,long length,CancellationToken ct)
+    private static async Task<byte[]> ReadWindowAsync(FileStream stream, long offset, long length, CancellationToken ct)
     {
-        stream.Seek(offset,SeekOrigin.Begin);
-        var buffer=new byte[length];
-        await stream.ReadExactlyAsync(buffer,ct);
+        stream.Seek(offset, SeekOrigin.Begin);
+        var buffer = new byte[length];
+        await stream.ReadExactlyAsync(buffer, ct);
         return buffer;
     }
 
     private static byte[]? ExtractXmpPacket(byte[] window)
     {
-        var span=window.AsSpan();
-        var start=span.IndexOf(XpacketBegin);
-        if(start<0) return null;
-        var endMarker=span[start..].IndexOf(XpacketEnd);
-        if(endMarker<0) return null;
-        endMarker+=start;
-        var closing=span[endMarker..].IndexOf("?>"u8);
-        if(closing<0) return null;
-        var end=endMarker+closing+2;
-        return end-start>MaximumMetadataBytes?null:window[start..end];
+        var span = window.AsSpan();
+        var start = span.IndexOf(XpacketBegin);
+        if (start < 0) return null;
+        var endMarker = span[start..].IndexOf(XpacketEnd);
+        if (endMarker < 0) return null;
+        endMarker += start;
+        var closing = span[endMarker..].IndexOf("?>"u8);
+        if (closing < 0) return null;
+        var end = endMarker + closing + 2;
+        return end - start > MaximumMetadataBytes ? null : window[start..end];
     }
 
     public static byte[] WriteXmp(IEnumerable<string> tags)
     {
-        XNamespace x="adobe:ns:meta/";
-        var document=new XDocument(new XElement(x+"xmpmeta",new XAttribute(XNamespace.Xmlns+"x",x),
-            new XElement(Rdf+"RDF",new XAttribute(XNamespace.Xmlns+"rdf",Rdf),
-                new XElement(Rdf+"Description",new XAttribute(Rdf+"about",""),new XAttribute(XNamespace.Xmlns+"dc",Dc),
-                    new XElement(Dc+"subject",new XElement(Rdf+"Bag",tags.Select(tag=>new XElement(Rdf+"li",tag))))))));
+        XNamespace x = "adobe:ns:meta/";
+        var document = new XDocument(new XElement(x + "xmpmeta", new XAttribute(XNamespace.Xmlns + "x", x),
+            new XElement(Rdf + "RDF", new XAttribute(XNamespace.Xmlns + "rdf", Rdf),
+                new XElement(Rdf + "Description", new XAttribute(Rdf + "about", ""), new XAttribute(XNamespace.Xmlns + "dc", Dc),
+                    new XElement(Dc + "subject", new XElement(Rdf + "Bag", tags.Select(tag => new XElement(Rdf + "li", tag))))))));
         return Encoding.UTF8.GetBytes(document.ToString());
     }
 
-    public static async Task<IReadOnlyList<string>> ReadImageAsync(string path,CancellationToken ct)
+    public static async Task<IReadOnlyList<string>> ReadImageAsync(string path, CancellationToken ct)
     {
-        var configuration=Configuration.Default.Clone();
-        configuration.MaxDegreeOfParallelism=1;
-        configuration.MemoryAllocator=MemoryAllocator.Create(new MemoryAllocatorOptions { MaximumPoolSizeMegabytes=8,AllocationLimitMegabytes=32 });
-        var info=await Image.IdentifyAsync(new DecoderOptions { Configuration=configuration,MaxFrames=1 },path,ct);
-        var keywords=new List<string>();
-        if(info.Metadata.XmpProfile is { } xmp) keywords.AddRange(ReadXmp(xmp.ToByteArray()));
-        if(info.Metadata.ExifProfile?.TryGetValue(ExifTag.XPKeywords,out var exif)==true)
-            keywords.AddRange((exif.Value ?? "").TrimEnd('\0').Split(';',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries));
+        var configuration = Configuration.Default.Clone();
+        configuration.MaxDegreeOfParallelism = 1;
+        configuration.MemoryAllocator = MemoryAllocator.Create(new MemoryAllocatorOptions { MaximumPoolSizeMegabytes = 8, AllocationLimitMegabytes = 32 });
+        var info = await Image.IdentifyAsync(new DecoderOptions { Configuration = configuration, MaxFrames = 1 }, path, ct);
+        var keywords = new List<string>();
+        if (info.Metadata.XmpProfile is { } xmp) keywords.AddRange(ReadXmp(xmp.ToByteArray()));
+        if (info.Metadata.ExifProfile?.TryGetValue(ExifTag.XPKeywords, out var exif) == true)
+            keywords.AddRange((exif.Value ?? "").TrimEnd('\0').Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
         return keywords;
     }
 }

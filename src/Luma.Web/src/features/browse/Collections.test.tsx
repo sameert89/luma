@@ -7,14 +7,28 @@ import { Collections } from './Collections'
 const page = { items: [{ id: 1, name: 'Vacation' }], nextCursor: null, previousCursor: null }
 
 function renderCollections(onChoose = vi.fn()) {
-  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(page), { headers: { 'Content-Type': 'application/json' } }))))
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify(page), { headers: { 'Content-Type': 'application/json' } })),
+      ),
+  )
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
-  render(<QueryClientProvider client={client}><Collections onChoose={onChoose} /></QueryClientProvider>)
+  render(
+    <QueryClientProvider client={client}>
+      <Collections onChoose={onChoose} />
+    </QueryClientProvider>,
+  )
   return onChoose
 }
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 it('browses by tag on a plain click, and long-pressing opens the manage dialog instead', async () => {
   const onChoose = renderCollections()
@@ -25,7 +39,9 @@ it('browses by tag on a plain click, and long-pressing opens the manage dialog i
 
   onChoose.mockClear()
   fireEvent.pointerDown(chip)
-  await act(async () => { await vi.advanceTimersByTimeAsync(600) })
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(600)
+  })
   fireEvent.pointerUp(chip)
   fireEvent.click(chip)
   expect(onChoose).not.toHaveBeenCalled()
@@ -36,7 +52,9 @@ it('releasing before the long-press threshold still counts as a normal click', a
   const onChoose = renderCollections()
   const chip = await screen.findByRole('button', { name: 'Vacation' })
   fireEvent.pointerDown(chip)
-  await act(async () => { await vi.advanceTimersByTimeAsync(200) })
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(200)
+  })
   fireEvent.pointerUp(chip)
   fireEvent.click(chip)
   expect(onChoose).toHaveBeenCalledWith({ tag: ['Vacation'] })
@@ -49,7 +67,11 @@ it('renames a tag from the manage dialog reached by its button', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Manage tag Vacation' }))
   const dialog = within(await screen.findByRole('dialog', { name: 'Manage "Vacation"' }))
   const fetch = vi.mocked(globalThis.fetch)
-  fetch.mockImplementationOnce(() => Promise.resolve(new Response(JSON.stringify({ id: 1, name: 'Travel' }), { headers: { 'Content-Type': 'application/json' } })))
+  fetch.mockImplementationOnce(() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ id: 1, name: 'Travel' }), { headers: { 'Content-Type': 'application/json' } }),
+    ),
+  )
   await userEvent.clear(dialog.getByLabelText('Tag name'))
   await userEvent.type(dialog.getByLabelText('Tag name'), 'Travel')
   await userEvent.click(dialog.getByRole('button', { name: 'Save name' }))

@@ -8,22 +8,48 @@ const fixture = path.resolve('../../.local/browser-fixture-v2')
 
 // A playable clip of a known length, so seeking has a real duration to report.
 test.beforeAll(() => {
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=green:s=320x240:r=24', '-t', '4',
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-threads', '1', '-movflags', '+faststart',
-    path.join(fixture, 'media/feedback-clip.mp4')])
+  execFileSync('ffmpeg', [
+    '-v',
+    'error',
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    'color=c=green:s=320x240:r=24',
+    '-t',
+    '4',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-threads',
+    '1',
+    '-movflags',
+    '+faststart',
+    path.join(fixture, 'media/feedback-clip.mp4'),
+  ])
   const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
   db.function('luma_key', { deterministic: true }, (value: string) => value.normalize('NFC').toUpperCase())
   db.function('luma_reverse', { deterministic: true }, (value: string) => [...value].reverse().join(''))
-  db.function('luma_ticks', { deterministic: true }, (value: string) => BigInt(Date.parse(value)) * 10000n + 621355968000000000n)
+  db.function(
+    'luma_ticks',
+    { deterministic: true },
+    (value: string) => BigInt(Date.parse(value)) * 10000n + 621355968000000000n,
+  )
   try {
-    db.prepare(`UPDATE Media SET FolderId=2,FileName='feedback-clip.mp4',RelativePath='feedback-clip.mp4',
-      PathKey='feedback-clip.mp4',MediaType='video',MimeType='video/mp4',Extension='.mp4' WHERE Id=1480`).run()
-  } finally { db.close() }
+    db.prepare(
+      `UPDATE Media SET FolderId=2,FileName='feedback-clip.mp4',RelativePath='feedback-clip.mp4',
+      PathKey='feedback-clip.mp4',MediaType='video',MimeType='video/mp4',Extension='.mp4' WHERE Id=1480`,
+    ).run()
+  } finally {
+    db.close()
+  }
 })
 
 async function displayedOrder(page: Page) {
-  return page.locator('[data-testid="media-cell"] button[data-media-id]').evaluateAll(
-    buttons => buttons.map(button => Number(button.getAttribute('data-media-id'))))
+  return page
+    .locator('[data-testid="media-cell"] button[data-media-id]')
+    .evaluateAll(buttons => buttons.map(button => Number(button.getAttribute('data-media-id'))))
 }
 
 test('asks for previews in the order the gallery shows them', async ({ page }) => {
@@ -31,8 +57,11 @@ test('asks for previews in the order the gallery shows them', async ({ page }) =
   // gallery makes can be compared with what is on screen.
   await page.route('**/api/media?*', async route => {
     const response = await route.fetch()
-    const page_ = await response.json() as { items: { thumbnail: { status: string }; preview: { status: string } }[] }
-    for (const item of page_.items) { item.thumbnail.status = 'pending'; item.preview.status = 'pending' }
+    const page_ = (await response.json()) as { items: { thumbnail: { status: string }; preview: { status: string } }[] }
+    for (const item of page_.items) {
+      item.thumbnail.status = 'pending'
+      item.preview.status = 'pending'
+    }
     await route.fulfill({ response, json: page_ })
   })
   const batches: number[][] = []
@@ -71,12 +100,18 @@ test('prepares an unindexed folder starting from what is on screen', async ({ pa
   let folderId: number
   try {
     db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON')
-    const row = db.prepare(`INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)
-      VALUES(1,1,?,?,1) ON CONFLICT(LibraryId,PathKey) DO UPDATE SET DirectIndexedAt=NULL RETURNING Id`).get(relative, relative)!
+    const row = db
+      .prepare(
+        `INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)
+      VALUES(1,1,?,?,1) ON CONFLICT(LibraryId,PathKey) DO UPDATE SET DirectIndexedAt=NULL RETURNING Id`,
+      )
+      .get(relative, relative)!
     folderId = Number(row.Id)
     db.prepare('INSERT OR IGNORE INTO FolderAncestry VALUES(1,?)').run(folderId)
     db.prepare('INSERT OR IGNORE INTO FolderAncestry VALUES(?,?)').run(folderId, folderId)
-  } finally { db.close() }
+  } finally {
+    db.close()
+  }
 
   await page.goto(`/?libraryId=1&folderId=${folderId}`)
   await expect(page.getByTestId('media-cell')).toHaveCount(8, { timeout: 20000 })
@@ -84,12 +119,17 @@ test('prepares an unindexed folder starting from what is on screen', async ({ pa
   expect(displayed).not.toEqual([...displayed].sort((left, right) => left - right))
   const first = page.getByTestId('media-cell').first().locator('img')
   await expect(first).toBeVisible({ timeout: 20000 })
-  await expect.poll(() => first.evaluate(image => (image as HTMLImageElement).naturalWidth), { timeout: 20000 }).toBeGreaterThan(0)
+  await expect
+    .poll(() => first.evaluate(image => (image as HTMLImageElement).naturalWidth), { timeout: 20000 })
+    .toBeGreaterThan(0)
 })
 
 test('reels reveal seeking from its strip and fade it again', async ({ page }) => {
   await page.goto('/?q=feedback&order=desc')
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Reels', exact: true })
+    .click()
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   const strip = reels.getByTestId('reels-seek')
@@ -115,7 +155,10 @@ test('reels reveal seeking from its strip and fade it again', async ({ page }) =
 
 test('double tapping a reel likes it without toggling playback', async ({ page }) => {
   await page.goto('/?mediaType=video&preference=neutral')
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Reels', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Reels', exact: true })
+    .click()
   const reels = page.getByRole('region', { name: 'Reels', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   const like = reels.getByRole('button', { name: 'Like', exact: true })
@@ -124,11 +167,16 @@ test('double tapping a reel likes it without toggling playback', async ({ page }
   const bounds = (await reels.locator('video').boundingBox())!
   // Clear of the centred play affordance, the control column and the seek strip.
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height * 0.35)
-  await page.mouse.down(); await page.mouse.up()
-  await page.mouse.down(); await page.mouse.up()
+  await page.mouse.down()
+  await page.mouse.up()
+  await page.mouse.down()
+  await page.mouse.up()
   await expect(like).toHaveAttribute('aria-pressed', 'true')
   // The like is persisted, not only reflected in the reels control.
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Collections', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Collections', exact: true })
+    .click()
   await page.getByRole('button', { name: 'Open favourites', exact: true }).click()
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 })

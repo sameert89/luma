@@ -17,19 +17,40 @@ export function usePreviewPriority(items: readonly (Media | null | undefined)[],
   const requested = useRef('')
   const [attempt, setAttempt] = useState(0)
   // Grouping can show one item under several headers at once, and the endpoint takes each ID once.
-  const signature = [...new Set(items
-    .filter(item => item && (item.thumbnail.status === 'pending'
-      || previews && item.mediaType === 'image' && item.preview.status !== 'ready' && item.preview.status !== 'failed'))
-    .map(item => item!.id))].slice(0, batchLimit).join(',')
+  const signature = [
+    ...new Set(
+      items
+        .filter(
+          item =>
+            item &&
+            (item.thumbnail.status === 'pending' ||
+              (previews &&
+                item.mediaType === 'image' &&
+                item.preview.status !== 'ready' &&
+                item.preview.status !== 'failed')),
+        )
+        .map(item => item!.id),
+    ),
+  ]
+    .slice(0, batchLimit)
+    .join(',')
   useEffect(() => {
     if (!signature || signature === requested.current) return
     // Scrolling re-orders the batch on every frame; send the settled order only.
-    const timer = window.setTimeout(() => {
-      requested.current = signature
-      void request('/api/media/priority', undefined, 'POST', { ids: signature.split(',').map(Number), previews })
-        .then(() => setAttempt(value => value === 0 ? value : 0))
-        .catch(() => { if (attempt < retryLimit) { requested.current = ''; setAttempt(value => value + 1) } })
-    }, attempt === 0 ? settleMs : retryMs)
+    const timer = window.setTimeout(
+      () => {
+        requested.current = signature
+        void request('/api/media/priority', undefined, 'POST', { ids: signature.split(',').map(Number), previews })
+          .then(() => setAttempt(value => (value === 0 ? value : 0)))
+          .catch(() => {
+            if (attempt < retryLimit) {
+              requested.current = ''
+              setAttempt(value => value + 1)
+            }
+          })
+      },
+      attempt === 0 ? settleMs : retryMs,
+    )
     return () => window.clearTimeout(timer)
   }, [signature, attempt, previews])
 }

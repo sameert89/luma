@@ -4,7 +4,7 @@ Gate 7 implements status, indexing/scans, library/folder navigation, media queri
 
 ## Foundation and errors
 
-`GET /api/status` returns 200 `{ "status": "ready", "schemaVersion": 11 }` after a successful SQLite query. Database failure returns 503 `database_unavailable`. Migration failure prevents startup. No root scan or source access is performed.
+`GET /api/status` returns 200 `{ "status": "ready", "schemaVersion": 11, "version": "1.0.6" }` after a successful SQLite query. `version` is the running build's release, which a browser tab compares with its own to offer a refresh after the server is updated; it never changes what the API accepts or returns. Database failure returns 503 `database_unavailable`. Migration failure prevents startup. No root scan or source access is performed.
 
 Errors use `application/problem+json`: `{ "type": "about:blank", "title": "...", "status": 400, "code": "invalid_request", "traceId": "..." }`. Optional `errors` maps field names to message arrays. Never return stack traces, SQL, absolute paths or exception messages. Codes: 400 `invalid_request`/`invalid_cursor`, 404 `not_found`, 409 `conflict`, 413 `request_too_large`, 429 `rate_limited`, 503 `database_unavailable`/`cache_unavailable`, 500 `internal_error`. A future explicit expired cursor returns 410 `cursor_expired`. Unsupported methods return 405 `method_not_allowed`. Unknown API routes remain JSON 404, never the frontend shell.
 
@@ -179,3 +179,8 @@ completed/cancelled/failed/interrupted/expired metadata operations and
 completed/cancelled/failed/interrupted scans. Active scans and completed traversals still
 preparing previews remain visible. Dismissal persists in SQLite (migration 0015), without
 deleting scan dependencies, imported tags, checkpoints or export downloads.
+
+Queueing a task also dismisses finished tasks beyond the ten most recent of its kind
+(migration 0021), so the queue cannot grow without bound between manual clears. Active
+tasks, completed traversals still preparing previews, and the underlying scan and job rows
+are never touched.

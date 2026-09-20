@@ -7,8 +7,13 @@ public static class ApiErrors
 {
     public static string Code(int status) => status switch
     {
-        400 => "invalid_request", 404 => "not_found", 405 => "method_not_allowed",
-        409 => "conflict", 413 => "request_too_large", 503 => "database_unavailable", _ => "internal_error"
+        400 => "invalid_request",
+        404 => "not_found",
+        405 => "method_not_allowed",
+        409 => "conflict",
+        413 => "request_too_large",
+        503 => "database_unavailable",
+        _ => "internal_error"
     };
 
     public static Dictionary<string, object?> Extensions(int status, HttpContext context) =>

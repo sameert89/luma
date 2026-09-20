@@ -1,0 +1,7 @@
+dist
+node_modules
+package-lock.json
+# Written by npm run generate:api; CI checks it matches the generator's own output.
+src/lib/api/generated.ts
+test-results
+playwright-report

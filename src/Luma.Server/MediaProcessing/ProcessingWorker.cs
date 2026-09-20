@@ -204,8 +204,17 @@ public sealed class ProcessingWorker(Database database, IndexingOptions options,
         var changed = await db.ExecuteAsync(new CommandDefinition("""
             UPDATE ProcessingJobs SET State=@state,FailureCode=@code,Attempts=Attempts+@increment,NextAttemptAt=@next,Claim=NULL,LeaseUntil=NULL
             WHERE MediaId=@MediaId AND SourceRevision=@SourceRevision AND EncoderVersion=@EncoderVersion AND Claim=@Claim;
-            """, new { job.MediaId, job.SourceRevision, job.EncoderVersion, job.Claim, state, code, increment = failure ? 1 : 0,
-                next = DateTimeOffset.UtcNow.AddSeconds(delay).ToString("O") }, tx, cancellationToken: ct));
+            """, new
+        {
+            job.MediaId,
+            job.SourceRevision,
+            job.EncoderVersion,
+            job.Claim,
+            state,
+            code,
+            increment = failure ? 1 : 0,
+            next = DateTimeOffset.UtcNow.AddSeconds(delay).ToString("O")
+        }, tx, cancellationToken: ct));
         if (changed > 0)
         {
             await db.ExecuteAsync(new CommandDefinition("UPDATE Media SET ProcessingStatus=@state WHERE Id=@MediaId AND SourceRevision=@SourceRevision",

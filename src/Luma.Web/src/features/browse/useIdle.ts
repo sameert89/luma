@@ -19,7 +19,10 @@ export function useIdle(enabled: boolean, delay = 3000) {
         else setIdle(true)
       }, delay)
     }
-    function wake() { setIdle(false); arm() }
+    function wake() {
+      setIdle(false)
+      arm()
+    }
     arm()
     for (const name of wakeEvents) window.addEventListener(name, wake, { passive: true })
     return () => {

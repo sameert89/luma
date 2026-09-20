@@ -27,6 +27,7 @@ jobs:
         if: runner.os == 'Linux'
       - run: choco install ffmpeg --no-progress -y
         if: runner.os == 'Windows'
+      - run: dotnet format Luma.slnx --verify-no-changes --no-restore
       - run: dotnet build Luma.slnx -c Release --no-restore
       - run: dotnet test Luma.slnx -c Release --no-build
       - run: npm ci
@@ -34,6 +35,8 @@ jobs:
       - run: npm run generate:api
         working-directory: src/Luma.Web
       - run: git diff --exit-code -- contracts/luma.json src/Luma.Web/src/lib/api/generated.ts
+      - run: npm run format:check
+        working-directory: src/Luma.Web
       - run: npm run lint
         working-directory: src/Luma.Web
       - run: npm run build

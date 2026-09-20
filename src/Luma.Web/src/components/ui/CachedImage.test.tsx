@@ -15,7 +15,9 @@ describe('cache readiness', () => {
       fireEvent.error(screen.getByRole('img'))
       view.unmount()
       expect(vi.getTimerCount()).toBe(0)
-    } finally { vi.useRealTimers() }
+    } finally {
+      vi.useRealTimers()
+    }
   })
   it('does not request pending images and shows the image when ready', () => {
     const view = render(<CachedImage url="/pending-preview" status="pending" alt="Holiday" />)

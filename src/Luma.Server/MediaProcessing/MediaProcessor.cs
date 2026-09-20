@@ -38,8 +38,11 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
             {
                 var assembly = typeof(MediaProcessor).Assembly;
                 var apphost = Assembly.GetEntryAssembly() == assembly && Path.GetFileNameWithoutExtension(Environment.ProcessPath) != "dotnet";
-                var process = new Process { StartInfo = new ProcessStartInfo(apphost ? Environment.ProcessPath! : "dotnet")
-                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true } };
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo(apphost ? Environment.ProcessPath! : "dotnet")
+                    { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true }
+                };
                 if (!apphost) process.StartInfo.ArgumentList.Add(assembly.Location);
                 process.StartInfo.ArgumentList.Add("--image-worker");
                 worker = new(process);
@@ -178,8 +181,11 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
 
     public static async Task<string> RunAsync(string executable, IEnumerable<string> arguments, CancellationToken ct)
     {
-        using var process = new Process { StartInfo = new ProcessStartInfo(executable)
-        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true } };
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo(executable)
+            { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true }
+        };
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
         try { process.Start(); }
         catch (System.ComponentModel.Win32Exception) { throw new ProcessingException("tool_unavailable", true); }

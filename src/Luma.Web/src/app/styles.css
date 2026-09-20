@@ -1,4 +1,4 @@
-@import "tailwindcss" source("../");
+@import 'tailwindcss' source('../');
 
 @theme {
   --color-canvas: #111319;
@@ -10,7 +10,7 @@
   --color-on-accent: #111319;
   --color-positive: #a6e3a1;
   --color-danger: #f38ba8;
-  --font-sans: "Inter Variable", system-ui, sans-serif;
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
 }
 
 /* Phones held upright: the only layout where video controls stack into two rows.
@@ -18,97 +18,368 @@
 @custom-variant phone-portrait (@media (orientation: portrait) and (max-width: 639px));
 
 @layer base {
-  html, body, #root { height: 100%; }
-  body { @apply m-0 min-w-80 overflow-hidden bg-canvas font-sans text-ink antialiased; }
-  button, a, input, select, summary { @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent; }
-  button { @apply cursor-pointer disabled:cursor-wait; }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply m-0 min-w-80 overflow-hidden bg-canvas font-sans text-ink antialiased;
+  }
+  button,
+  a,
+  input,
+  select,
+  summary {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent;
+  }
+  button {
+    @apply cursor-pointer disabled:cursor-wait;
+  }
   @media (prefers-reduced-motion: no-preference) {
-    button, a, input, select { @apply transition-colors duration-150; }
+    button,
+    a,
+    input,
+    select {
+      @apply transition-colors duration-150;
+    }
   }
 }
 
 @layer utilities {
-  .pb-safe-2 { padding-bottom: calc(var(--spacing) * 2 + env(safe-area-inset-bottom, 0px)); }
-  .no-scrollbar { scrollbar-width: none; }
-  .no-scrollbar::-webkit-scrollbar { display: none; }
-  .tag-tone { background-color: color-mix(in srgb, var(--tag-accent) 14%, transparent); border-color: color-mix(in srgb, var(--tag-accent) 34%, transparent); color: color-mix(in srgb, var(--tag-accent) 82%, var(--color-ink)); }
-  .tag-tone:hover { background-color: color-mix(in srgb, var(--tag-accent) 22%, transparent); }
+  .pb-safe-2 {
+    padding-bottom: calc(var(--spacing) * 2 + env(safe-area-inset-bottom, 0px));
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* A sheet stays a sheet: tall enough for its content, never the whole screen. */
+  .sheet-panel {
+    max-height: min(85dvh, 44rem);
+  }
+  .tag-tone {
+    background-color: color-mix(in srgb, var(--tag-accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--tag-accent) 34%, transparent);
+    color: color-mix(in srgb, var(--tag-accent) 82%, var(--color-ink));
+  }
+  .tag-tone:hover {
+    background-color: color-mix(in srgb, var(--tag-accent) 22%, transparent);
+  }
 }
 
-.motion-overlay[data-state='closed'] { pointer-events: none; }
-.search-reveal { display: grid; grid-template-columns: 0fr; width: 0; opacity: 0; visibility: hidden; }
-.search-reveal[data-open='true'] { grid-template-columns: 1fr; width: 100%; opacity: 1; visibility: visible; transition-delay: 0s; }
+.motion-overlay[data-state='closed'] {
+  pointer-events: none;
+}
+.search-reveal {
+  display: grid;
+  grid-template-columns: 0fr;
+  width: 0;
+  opacity: 0;
+  visibility: hidden;
+}
+.search-reveal[data-open='true'] {
+  grid-template-columns: 1fr;
+  width: 100%;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
 /* Same collapsing-track trick as .search-reveal, but vertical: Reels' secondary controls
    drop open below their toggle instead of sitting on the stage all the time. */
-.motion-drop { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; }
-.motion-drop[data-open='true'] { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s; }
+.motion-drop {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+}
+.motion-drop[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
 /* Radix retains closing dialogs until their exit animation ends. Individual scale
    preserves the positioning transform on centered dialogs. */
-@keyframes luma-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes luma-fade-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes luma-dialog-in { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: translateY(0); } }
-@keyframes luma-dialog-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(0.5rem); } }
-@keyframes luma-sheet-in { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
-@keyframes luma-sheet-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(1rem); } }
-@keyframes luma-page-in { from { opacity: 0; transform: translateY(.5rem); } to { opacity: 1; transform: translateY(0); } }
-@keyframes luma-media-in { from { transform: translateX(var(--media-entry, 1rem)); } to { transform: translateX(0); } }
-@keyframes luma-media-y-in { from { transform: translateY(var(--media-entry-y, 1rem)); } to { transform: translateY(0); } }
+@keyframes luma-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes luma-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes luma-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes luma-dialog-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@keyframes luma-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes luma-sheet-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+}
+@keyframes luma-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes luma-media-in {
+  from {
+    transform: translateX(var(--media-entry, 1rem));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes luma-media-y-in {
+  from {
+    transform: translateY(var(--media-entry-y, 1rem));
+  }
+  to {
+    transform: translateY(0);
+  }
+}
 /* The fade-out leg gets its own (ease-in) timing function so opacity accelerates
    smoothly to exactly 0 instead of lingering near-invisible and appearing to blink. */
-@keyframes luma-like { 0% { opacity: 0; transform: scale(.6); } 35% { opacity: 1; transform: scale(1.15); animation-timing-function: ease-in; } 100% { opacity: 0; transform: scale(1); } }
-.motion-media[data-direction='previous'] { --media-entry: -1rem; }
-.motion-media[data-axis='vertical'][data-direction='previous'] { --media-entry-y: -1rem; }
-@media (prefers-reduced-motion: no-preference) {
-  .motion-overlay[data-state='open'], [data-motion='viewer'][data-state='open'] { animation: luma-fade-in 150ms ease-out; }
-  .motion-overlay[data-state='closed'], [data-motion='viewer'][data-state='closed'] { animation: luma-fade-out 150ms ease-in; }
-  [data-motion='dialog'][data-state='open'], [data-motion='sheet'][data-state='open'] { animation: luma-fade-in 180ms ease-out; }
-  [data-motion='dialog'][data-state='closed'], [data-motion='sheet'][data-state='closed'] { animation: luma-fade-out 150ms ease-in; }
-  [data-motion='dialog'][data-state='open'] [data-motion-panel], [data-motion='sheet'][data-state='open'] [data-motion-panel] { animation: luma-dialog-in 180ms ease-out; }
-  [data-motion='dialog'][data-state='closed'] [data-motion-panel], [data-motion='sheet'][data-state='closed'] [data-motion-panel] { animation: luma-dialog-out 150ms ease-in; }
-  .motion-page { animation: luma-page-in 180ms ease-out; }
-  .motion-media { animation: luma-media-in 180ms ease-out both; }
-  .motion-media[data-axis='vertical'] { animation-name: luma-media-y-in; }
-  details[open] > :not(summary) { animation: luma-fade-in 150ms ease-out; }
-  nav button svg { transition: transform 150ms ease-out; }
-  nav button[aria-current='page'] svg { transform: translateY(-.125rem); }
-  @media (max-width: 639px) {
-    [data-motion='sheet'][data-state='open'] [data-motion-panel] { animation-name: luma-sheet-in; }
-    [data-motion='sheet'][data-state='closed'] [data-motion-panel] { animation-name: luma-sheet-out; }
+@keyframes luma-like {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
   }
-  .search-reveal { transition: grid-template-columns 180ms ease, width 180ms ease, opacity 150ms ease, visibility 0s linear 180ms; }
-  .search-reveal[data-open='true'] { transition-delay: 0s; }
-  .motion-drop { transition: grid-template-rows 180ms ease, opacity 150ms ease, visibility 0s linear 180ms; }
-  .motion-drop[data-open='true'] { transition-delay: 0s; }
+  35% {
+    opacity: 1;
+    transform: scale(1.15);
+    animation-timing-function: ease-in;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+.motion-media[data-direction='previous'] {
+  --media-entry: -1rem;
+}
+.motion-media[data-axis='vertical'][data-direction='previous'] {
+  --media-entry-y: -1rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .motion-overlay[data-state='open'],
+  [data-motion='viewer'][data-state='open'] {
+    animation: luma-fade-in 150ms ease-out;
+  }
+  .motion-overlay[data-state='closed'],
+  [data-motion='viewer'][data-state='closed'] {
+    animation: luma-fade-out 150ms ease-in;
+  }
+  [data-motion='dialog'][data-state='open'],
+  [data-motion='sheet'][data-state='open'] {
+    animation: luma-fade-in 180ms ease-out;
+  }
+  [data-motion='dialog'][data-state='closed'],
+  [data-motion='sheet'][data-state='closed'] {
+    animation: luma-fade-out 150ms ease-in;
+  }
+  [data-motion='dialog'][data-state='open'] [data-motion-panel],
+  [data-motion='sheet'][data-state='open'] [data-motion-panel] {
+    animation: luma-dialog-in 180ms ease-out;
+  }
+  [data-motion='dialog'][data-state='closed'] [data-motion-panel],
+  [data-motion='sheet'][data-state='closed'] [data-motion-panel] {
+    animation: luma-dialog-out 150ms ease-in;
+  }
+  .motion-page {
+    animation: luma-page-in 180ms ease-out;
+  }
+  /* A bar that lifts off the end of a form to follow the viewport once it has something to do. */
+  .motion-rise {
+    animation: luma-sheet-in 180ms ease-out;
+  }
+  .motion-media {
+    animation: luma-media-in 180ms ease-out both;
+  }
+  .motion-media[data-axis='vertical'] {
+    animation-name: luma-media-y-in;
+  }
+  details[open] > :not(summary) {
+    animation: luma-fade-in 150ms ease-out;
+  }
+  nav button svg {
+    transition: transform 150ms ease-out;
+  }
+  nav button[aria-current='page'] svg {
+    transform: translateY(-0.125rem);
+  }
+  @media (max-width: 639px) {
+    [data-motion='sheet'][data-state='open'] [data-motion-panel] {
+      animation-name: luma-sheet-in;
+    }
+    [data-motion='sheet'][data-state='closed'] [data-motion-panel] {
+      animation-name: luma-sheet-out;
+    }
+  }
+  .search-reveal {
+    transition:
+      grid-template-columns 180ms ease,
+      width 180ms ease,
+      opacity 150ms ease,
+      visibility 0s linear 180ms;
+  }
+  .search-reveal[data-open='true'] {
+    transition-delay: 0s;
+  }
+  .motion-drop {
+    transition:
+      grid-template-rows 180ms ease,
+      opacity 150ms ease,
+      visibility 0s linear 180ms;
+  }
+  .motion-drop[data-open='true'] {
+    transition-delay: 0s;
+  }
 }
 
 /* Video seek track: played, buffered and remaining segments come from --played and
    --loaded (percentages set by the player), like the scrubbers of streaming players. */
-.seek { appearance: none; background: transparent; cursor: pointer; --seek-track: .25rem; --seek-thumb: .875rem; }
-.seek::-webkit-slider-runnable-track { height: var(--seek-track); border-radius: 9999px;
-  background: linear-gradient(to right, var(--color-accent) var(--played, 0%), color-mix(in srgb, var(--color-ink) 50%, transparent) var(--played, 0%) var(--loaded, 0%), color-mix(in srgb, var(--color-ink) 22%, transparent) var(--loaded, 0%)); }
-.seek::-moz-range-track { height: var(--seek-track); border-radius: 9999px;
-  background: linear-gradient(to right, var(--color-accent) var(--played, 0%), color-mix(in srgb, var(--color-ink) 50%, transparent) var(--played, 0%) var(--loaded, 0%), color-mix(in srgb, var(--color-ink) 22%, transparent) var(--loaded, 0%)); }
-.seek::-webkit-slider-thumb { appearance: none; width: var(--seek-thumb); height: var(--seek-thumb); margin-top: calc((var(--seek-track) - var(--seek-thumb)) / 2); border: 0; border-radius: 9999px; background: var(--color-accent); }
-.seek::-moz-range-thumb { width: var(--seek-thumb); height: var(--seek-thumb); border: 0; border-radius: 9999px; background: var(--color-accent); }
-.seek:hover, .seek:focus-visible, .seek:active { --seek-track: .375rem; }
+.seek {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  --seek-track: 0.25rem;
+  --seek-thumb: 0.875rem;
+}
+.seek::-webkit-slider-runnable-track {
+  height: var(--seek-track);
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) var(--played, 0%),
+    color-mix(in srgb, var(--color-ink) 50%, transparent) var(--played, 0%) var(--loaded, 0%),
+    color-mix(in srgb, var(--color-ink) 22%, transparent) var(--loaded, 0%)
+  );
+}
+.seek::-moz-range-track {
+  height: var(--seek-track);
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) var(--played, 0%),
+    color-mix(in srgb, var(--color-ink) 50%, transparent) var(--played, 0%) var(--loaded, 0%),
+    color-mix(in srgb, var(--color-ink) 22%, transparent) var(--loaded, 0%)
+  );
+}
+.seek::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--seek-thumb);
+  height: var(--seek-thumb);
+  margin-top: calc((var(--seek-track) - var(--seek-thumb)) / 2);
+  border: 0;
+  border-radius: 9999px;
+  background: var(--color-accent);
+}
+.seek::-moz-range-thumb {
+  width: var(--seek-thumb);
+  height: var(--seek-thumb);
+  border: 0;
+  border-radius: 9999px;
+  background: var(--color-accent);
+}
+.seek:hover,
+.seek:focus-visible,
+.seek:active {
+  --seek-track: 0.375rem;
+}
 @media (orientation: portrait) and (max-width: 639px) {
   /* Much larger touch scrubber when the phone is upright. */
-  .seek, .seek:hover, .seek:focus-visible { --seek-track: .5rem; --seek-thumb: 1.25rem; }
-  .seek:active { --seek-track: .625rem; }
+  .seek,
+  .seek:hover,
+  .seek:focus-visible {
+    --seek-track: 0.5rem;
+    --seek-thumb: 1.25rem;
+  }
+  .seek:active {
+    --seek-track: 0.625rem;
+  }
 }
 
-@keyframes luma-flash { 0% { opacity: 0; transform: scale(.8); } 30% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.1); } }
+@keyframes luma-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.1);
+  }
+}
 /* Short-lived player feedback (play/pause, skip, speed): gone before it gets in the way. */
-.motion-flash { animation: luma-flash 500ms ease-out both; }
+.motion-flash {
+  animation: luma-flash 500ms ease-out both;
+}
 @media (prefers-reduced-motion: reduce) {
-  .motion-flash { animation: luma-fade-out 500ms ease-out both; }
+  .motion-flash {
+    animation: luma-fade-out 500ms ease-out both;
+  }
 }
 
 /* Brief confirmation for the double-tap like; it removes itself when the animation ends,
    so reduced motion gets a plain fade rather than no animation event at all. */
-.motion-like { animation: luma-like 400ms ease-out both; }
+.motion-like {
+  animation: luma-like 400ms ease-out both;
+}
 @media (prefers-reduced-motion: reduce) {
-  .motion-like { animation: luma-fade-out 400ms ease-out both; }
+  .motion-like {
+    animation: luma-fade-out 400ms ease-out both;
+  }
 }
 
 [data-theme='obsidian'] {
@@ -169,7 +440,11 @@
   --color-on-accent: #ffffff;
 }
 
-[data-theme='cinema'], [data-theme='midnight'], [data-theme='oled'], [data-theme='forest'] {
+[data-theme='cinema'],
+[data-theme='midnight'],
+[data-theme='oled'],
+[data-theme='forest'],
+[data-theme='nord'] {
   color-scheme: dark;
   --color-ink: #f5f5f5;
   --color-muted: #b5b8bf;
@@ -203,4 +478,13 @@
   --color-line: #40564a;
   --color-accent: #4ade80;
   --color-on-accent: #0e1411;
+}
+[data-theme='nord'] {
+  --color-canvas: #2e3440;
+  --color-surface: #3b4252;
+  --color-line: #5b6779;
+  --color-ink: #eceff4;
+  --color-muted: #d0d6e0;
+  --color-accent: #88c0d0;
+  --color-on-accent: #2e3440;
 }

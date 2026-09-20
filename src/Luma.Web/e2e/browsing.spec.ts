@@ -11,11 +11,23 @@ test.beforeEach(async ({ page }) => {
   const cover = page.getByRole('button', { name: 'Open Sample library', exact: true }).locator('img').first()
   await expect(cover).toBeVisible()
   await expect.poll(() => cover.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
-  await page.screenshot({ animations: 'disabled', path: `test-results/libraries-${test.info().project.name}.png`, fullPage: true })
+  await page.screenshot({
+    animations: 'disabled',
+    path: `test-results/libraries-${test.info().project.name}.png`,
+    fullPage: true,
+  })
   await page.getByRole('button', { name: 'Open Sample library', exact: true }).click()
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
   await expect(page.getByTestId('media-cell').first().locator('img')).toBeVisible()
-  await expect.poll(() => page.getByTestId('media-cell').first().locator('img').evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+  await expect
+    .poll(() =>
+      page
+        .getByTestId('media-cell')
+        .first()
+        .locator('img')
+        .evaluate(image => (image as HTMLImageElement).naturalWidth),
+    )
+    .toBeGreaterThan(0)
 })
 
 test('anchors mobile search to its icon and closes it with the cross', async ({ page }, testInfo) => {
@@ -42,9 +54,21 @@ test('anchors mobile search to its icon and closes it with the cross', async ({ 
 })
 
 test('previews distinct light and dark themes and scrolls settings clear of navigation', async ({ page }, testInfo) => {
-  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Settings', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('button', { name: 'Settings', exact: true })
+    .click()
   const settings = page.getByRole('region', { name: 'Theme settings' })
-  for (const [name, theme] of [['White', 'light'], ['Red & white', 'crimson'], ['Orange & black', 'ember'], ['Cinema red', 'cinema'], ['Midnight blue', 'midnight'], ['OLED black', 'oled'], ['Forest', 'forest'], ['Dark', 'obsidian']]) {
+  for (const [name, theme] of [
+    ['White', 'light'],
+    ['Red & white', 'crimson'],
+    ['Orange & black', 'ember'],
+    ['Cinema red', 'cinema'],
+    ['Midnight blue', 'midnight'],
+    ['OLED black', 'oled'],
+    ['Forest', 'forest'],
+    ['Dark', 'obsidian'],
+  ]) {
     const button = settings.getByRole('button', { name, exact: true })
     await button.scrollIntoViewIfNeeded()
     await button.click()
@@ -55,7 +79,10 @@ test('previews distinct light and dark themes and scrolls settings clear of navi
       const navigation = page.getByRole('navigation', { name: 'Primary navigation' })
       await navigation.getByRole('button', { name: 'Library', exact: true }).click()
       await expect(page.getByTestId('media-cell').first()).toBeVisible()
-      await page.screenshot({ animations: 'disabled', path: `test-results/gallery-${theme}-${testInfo.project.name}.png` })
+      await page.screenshot({
+        animations: 'disabled',
+        path: `test-results/gallery-${theme}-${testInfo.project.name}.png`,
+      })
       await navigation.getByRole('button', { name: 'Settings', exact: true }).click()
     }
   }
@@ -71,9 +98,31 @@ test('previews distinct light and dark themes and scrolls settings clear of navi
 test('cancelling preparation stops the busy indicator even with paused jobs', async ({ page }) => {
   let cancelled = false
   await page.route('**/api/indexing', route => route.fulfill({ json: { libraries: [{ id: 1, latestScanId: 901 }] } }))
-  await page.route('**/api/scans/901', route => route.fulfill({ json: { id: 901, libraryId: 1, state: cancelled ? 'cancelled' : 'completed', discovered: 1500, ready: 1000, pending: 500, processing: 0, failed: 0 } }))
-  await page.route('**/api/tasks', route => route.fulfill({ json: cancelled ? [] : [{ id: 'scan-901', kind: 'indexing', state: 'running', processed: 1000, pending: 500, failed: 0 }] }))
-  await page.route('**/api/tasks/scan-901/cancel', async route => { cancelled = true; await route.fulfill({ status: 204 }) })
+  await page.route('**/api/scans/901', route =>
+    route.fulfill({
+      json: {
+        id: 901,
+        libraryId: 1,
+        state: cancelled ? 'cancelled' : 'completed',
+        discovered: 1500,
+        ready: 1000,
+        pending: 500,
+        processing: 0,
+        failed: 0,
+      },
+    }),
+  )
+  await page.route('**/api/tasks', route =>
+    route.fulfill({
+      json: cancelled
+        ? []
+        : [{ id: 'scan-901', kind: 'indexing', state: 'running', processed: 1000, pending: 500, failed: 0 }],
+    }),
+  )
+  await page.route('**/api/tasks/scan-901/cancel', async route => {
+    cancelled = true
+    await route.fulfill({ status: 204 })
+  })
   await page.getByRole('button', { name: /^Background jobs/ }).click()
   const dialog = page.getByRole('dialog', { name: 'Background jobs' })
   await expect(dialog.getByRole('button', { name: 'Cancel Indexing' })).toBeVisible()
@@ -97,13 +146,18 @@ test('selection is visible and its full checkbox target can be tapped', async ({
   await expect(page.getByRole('checkbox')).toHaveCount(0)
 })
 
-test('Collections favourites clear browse filters and keeps a persisted like across refresh and navigation', async ({ page }) => {
+test('Collections favourites clear browse filters and keeps a persisted like across refresh and navigation', async ({
+  page,
+}) => {
   const item = page.getByTestId('media-cell').first().locator('button[data-media-id]')
   const id = await item.getAttribute('data-media-id')
   await item.click()
   const viewer = page.getByRole('dialog')
   const like = viewer.getByRole('button', { name: 'Like', exact: true })
-  if (await like.getAttribute('aria-pressed') === 'true') { await like.click(); await expect(like).toHaveAttribute('aria-pressed', 'false') }
+  if ((await like.getAttribute('aria-pressed')) === 'true') {
+    await like.click()
+    await expect(like).toHaveAttribute('aria-pressed', 'false')
+  }
   await like.click()
   await expect(like).toHaveAttribute('aria-pressed', 'true')
   await page.keyboard.press('Escape')
@@ -146,7 +200,9 @@ test('dialog motion supports entering, exiting and reduced motion', async ({ pag
   await expect(page.getByRole('dialog')).toBeHidden()
 })
 
-test('opening an unindexed folder discovers its files and prepares previews without a library scan', async ({ page }, testInfo) => {
+test('opening an unindexed folder discovers its files and prepares previews without a library scan', async ({
+  page,
+}, testInfo) => {
   const fixture = path.resolve('../../.local/browser-fixture-v2')
   const relative = `On-demand-${testInfo.project.name}-${Date.now()}`
   await mkdir(path.join(fixture, 'media', relative), { recursive: true })
@@ -155,19 +211,31 @@ test('opening an unindexed folder discovers its files and prepares previews with
   let folderId: number
   try {
     db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON')
-    const row = db.prepare(`INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)
-      VALUES(1,1,?,?,1) ON CONFLICT(LibraryId,PathKey) DO UPDATE SET DirectIndexedAt=NULL RETURNING Id`).get(relative, relative)!
+    const row = db
+      .prepare(
+        `INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)
+      VALUES(1,1,?,?,1) ON CONFLICT(LibraryId,PathKey) DO UPDATE SET DirectIndexedAt=NULL RETURNING Id`,
+      )
+      .get(relative, relative)!
     folderId = Number(row.Id)
     db.prepare('INSERT OR IGNORE INTO FolderAncestry VALUES(1,?)').run(folderId)
     db.prepare('INSERT OR IGNORE INTO FolderAncestry VALUES(?,?)').run(folderId, folderId)
-  } finally { db.close() }
+  } finally {
+    db.close()
+  }
   let libraryScans = 0
-  page.on('request', request => { if (request.method() === 'POST' && /\/api\/libraries\/\d+\/scans$/.test(request.url())) libraryScans++ })
+  page.on('request', request => {
+    if (request.method() === 'POST' && /\/api\/libraries\/\d+\/scans$/.test(request.url())) libraryScans++
+  })
   await page.goto(`/?libraryId=1&folderId=${folderId}`)
-  const cell = page.getByTestId('media-cell').filter({ has: page.getByRole('button', { name: 'Open new-photo.jpg', exact: true }) })
+  const cell = page
+    .getByTestId('media-cell')
+    .filter({ has: page.getByRole('button', { name: 'Open new-photo.jpg', exact: true }) })
   await expect(cell).toBeVisible({ timeout: 20000 })
   await expect(cell.locator('img')).toBeVisible({ timeout: 20000 })
-  await expect.poll(() => cell.locator('img').evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+  await expect
+    .poll(() => cell.locator('img').evaluate(image => (image as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0)
   await cell.getByRole('button').click()
   await expect(page.getByRole('dialog').getByRole('img')).toBeVisible()
   expect(libraryScans).toBe(0)
@@ -175,7 +243,9 @@ test('opening an unindexed folder discovers its files and prepares previews with
   await page.screenshot({ animations: 'disabled', path: `test-results/on-demand-${testInfo.project.name}.png` })
 })
 
-test('rescans from the folder menu after confirmation and shows progress in Background jobs', async ({ page }, testInfo) => {
+test('rescans from the folder menu after confirmation and shows progress in Background jobs', async ({
+  page,
+}, testInfo) => {
   let requested = false
   await page.route('**/api/folders/*/scans', async route => {
     requested = true
@@ -183,9 +253,24 @@ test('rescans from the folder menu after confirmation and shows progress in Back
   })
   await page.route('**/api/indexing', async route => {
     if (!requested) return route.continue()
-    await route.fulfill({ json: { libraries: [{ id: 1, name: 'Sample library', latestScanId: 900 }], cachePressure: false } })
+    await route.fulfill({
+      json: { libraries: [{ id: 1, name: 'Sample library', latestScanId: 900 }], cachePressure: false },
+    })
   })
-  await page.route('**/api/scans/900', route => route.fulfill({ json: { id: 900, libraryId: 1, state: 'running', discovered: 1500, ready: 1000, pending: 500, processing: 0, failed: 0 } }))
+  await page.route('**/api/scans/900', route =>
+    route.fulfill({
+      json: {
+        id: 900,
+        libraryId: 1,
+        state: 'running',
+        discovered: 1500,
+        ready: 1000,
+        pending: 500,
+        processing: 0,
+        failed: 0,
+      },
+    }),
+  )
   await (await galleryAction(page, 'Rescan library')).click()
   const confirmation = page.getByRole('dialog', { name: 'Rescan library' })
   await expect(confirmation).toContainText('significant disk and CPU')
@@ -206,14 +291,23 @@ test('browses cached media, navigates the viewer, and restores position and focu
   const errors: string[] = []
   const cacheFailures: string[] = []
   page.on('pageerror', error => errors.push(error.message))
-  page.on('response', response => { if (response.url().includes('/cache/') && !response.ok()) cacheFailures.push(`${response.status()} ${response.url()}`) })
+  page.on('response', response => {
+    if (response.url().includes('/cache/') && !response.ok())
+      cacheFailures.push(`${response.status()} ${response.url()}`)
+  })
   const scroller = page.getByTestId('gallery-scroll')
-  await scroller.evaluate(element => { const grid = element.querySelector('[data-testid=gallery-grid]')!; element.scrollTop += grid.getBoundingClientRect().top - element.getBoundingClientRect().top + 900; element.dispatchEvent(new Event('scroll')) })
+  await scroller.evaluate(element => {
+    const grid = element.querySelector('[data-testid=gallery-grid]')!
+    element.scrollTop += grid.getBoundingClientRect().top - element.getBoundingClientRect().top + 900
+    element.dispatchEvent(new Event('scroll'))
+  })
   await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
   const opened = await scroller.evaluate(element => {
     const viewport = element.getBoundingClientRect()
-    const trigger = [...element.querySelectorAll<HTMLButtonElement>('button[data-media-id]')]
-      .find(button => { const rect = button.getBoundingClientRect(); return rect.top >= viewport.top && rect.bottom <= viewport.bottom })
+    const trigger = [...element.querySelectorAll<HTMLButtonElement>('button[data-media-id]')].find(button => {
+      const rect = button.getBoundingClientRect()
+      return rect.top >= viewport.top && rect.bottom <= viewport.bottom
+    })
     if (!trigger) throw new Error('No fully visible media item')
     const result = { id: trigger.dataset.mediaId!, position: element.scrollTop }
     trigger.click()
@@ -222,7 +316,11 @@ test('browses cached media, navigates the viewer, and restores position and focu
   const viewer = page.getByRole('dialog')
   await expect(viewer).toBeVisible()
   await expect(viewer.locator('img,video')).toBeVisible()
-  await page.screenshot({ animations: 'disabled', path: `test-results/viewer-${test.info().project.name}.png`, fullPage: true })
+  await page.screenshot({
+    animations: 'disabled',
+    path: `test-results/viewer-${test.info().project.name}.png`,
+    fullPage: true,
+  })
   await (await viewerAction(page, 'Media details')).click()
   const details = page.getByRole('dialog', { name: 'Media details' })
   await expect(details.getByRole('heading', { level: 2, name: 'Tags' })).toBeVisible()
@@ -238,10 +336,14 @@ test('browses cached media, navigates the viewer, and restores position and focu
   await page.keyboard.press('Escape')
   await expect(viewer).toBeHidden()
   await expect(page.locator(`button[data-media-id="${opened.id}"]`)).toBeFocused()
-  expect(Math.abs(await scroller.evaluate(element => element.scrollTop) - opened.position)).toBeLessThan(5)
+  expect(Math.abs((await scroller.evaluate(element => element.scrollTop)) - opened.position)).toBeLessThan(5)
   expect(errors).toEqual([])
   expect(cacheFailures).toEqual([])
-  await page.screenshot({ animations: 'disabled', path: `test-results/gallery-${test.info().project.name}.png`, fullPage: true })
+  await page.screenshot({
+    animations: 'disabled',
+    path: `test-results/gallery-${test.info().project.name}.png`,
+    fullPage: true,
+  })
 })
 
 test('keeps the mobile filter sheet inside the viewport', async ({ page }, testInfo) => {
@@ -249,11 +351,17 @@ test('keeps the mobile filter sheet inside the viewport', async ({ page }, testI
   await page.getByRole('button', { name: 'Filters', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Filters and sorting' })
   await expect(dialog).toBeVisible()
-  await page.screenshot({ animations: 'disabled', path: `test-results/filters-${testInfo.project.name}.png`, fullPage: true })
-  expect(await dialog.evaluate(element => {
-    const rect = element.getBoundingClientRect()
-    return rect.left >= 0 && rect.right <= window.innerWidth && element.scrollWidth <= element.clientWidth
-  })).toBe(true)
+  await page.screenshot({
+    animations: 'disabled',
+    path: `test-results/filters-${testInfo.project.name}.png`,
+    fullPage: true,
+  })
+  expect(
+    await dialog.evaluate(element => {
+      const rect = element.getBoundingClientRect()
+      return rect.left >= 0 && rect.right <= window.innerWidth && element.scrollWidth <= element.clientWidth
+    }),
+  ).toBe(true)
   await expect(dialog.getByRole('button', { name: 'Apply filters' })).toBeVisible()
 })
 
@@ -267,7 +375,10 @@ test('keeps the virtualized gallery and retained summaries bounded', async ({ pa
   })
   for (let pageNumber = 0; pageNumber < 8; pageNumber++) {
     const previous = loadedPages
-    await scroller.evaluate(element => { element.scrollTop = element.scrollHeight; element.dispatchEvent(new Event('scroll')) })
+    await scroller.evaluate(element => {
+      element.scrollTop = element.scrollHeight
+      element.dispatchEvent(new Event('scroll'))
+    })
     await expect.poll(() => loadedPages).toBeGreaterThan(previous)
   }
   expect(loadedPages).toBeGreaterThan(5)

@@ -6,7 +6,7 @@ namespace Luma.Server.Features.Indexing;
 public sealed class IndexingOptions
 {
     private SemaphoreSlim? processingSlots;
-    internal SemaphoreSlim ProcessingSlots => LazyInitializer.EnsureInitialized(ref processingSlots,()=>new SemaphoreSlim(ProcessingWorkers,ProcessingWorkers));
+    internal SemaphoreSlim ProcessingSlots => LazyInitializer.EnsureInitialized(ref processingSlots, () => new SemaphoreSlim(ProcessingWorkers, ProcessingWorkers));
     public List<LibraryOptions> Libraries { get; set; } = [];
     public string CachePath { get; set; } = ".local/cache";
     public string FfmpegPath { get; set; } = "ffmpeg";

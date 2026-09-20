@@ -1,6 +1,6 @@
 {
   "name": "luma-web",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "type": "module",
   "engines": {
@@ -13,6 +13,8 @@
     "test": "vitest run",
     "test:e2e": "npm run build && dotnet run --project ../../tests/Luma.Tools -c Release -- seed ../../.local/browser-fixture-v2 1500 && playwright test",
     "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "generate:api": "node scripts/generate-api.mjs",
     "preview": "vite preview"
   },
@@ -41,6 +43,7 @@
     "globals": "^17.12.0",
     "jsdom": "^30.0.1",
     "openapi-typescript": "^7.13.0",
+    "prettier": "3.9.8",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.70.0",

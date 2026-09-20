@@ -9,7 +9,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Luma.Server.Features.Indexing;
 
-public sealed record StartScanRequest(bool Force = false, bool RetryFailures = false,string MetadataMode = "embedded");
+public sealed record StartScanRequest(bool Force = false, bool RetryFailures = false, string MetadataMode = "embedded");
 public sealed record ScanAccepted(long Id);
 public sealed record ScanFailure(long Id, long? MediaId, string Code, string OccurredAt);
 public sealed record ScanProgress(long Id, long LibraryId, string State, long Discovered, long Skipped,
@@ -53,8 +53,16 @@ public static class IndexingEndpoints
                   FileStabilitySeconds=@FileStabilitySeconds,
                   LastPeriodicScanAt=CASE WHEN @Mode='periodic' AND RefreshMode<>'periodic' THEN @now ELSE LastPeriodicScanAt END
                 WHERE Id=@id AND Enabled=1
-                """, new { id, request.Mode, request.RefreshOnOpen, request.PeriodicIntervalMinutes,
-                    request.WatcherDebounceSeconds, request.FileStabilitySeconds, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+                """, new
+            {
+                id,
+                request.Mode,
+                request.RefreshOnOpen,
+                request.PeriodicIntervalMinutes,
+                request.WatcherDebounceSeconds,
+                request.FileStabilitySeconds,
+                now = DateTimeOffset.UtcNow.ToString("O")
+            }, tx, cancellationToken: ct));
             if (changed == 0) return Problem(404, context);
             if (request.Mode != "watcher")
                 await db.ExecuteAsync(new CommandDefinition("DELETE FROM DirtyFolders WHERE LibraryId=@id", new { id }, tx, cancellationToken: ct));
@@ -124,7 +132,7 @@ public static class IndexingEndpoints
             var scanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
                 INSERT INTO Scans(LibraryId,FolderId,State,StartedAt,MetadataMode) VALUES(@LibraryId,@id,'queued',@now,@MetadataMode) RETURNING Id
                 """, new { folder.LibraryId, folder.MetadataMode, id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
-            await QueueMetadataAsync(db,tx,scanId,folder.LibraryId,id,folder.MetadataMode,ct);
+            await QueueMetadataAsync(db, tx, scanId, folder.LibraryId, id, folder.MetadataMode, ct);
             tx.Commit();
             return TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId));
         }).WithName("IndexFolder").Produces<ApiProblem>(404, "application/problem+json").Produces<ApiProblem>(409, "application/problem+json");
@@ -143,7 +151,7 @@ public static class IndexingEndpoints
         app.MapPost("/api/libraries/{id:long}/scans", async Task<Results<Accepted<ScanAccepted>, ProblemHttpResult>>
             (long id, StartScanRequest request, Database database, HttpContext context, CancellationToken ct) =>
         {
-            if(request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400,context);
+            if (request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400, context);
             await using var db = await database.OpenAsync(ct);
             var scanId = await StartScanAsync(db, id, null, request, ct);
             return scanId is null ? Problem(404, context) : TypedResults.Accepted($"/api/scans/{scanId}", new ScanAccepted(scanId.Value));
@@ -155,7 +163,7 @@ public static class IndexingEndpoints
         app.MapPut("/api/libraries/{id:long}/metadata-mode", async Task<Results<NoContent, ProblemHttpResult>>
             (long id, LibraryMetadataMode request, Database database, HttpContext context, CancellationToken ct) =>
         {
-            if(request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400,context);
+            if (request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400, context);
             await using var db = await database.OpenAsync(ct);
             var changed = await db.ExecuteAsync(new CommandDefinition("UPDATE Libraries SET MetadataMode=@MetadataMode WHERE Id=@id AND Enabled=1",
                 new { id, request.MetadataMode }, cancellationToken: ct));
@@ -185,7 +193,7 @@ public static class IndexingEndpoints
         app.MapPost("/api/folders/{id:long}/scans", async Task<Results<Accepted<ScanAccepted>, ProblemHttpResult>>
             (long id, StartScanRequest request, Database database, HttpContext context, CancellationToken ct) =>
         {
-            if(request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400,context);
+            if (request.MetadataMode is not ("none" or "embedded" or "xmp")) return Problem(400, context);
             await using var db = await database.OpenAsync(ct);
             var folder = await db.QuerySingleOrDefaultAsync<FolderScanRow>(new CommandDefinition(
                 "SELECT LibraryId,ParentId FROM Folders WHERE Id=@id", new { id }, cancellationToken: ct));
@@ -228,8 +236,8 @@ public static class IndexingEndpoints
                   AND EXISTS(SELECT 1 FROM Scans WHERE Id=@id AND State='cancelled');
                 """, new { id, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
             worker.Cancel(id);
-            var metadataIds=await db.QueryAsync<long>(new CommandDefinition("SELECT Id FROM MetadataJobs WHERE ScanId=@id AND State IN ('queued','running') AND EXISTS(SELECT 1 FROM Scans WHERE Id=@id AND State='cancelled')",new{id},cancellationToken:ct));
-            foreach(var metadataId in metadataIds) await metadataJobs.CancelAsync(metadataId,ct);
+            var metadataIds = await db.QueryAsync<long>(new CommandDefinition("SELECT Id FROM MetadataJobs WHERE ScanId=@id AND State IN ('queued','running') AND EXISTS(SELECT 1 FROM Scans WHERE Id=@id AND State='cancelled')", new { id }, cancellationToken: ct));
+            foreach (var metadataId in metadataIds) await metadataJobs.CancelAsync(metadataId, ct);
             return TypedResults.Accepted($"/api/scans/{id}", new ScanAccepted(id));
         }).WithName("CancelScan").Produces<ApiProblem>(404, "application/problem+json");
     }
@@ -239,28 +247,29 @@ public static class IndexingEndpoints
     {
         try
         {
-            using var tx=db.BeginTransaction();
+            using var tx = db.BeginTransaction();
             var scanId = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition("""
                 INSERT INTO Scans(LibraryId,FolderId,Recursive,State,Force,RetryFailures,StartedAt,MetadataMode)
                 SELECT Id,@folderId,@recursive,'queued',@Force,@RetryFailures,@now,@MetadataMode FROM Libraries WHERE Id=@libraryId AND Enabled=1 RETURNING Id
-                """, new { libraryId, folderId, recursive = folderId is not null, request.Force, request.RetryFailures, request.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") },tx, cancellationToken: ct));
-            if(scanId is { } accepted) {
+                """, new { libraryId, folderId, recursive = folderId is not null, request.Force, request.RetryFailures, request.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+            if (scanId is { } accepted)
+            {
                 // The library remembers the choice for startup and folder-demand scans.
-                await db.ExecuteAsync(new CommandDefinition("UPDATE Libraries SET MetadataMode=@MetadataMode WHERE Id=@libraryId",new{libraryId,request.MetadataMode},tx,cancellationToken:ct));
-                await QueueMetadataAsync(db,tx,accepted,libraryId,folderId,request.MetadataMode,ct,recursive:true);
+                await db.ExecuteAsync(new CommandDefinition("UPDATE Libraries SET MetadataMode=@MetadataMode WHERE Id=@libraryId", new { libraryId, request.MetadataMode }, tx, cancellationToken: ct));
+                await QueueMetadataAsync(db, tx, accepted, libraryId, folderId, request.MetadataMode, ct, recursive: true);
             }
             tx.Commit();
             return scanId;
         }
-        catch (SqliteException error) when (error.SqliteErrorCode == 19) { throw new ApiRequestException(409,"conflict","A scan for this library is already running. Cancel it or wait for it to finish."); }
+        catch (SqliteException error) when (error.SqliteErrorCode == 19) { throw new ApiRequestException(409, "conflict", "A scan for this library is already running. Cancel it or wait for it to finish."); }
     }
 
-    internal static async Task QueueMetadataAsync(SqliteConnection db,SqliteTransaction tx,long scanId,long libraryId,long? folderId,string mode,CancellationToken ct,bool recursive=false)
+    internal static async Task QueueMetadataAsync(SqliteConnection db, SqliteTransaction tx, long scanId, long libraryId, long? folderId, string mode, CancellationToken ct, bool recursive = false)
     {
-        if(mode=="none") return;
-        if(await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')",transaction:tx,cancellationToken:ct))>=16) throw new ApiRequestException(429,"rate_limited","The metadata job queue is full.");
-        var request=new MetadataJobRequest(Query:new MediaQuery{LibraryId=libraryId,FolderId=folderId,Recursive=folderId is null || recursive},IncludeSidecars:mode=="xmp",Automatic:true,ScanId:scanId);
-        await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,ScanId) VALUES('import','queued',@request,@now,@scanId); UPDATE Scans SET MetadataQueued=1 WHERE Id=@scanId",new{scanId,request=JsonSerializer.Serialize(request with {Query=request.Query!.Normalize()}),now=DateTimeOffset.UtcNow.ToString("O")},tx,cancellationToken:ct));
+        if (mode == "none") return;
+        if (await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')", transaction: tx, cancellationToken: ct)) >= 16) throw new ApiRequestException(429, "rate_limited", "The metadata job queue is full.");
+        var request = new MetadataJobRequest(Query: new MediaQuery { LibraryId = libraryId, FolderId = folderId, Recursive = folderId is null || recursive }, IncludeSidecars: mode == "xmp", Automatic: true, ScanId: scanId);
+        await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,ScanId) VALUES('import','queued',@request,@now,@scanId); UPDATE Scans SET MetadataQueued=1 WHERE Id=@scanId", new { scanId, request = JsonSerializer.Serialize(request with { Query = request.Query!.Normalize() }), now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
     }
 
     // An indexed folder whose media never had tags imported (indexed while the library imported

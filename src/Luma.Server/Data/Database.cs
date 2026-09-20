@@ -17,8 +17,11 @@ public sealed class Database(IConfiguration configuration, IHostEnvironment envi
     {
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = Path, Mode = SqliteOpenMode.ReadWriteCreate,
-            ForeignKeys = true, DefaultTimeout = 5, Pooling = true
+            DataSource = Path,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            ForeignKeys = true,
+            DefaultTimeout = 5,
+            Pooling = true
         }.ToString());
         try
         {
