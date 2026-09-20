@@ -14,6 +14,7 @@ export const releases: Release[] = [
       'Messages about a refresh or a selection appear briefly at the bottom of the screen and go away by themselves, instead of staying in red above the collection for the rest of the session.',
       'Pull to refresh shows the turning disc phones use, floating over the collection rather than pushing it down.',
       'The gallery shows one status at a time: “Loading your collection” no longer flashes every few seconds over a folder that is already saying it is being checked.',
+      'An installed Luma now carries the colours of the theme you chose into its status bar and splash screen, rather than staying on the Dark theme’s. It changes on one of the next launches, once the phone refreshes the app’s details.',
     ],
   },
   {
