@@ -3,10 +3,17 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
+import packageJson from '../../package.json'
 
+// Clears the app's stored state but keeps What's new past its once-per-release popup,
+// which otherwise opens over every test.
+function resetStorage() {
+  localStorage.clear()
+  localStorage.setItem('luma-version-seen', packageJson.version)
+}
 function renderApp() {
   window.history.replaceState(null, '', '/')
-  localStorage.clear()
+  resetStorage()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   return render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
 }
@@ -43,7 +50,7 @@ describe('browsing shell', () => {
   it('restores a seedless shuffle URL without randomUUID on HTTP hosts', async () => {
     vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
     browsingApi()
-    localStorage.clear()
+    resetStorage()
     window.history.replaceState(null, '', '/?sort=shuffle')
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('seed')).toMatch(/^[0-9a-f]{32}$/))
@@ -52,7 +59,7 @@ describe('browsing shell', () => {
 
   it('sorts a library in place and keeps selection and folder actions in its compact header', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
-    localStorage.clear()
+    resetStorage()
     browsingApi()
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
     await screen.findByRole('heading', { name: 'Trips' })
@@ -97,7 +104,7 @@ describe('browsing shell', () => {
 
   it('opens a child folder menu without navigating and imports that folder rather than the parent', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
-    localStorage.clear()
+    resetStorage()
     const name = 'A very long child folder name that remains available in folder information'
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
       const data = url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
@@ -132,7 +139,7 @@ describe('browsing shell', () => {
 
   it('clears search back to the last library folder even after returning to Library with the query active', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2&order=asc')
-    localStorage.clear()
+    resetStorage()
     browsingApi()
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
     const input = screen.getByRole('combobox', { name: 'Search media' })
@@ -189,7 +196,7 @@ describe('browsing shell', () => {
 
   it('imports the whole current folder without inheriting gallery filters or selecting media IDs', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2&mediaType=video&preference=liked')
-    localStorage.clear()
+    resetStorage()
     const fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url === '/api/folders/2/index' && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
       const data = url === '/api/imports/tags' ? { id: 9 }
@@ -329,7 +336,7 @@ describe('browsing shell', () => {
       return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
-    localStorage.clear()
+    resetStorage()
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -356,7 +363,7 @@ describe('browsing shell', () => {
           : { items: photos, nextCursor: null, previousCursor: null }
       return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
     }))
-    localStorage.clear()
+    resetStorage()
     try {
       render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
       const openChild = await screen.findByRole('button', { name: 'Open Beach' })
@@ -383,7 +390,7 @@ describe('browsing shell', () => {
             : /\/api\/media\/\d+$/.test(text) ? clip : { items: media, nextCursor: null, previousCursor: null }
       return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
     }))
-    localStorage.clear()
+    resetStorage()
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -436,7 +443,7 @@ describe('browsing shell', () => {
       return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
-    localStorage.clear()
+    resetStorage()
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -466,7 +473,7 @@ describe('browsing shell', () => {
       return Promise.resolve(new Response(JSON.stringify(url === '/api/tasks' ? [] : data), { headers: { 'Content-Type': 'application/json' } }))
     })
     vi.stubGlobal('fetch', fetch)
-    localStorage.clear()
+    resetStorage()
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -537,7 +544,7 @@ describe('browsing shell', () => {
 
 it('restores the open file and query from a refreshed URL and clears only the file when closing', async () => {
   window.history.replaceState(null, '', '/?libraryId=1&folderId=2&tag=Trips&media=9')
-  localStorage.clear()
+  resetStorage()
   const photo = { id: 9, libraryId: 1, folderId: 2, fileName: 'selected.jpg', mediaType: 'image', extension: '.jpg', preference: 'neutral', sizeBytes: 123, modifiedAt: '2026-01-01T00:00:00Z', preview: { status: 'ready', url: '/selected.jpg' }, thumbnail: { status: 'ready', url: '/thumb.jpg' }, tags: [] }
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     const data = url === '/api/tasks' ? [] : url === '/api/libraries' ? [{ id: 1, name: 'Photos', rootFolderId: 1 }] : url === '/api/media/9' ? photo : url.includes('/neighbors?') ? { previous: null, next: null } : url.startsWith('/api/indexing') ? { libraries: [] } : url.startsWith('/api/folders?') ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] } : { items: [], nextCursor: null }
@@ -558,12 +565,12 @@ it('organizes settings under consistent headings without an installation panel',
   emptyApi()
   renderApp()
   await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
-  for (const name of ['Theme & appearance', 'Random media URL', 'Metadata exchange', 'Libraries', 'Hidden folders', 'Help', 'About']) {
+  for (const name of ['Updates', 'Theme & appearance', 'Random media URL', 'Metadata exchange', 'Libraries', 'Hidden folders', 'Help', 'About']) {
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
   }
   expect(screen.getAllByRole('heading', { name: 'Metadata exchange' })).toHaveLength(1)
-  expect(screen.getByRole('heading', { name: 'About' }).closest('section')).toHaveTextContent('Luma v1.0.5')
-  expect(screen.getByTestId('desktop-version')).toHaveTextContent('Luma v1.0.5')
+  expect(screen.getByRole('heading', { name: 'About' }).closest('section')).toHaveTextContent(`Luma v${packageJson.version}`)
+  expect(screen.getByTestId('desktop-version')).toHaveTextContent(`Luma v${packageJson.version}`)
   expect(screen.getByTestId('desktop-version').closest('aside')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/sameert89/luma')
   expect(screen.queryByText('Install Luma')).not.toBeInTheDocument()
@@ -604,7 +611,7 @@ describe('help', () => {
 
   it('opens from Settings without losing folder scope or filters, and Back returns to Settings', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2&mediaType=video')
-    localStorage.clear()
+    resetStorage()
     const fetch = libraryApi()
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
     await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
@@ -629,7 +636,7 @@ describe('help', () => {
 
   it('restores Help and its return destination from a refreshed URL', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2&view=help&from=settings')
-    localStorage.clear()
+    resetStorage()
     const fetch = libraryApi()
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
     expect(screen.getByRole('heading', { name: 'Help', level: 1 })).toBeVisible()
@@ -661,7 +668,7 @@ describe('folder actions', () => {
   }
   function renderFolder() {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
-    localStorage.clear()
+    resetStorage()
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}><App /></QueryClientProvider>)
   }
 
@@ -739,7 +746,7 @@ describe('folder actions', () => {
 
 it('remembers filter-row visibility separately for Reels', async () => {
   window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
-  localStorage.clear()
+  resetStorage()
   const photo = { id: 7, libraryId: 1, folderId: 2, fileName: 'beach.jpg', mediaType: 'image', extension: '.jpg', sizeBytes: 10, modifiedAt: '2026-01-01T00:00:00Z', preference: 'neutral', thumbnail: { status: 'ready', url: '/thumb.jpg' }, preview: { status: 'ready', url: '/preview.jpg' }, tags: [] }
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     const text = String(url)

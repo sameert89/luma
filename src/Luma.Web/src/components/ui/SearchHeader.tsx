@@ -10,7 +10,7 @@ export type SearchSuggestion = components['schemas']['SearchSuggestion']
 
 const kinds: Record<string, { label: string; icon: typeof Tag }> = { tag: { label: 'Tag', icon: Tag }, folder: { label: 'Folder', icon: FolderOpen }, file: { label: 'File', icon: FileImage } }
 
-export function SearchHeader({ value, onChange, onSearch, onSuggestion, onClear, onHome, onFilters, searchRequested }: { value: string; onChange: (value: string) => void; onSearch: () => void; onSuggestion?: (suggestion: SearchSuggestion) => void; onClear: () => void; onHome: () => void; onFilters: () => void; searchRequested: boolean }) {
+export function SearchHeader({ value, onChange, onSearch, onSuggestion, onClear, onHome, onFilters, searchRequested, scope = '' }: { value: string; onChange: (value: string) => void; onSearch: () => void; onSuggestion?: (suggestion: SearchSuggestion) => void; onClear: () => void; onHome: () => void; onFilters: () => void; searchRequested: boolean; scope?: string }) {
   const [open, setOpen] = useState(false)
   const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 639px)').matches ?? false)
   // Suggestions show while the field is focused and edited; choosing, submitting or Escape hides them.
@@ -32,6 +32,14 @@ export function SearchHeader({ value, onChange, onSearch, onSuggestion, onClear,
     return () => query.removeEventListener('change', update)
   }, [])
   useEffect(() => setActiveIndex(-1), [typed])
+  // Opening search and then going somewhere else leaves an empty field taking up the header.
+  // Moving to another view closes it again, unless something was searched or is being typed.
+  const browsed = useRef(scope)
+  useEffect(() => {
+    if (scope === browsed.current) return
+    browsed.current = scope
+    if (!value.trim() && document.activeElement !== input.current) { setOpen(false); setListOpen(false) }
+  }, [scope, value])
   function toggle() { setOpen(!open); if (!open) requestAnimationFrame(() => input.current?.focus()) }
   function choose(suggestion: SearchSuggestion) { setListOpen(false); setActiveIndex(-1); onSuggestion?.(suggestion) }
   return <header className="relative z-30 flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:px-6">

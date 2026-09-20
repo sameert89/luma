@@ -27,17 +27,28 @@ export function Select({ className = '', shape = 'field', ...props }: ComponentP
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="flex min-w-0 flex-col gap-2 text-sm font-medium text-muted">{label}{children}</label>
 }
-export function QuietButton({ className = '', type = 'button', compact = false, ...props }: ComponentProps<'button'> & { compact?: boolean }) {
-  return <button type={type} className={`inline-flex ${compact ? 'min-h-7 px-2 py-1 text-xs' : 'min-h-10 px-3 py-2 text-sm'} items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line font-medium text-ink hover:bg-surface disabled:cursor-default disabled:opacity-40 ${className}`} {...props} />
+// outline: the default pill. plain: no outline, for rows that group their own controls.
+// accent: the one action in such a row that should be found without reading it.
+const quietVariants = {
+  outline: 'border border-line text-ink hover:bg-surface',
+  plain: 'border border-transparent text-muted hover:bg-surface hover:text-ink',
+  accent: 'border border-transparent bg-accent text-on-accent hover:opacity-90',
+  // overlay: sits on a photo or video, so it brings the same dark frosted backing as IconButton.
+  overlay: 'border border-white/25 bg-black/45 text-white backdrop-blur-sm hover:bg-black/65',
+}
+export function QuietButton({ className = '', type = 'button', compact = false, variant = 'outline', ...props }: ComponentProps<'button'> & { compact?: boolean; variant?: keyof typeof quietVariants }) {
+  return <button type={type} className={`inline-flex ${compact ? 'min-h-7 px-2 py-1 text-xs' : 'min-h-10 px-3 py-2 text-sm'} items-center justify-center gap-2 whitespace-nowrap rounded-full font-medium disabled:cursor-default disabled:opacity-40 ${quietVariants[variant]} ${className}`} {...props} />
 }
 export function QuietLink({ className = '', children, ...props }: ComponentProps<'a'>) {
   return <a className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-surface ${className}`} {...props}>{children}</a>
 }
 // overlay: sits on top of photos, so it carries its own dark frosted backing in every theme.
 const iconTones = { default: 'border-line text-ink hover:bg-surface', overlay: 'border-white/25 bg-black/45 text-white backdrop-blur-sm hover:bg-black/65' }
-export function IconButton({ label, className = '', type = 'button', tone = 'default', ...props }: ComponentProps<'button'> & { label: string; tone?: keyof typeof iconTones }) {
+// large: a control that floats over the collection rather than sitting in a row of header icons.
+const iconSizes = { default: 'size-10', large: 'size-12' }
+export function IconButton({ label, className = '', type = 'button', tone = 'default', size = 'default', ...props }: Omit<ComponentProps<'button'>, 'size'> & { label: string; tone?: keyof typeof iconTones; size?: keyof typeof iconSizes }) {
   // A fixed square (not QuietButton's text padding) keeps every icon-only control a true circle.
   return <button type={type} aria-label={label} title={label}
-    className={`inline-flex size-10 shrink-0 items-center justify-center rounded-full border disabled:cursor-default disabled:opacity-40 ${iconTones[tone]} ${className}`}
+    className={`inline-flex ${iconSizes[size]} shrink-0 items-center justify-center rounded-full border disabled:cursor-default disabled:opacity-40 ${iconTones[tone]} ${className}`}
     {...props} />
 }

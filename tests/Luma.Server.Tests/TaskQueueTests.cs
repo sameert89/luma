@@ -108,6 +108,36 @@ public sealed class TaskQueueTests
         Assert.DoesNotContain((await client.GetFromJsonAsync<BackgroundTask[]>("/api/tasks"))!, x => x.Id == "scan-40");
     }
 
+    [Fact]
+    public async Task Finished_tasks_stop_at_the_most_recent_ten_while_active_work_stays_listed()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await BrowsingTests.SeedAsync(f, 1);
+        await using (var db = await f.Database.OpenAsync(default))
+        {
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            // A running scan and a scan whose previews are still being prepared are not finished.
+            await db.ExecuteAsync("""
+                INSERT INTO Scans(Id,LibraryId,State,StartedAt) VALUES(500,1,'running',@now);
+                INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt) VALUES(501,1,'completed',@now,@now);
+                INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt) VALUES(1,0,@version,501,'image','pending',@now);
+                """, new { now, version = Luma.Server.Features.Indexing.IndexingOptions.EncoderVersion });
+            for (var i = 0; i < 14; i++)
+                await db.ExecuteAsync("INSERT INTO Scans(LibraryId,State,StartedAt,FinishedAt) VALUES(1,'completed',@now,@now); INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,FinishedAt) VALUES('xmp','completed','{}',@now,@now)", new { now });
+        }
+        await using var host = Host(f);
+        using var client = host.CreateClient();
+
+        var tasks = (await client.GetFromJsonAsync<BackgroundTask[]>("/api/tasks"))!;
+        Assert.Equal(10, tasks.Count(x => x.Kind == "xmp"));
+        // The ten most recent finished scans, plus the two that are still working.
+        Assert.Equal(12, tasks.Count(x => x.Kind == "indexing"));
+        Assert.Contains(tasks, x => x.Id == "scan-500");
+        Assert.Contains(tasks, x => x.Id == "scan-501");
+        // The oldest finished ones cleared themselves rather than waiting for Clear finished.
+        Assert.DoesNotContain(tasks, x => x.Id == "scan-502");
+    }
+
     private static WebApplicationFactory<Program> Host(PipelineFixture f) => new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Testing")
         .UseSetting("Luma:DatabasePath", f.Database.Path).UseSetting("Luma:Indexing:CachePath", f.Options.CachePath)
         .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Test").UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path));

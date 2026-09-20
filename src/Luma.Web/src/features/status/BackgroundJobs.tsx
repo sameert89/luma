@@ -9,7 +9,7 @@ import { TaskQueue } from './TaskQueue'
 
 export function BackgroundJobsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return <Modal open={open} onOpenChange={onOpenChange} title="Background jobs" description="Indexing, metadata imports and exports. Rescan a folder or library from its ⋯ menu." sheet>
-    <div className="overflow-auto p-5"><TaskQueue /></div>
+    <div className="p-5"><TaskQueue /></div>
   </Modal>
 }
 
@@ -23,9 +23,9 @@ export function BackgroundJobsButton({ libraryId }: { libraryId?: number }) {
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: ({ signal }) => request<components['schemas']['BackgroundTask'][]>('/api/tasks', signal), refetchInterval: 3000 })
   const busy = !!starting || !!tasks.data?.some(task => task.state === 'queued' || task.state === 'running')
   useScanRefresh(libraryId)
-  const icon = <RefreshCw className={`size-4 ${busy ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
+  const icon = <RefreshCw className={`size-6 ${busy ? 'text-accent motion-safe:animate-spin' : ''}`} aria-hidden="true" />
   return <>
-    <IconButton className="bg-canvas shadow-lg" label={busy ? 'Background jobs, running' : 'Background jobs'} onClick={() => setOpen(true)}>{icon}</IconButton>
+    <IconButton size="large" className="bg-canvas shadow-lg" label={busy ? 'Background jobs, running' : 'Background jobs'} onClick={() => setOpen(true)}>{icon}</IconButton>
     <BackgroundJobsDialog open={open} onOpenChange={setOpen} />
   </>
 }

@@ -61,3 +61,26 @@ it('chooses a suggestion by tapping it', async () => {
   await userEvent.click(await screen.findByRole('option', { name: /Beach\s*Tag/ }))
   expect(onSuggestion).toHaveBeenCalledWith(suggestions[0])
 })
+
+it('closes an expanded phone search field when nothing was searched and the view changes', async () => {
+  vi.stubGlobal('matchMedia', vi.fn().mockImplementation(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+  function Harness({ scope }: { scope: string }) {
+    const [value, setValue] = useState('')
+    return <SearchHeader value={value} onChange={setValue} onSearch={vi.fn()} onClear={() => setValue('')} onHome={vi.fn()} onFilters={vi.fn()} searchRequested={false} scope={scope} />
+  }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  const shell = (scope: string) => <QueryClientProvider client={client}><Harness scope={scope} /></QueryClientProvider>
+  const { rerender } = render(shell('library:'))
+  await userEvent.click(screen.getByRole('button', { name: 'Open search' }))
+  const field = screen.getByRole('search')
+  expect(field).toHaveAttribute('data-open', 'true')
+
+  // Still open while the caret is in it: clearing a query leaves the field ready for the next one.
+  await userEvent.click(screen.getByRole('textbox', { name: 'Search media' }))
+  rerender(shell('library:folderId=2'))
+  expect(field).toHaveAttribute('data-open', 'true')
+
+  await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+  rerender(shell('search:q=beach'))
+  expect(screen.getByRole('search')).toHaveAttribute('data-open', 'false')
+})

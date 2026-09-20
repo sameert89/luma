@@ -31,6 +31,8 @@
   .pb-safe-2 { padding-bottom: calc(var(--spacing) * 2 + env(safe-area-inset-bottom, 0px)); }
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+  /* A sheet stays a sheet: tall enough for its content, never the whole screen. */
+  .sheet-panel { max-height: min(85dvh, 44rem); }
   .tag-tone { background-color: color-mix(in srgb, var(--tag-accent) 14%, transparent); border-color: color-mix(in srgb, var(--tag-accent) 34%, transparent); color: color-mix(in srgb, var(--tag-accent) 82%, var(--color-ink)); }
   .tag-tone:hover { background-color: color-mix(in srgb, var(--tag-accent) 22%, transparent); }
 }
@@ -66,6 +68,8 @@
   [data-motion='dialog'][data-state='open'] [data-motion-panel], [data-motion='sheet'][data-state='open'] [data-motion-panel] { animation: luma-dialog-in 180ms ease-out; }
   [data-motion='dialog'][data-state='closed'] [data-motion-panel], [data-motion='sheet'][data-state='closed'] [data-motion-panel] { animation: luma-dialog-out 150ms ease-in; }
   .motion-page { animation: luma-page-in 180ms ease-out; }
+  /* A bar that lifts off the end of a form to follow the viewport once it has something to do. */
+  .motion-rise { animation: luma-sheet-in 180ms ease-out; }
   .motion-media { animation: luma-media-in 180ms ease-out both; }
   .motion-media[data-axis='vertical'] { animation-name: luma-media-y-in; }
   details[open] > :not(summary) { animation: luma-fade-in 150ms ease-out; }
@@ -169,7 +173,7 @@
   --color-on-accent: #ffffff;
 }
 
-[data-theme='cinema'], [data-theme='midnight'], [data-theme='oled'], [data-theme='forest'] {
+[data-theme='cinema'], [data-theme='midnight'], [data-theme='oled'], [data-theme='forest'], [data-theme='nord'] {
   color-scheme: dark;
   --color-ink: #f5f5f5;
   --color-muted: #b5b8bf;
@@ -203,4 +207,13 @@
   --color-line: #40564a;
   --color-accent: #4ade80;
   --color-on-accent: #0e1411;
+}
+[data-theme='nord'] {
+  --color-canvas: #2e3440;
+  --color-surface: #3b4252;
+  --color-line: #5b6779;
+  --color-ink: #eceff4;
+  --color-muted: #d0d6e0;
+  --color-accent: #88c0d0;
+  --color-on-accent: #2e3440;
 }

@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Check, Film, Heart, Images, LoaderCircle } from 'lucide-react'
+import { ArrowDown, Check, Film, Heart, Images, LoaderCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Checkbox, QuietButton } from '../../components/ui/Controls'
@@ -8,12 +8,14 @@ import { tagTone } from '../../components/ui/TagTone'
 import { errorMessage, isGif, mediaPage, type Filters, type Media } from './api'
 import { useFolderIndexing } from './useFolderIndexing'
 import { usePreviewPriority } from './usePreviewPriority'
+import { pullThreshold, usePullToRefresh } from './usePullToRefresh'
 
 const cellKey = (item: Media) => `${item.groupKey ?? ''}:${item.id}`
 
-export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent, scopePending = false, scopeError, restoreScrollTop = 0, onScrollPosition }: {
-  filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode; scopePending?: boolean; scopeError?: Error | null; restoreScrollTop?: number; onScrollPosition?: (value: number) => void
+export function Gallery({ filters, selected, selecting, onSelect, onOpen, scrollerRef, leadingContent, scopePending = false, scopeError, restoreScrollTop = 0, onScrollPosition, onPullRefresh }: {
+  filters: Filters; selected: Set<number>; selecting: boolean; onSelect: (id: number) => void; onOpen: (item: Media) => void; scrollerRef: React.RefObject<HTMLDivElement | null>; leadingContent?: ReactNode; scopePending?: boolean; scopeError?: Error | null; restoreScrollTop?: number; onScrollPosition?: (value: number) => void; onPullRefresh?: () => Promise<unknown> | void
 }) {
+  const pull = usePullToRefresh(scrollerRef, onPullRefresh)
   const indexing = useFolderIndexing(filters.folderId)
   const query = useInfiniteQuery({ queryKey: ['media', filters], queryFn: ({ pageParam, signal }) => mediaPage(filters, pageParam, signal),
     initialPageParam: undefined as string | undefined, getNextPageParam: page => page.nextCursor ?? undefined, getPreviousPageParam: page => page.previousCursor ?? undefined,
@@ -103,6 +105,11 @@ export function Gallery({ filters, selected, selecting, onSelect, onOpen, scroll
   return <div ref={scrollerRef} tabIndex={-1} className="min-h-0 flex-1 overflow-auto p-4 focus-visible:outline-2 focus-visible:outline-accent" data-testid="gallery-scroll" data-scroll-restore
     onScroll={event => { if (!restoringScroll.current) onScrollPosition?.(event.currentTarget.scrollTop); if (event.currentTarget.scrollTop < rowHeight && query.hasPreviousPage && !query.isFetching) void load(true) }}>
     <div ref={gridRef} className="w-full">
+      {(pull.distance > 0 || pull.refreshing) && <div role="status" className="pointer-events-none flex items-center justify-center gap-2 overflow-hidden text-sm text-muted" style={{ height: pull.refreshing ? 40 : pull.distance }}>
+        {pull.refreshing
+          ? <><RefreshCw className="size-4 motion-safe:animate-spin" aria-hidden="true" />Checking this folder for changes…</>
+          : <><ArrowDown className="size-4" aria-hidden="true" />{pull.distance >= pullThreshold ? 'Release to refresh' : 'Pull to refresh'}</>}
+      </div>}
       <div ref={leadingRef}>{leadingContent}</div>
       {indexing.waiting && <p role="status" className="flex items-center gap-2 pb-3 text-sm text-muted"><LoaderCircle className="size-4 motion-safe:animate-spin" />Checking this folder and preparing previews…</p>}
       {scopeError && <p role="alert" className="pb-3 text-sm text-danger">{errorMessage(scopeError)}</p>}

@@ -17,6 +17,17 @@ function leaveEntry() {
   leaving = done
   window.history.back()
 }
+/**
+ * Closing on pointer down means the click that follows lands on whatever is now under the
+ * finger, which would press a button the person only meant to tap past. The click is caught
+ * once, in the capture phase, so dismissing a sheet only dismisses it.
+ */
+export function swallowNextClick() {
+  const swallow = (event: MouseEvent) => { event.stopPropagation(); event.preventDefault(); window.clearTimeout(timer) }
+  const timer = window.setTimeout(() => window.removeEventListener('click', swallow, true), 500)
+  window.addEventListener('click', swallow, { capture: true, once: true })
+}
+
 function createHistoryMarker() {
   markerSeed += 1
   return `luma-modal-${Date.now().toString(36)}-${markerSeed.toString(36)}`
@@ -62,7 +73,7 @@ export function Modal({ open, onOpenChange, title, description, children, wide =
       <Primitive.Content data-motion={wide ? 'viewer' : sheet ? 'sheet' : 'dialog'} tabIndex={-1}
         onOpenAutoFocus={event => { event.preventDefault(); previousFocus.current = document.activeElement as HTMLElement; (event.currentTarget as HTMLElement).focus({ preventScroll: true }) }}
         onCloseAutoFocus={event => { event.preventDefault(); onClosed?.(); if (restoreFocus) restoreFocus(); else previousFocus.current?.focus({ preventScroll: true }) }}
-        onPointerDown={event => { if (!wide && event.target === event.currentTarget) onOpenChange(false) }}
+        onPointerDown={event => { if (!wide && event.target === event.currentTarget) { swallowNextClick(); onOpenChange(false) } }}
         className={wide ? 'fixed inset-0 z-50 flex h-dvh w-full flex-col bg-canvas' : 'fixed inset-0 z-50 flex h-dvh w-full items-end justify-center sm:items-center sm:p-4'}>
         {wide ? <>
           {hideHeader ? <><Primitive.Title className="sr-only">{title}</Primitive.Title><Primitive.Description className="sr-only">{description}</Primitive.Description></> : null}
@@ -71,7 +82,7 @@ export function Modal({ open, onOpenChange, title, description, children, wide =
             <Primitive.Close asChild><IconButton label="Close"><X className="size-5" /></IconButton></Primitive.Close>
           </header>}
           <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-        </> : <div data-motion-panel="true" className={sheet ? 'flex max-h-dvh w-full min-h-0 flex-col overflow-hidden rounded-t-3xl border border-line bg-canvas sm:max-w-xl sm:rounded-2xl' : 'flex max-h-dvh w-full min-h-0 flex-col overflow-hidden rounded-t-3xl border border-line bg-canvas sm:max-w-xl sm:rounded-2xl'}>
+        </> : <div data-motion-panel="true" className="sheet-panel flex w-full min-h-0 flex-col overflow-hidden rounded-t-3xl border border-line bg-canvas sm:max-w-xl sm:rounded-2xl">
           {!hideHeader && <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line px-5 py-3">
             <div className="min-w-0"><Primitive.Title className="truncate text-lg font-semibold">{title}</Primitive.Title><Primitive.Description className="sr-only">{description}</Primitive.Description></div>
             <Primitive.Close asChild><IconButton label="Close"><X className="size-5" /></IconButton></Primitive.Close>

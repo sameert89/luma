@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { ChevronsLeft, ChevronsRight, Download, EllipsisVertical, FastForward, Heart, HeartCrack, LoaderCircle, Maximize, Minimize, Pause, PictureInPicture2, Play } from 'lucide-react'
+import { Button } from '../../components/ui/Button'
 import { Field, IconButton, QuietButton, QuietLink, Range, Select } from '../../components/ui/Controls'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Modal } from '../../components/ui/Modal'
@@ -399,7 +400,9 @@ export function MediaStage({ item, reels = false, muted = false, suspended = fal
         onPlaying={() => { ready(); if (!video.current?.error) setFailure('') }} onError={() => { ready(); setFailure('This video could not play. Copy its stream URL and open it in an external player such as VLC.') }}
         className={`motion-media pointer-events-none h-full w-full ${displayFill ? 'object-cover' : 'object-contain'}`} /> : <div key={item.id} data-axis={reels ? 'vertical' : 'horizontal'} data-direction={direction} className="motion-media flex h-full w-full items-center justify-center"><div className="flex h-full w-full items-center justify-center" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)` }}><CachedImage url={showOriginal ? originalUrl : item.preview.url} status={showOriginal ? 'ready' : item.preview.status === 'failed' ? 'failed' : item.preview.status === 'ready' ? 'ready' : 'pending'} placeholder={standIn && item.thumbnail.status === 'ready' ? item.thumbnail.url : undefined} alt={item.fileName} preview className={`h-full w-full select-none ${displayFill ? 'object-cover' : 'object-contain'}`} /></div></div>}
       {isVideo && volumeOverlay && <span role="status" className="pointer-events-none absolute right-8 top-1/2 rounded-lg bg-canvas/85 px-4 py-3 text-ink">Volume {Math.round(volume * 100)}%</span>}
-      {isVideo && watch.resume !== null && <div data-chrome className="absolute top-16 flex flex-wrap gap-3 rounded-lg bg-canvas/90 p-3"><QuietButton onClick={() => watch.choose(false)}>Resume from {formatTime(watch.resume)}</QuietButton><QuietButton onClick={() => watch.choose(true)}>Start from beginning</QuietButton></div>}
+      {/* Two buttons on the video itself: continuing is the accented one, starting over carries
+          the same frosted backing as every other control that sits on media. */}
+      {isVideo && watch.resume !== null && <div data-chrome className="absolute top-16 flex flex-wrap gap-3"><Button onClick={() => watch.choose(false)}>Resume from {formatTime(watch.resume)}</Button><QuietButton variant="overlay" className="min-h-11" onClick={() => watch.choose(true)}>Start from beginning</QuietButton></div>}
       {isVideo && buffering && <div className="pointer-events-none absolute flex size-16 items-center justify-center rounded-full bg-canvas/60" data-testid="buffering"><LoaderCircle aria-hidden="true" className="size-8 text-ink motion-safe:animate-spin" /><span className="sr-only">Buffering</span></div>}
       {isVideo && reels && !playing && !buffering && <IconButton label="Play video" className="absolute border-transparent bg-canvas/85" onClick={togglePlay}><Play className="size-6" /></IconButton>}
       {flash && <span key={flash.key} aria-hidden="true" className="motion-flash pointer-events-none absolute flex size-16 items-center justify-center rounded-full bg-canvas/60 text-ink">{flash.playing ? <Play className="size-7" /> : <Pause className="size-7" />}</span>}

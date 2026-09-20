@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { expect, it, vi } from 'vitest'
 import { Gallery } from './Gallery'
@@ -66,4 +66,36 @@ it('renders a heading per tag group with its media below it, repeating an item u
     expect(screen.getAllByTestId('media-cell')).toHaveLength(4)
     expect(screen.queryByText('No media to show')).not.toBeInTheDocument()
   } finally { rect.mockRestore(); Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height) }
+})
+
+it('refreshes the collection when the gallery is pulled down from the top', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ items: [], nextCursor: null, previousCursor: null })))))
+  const refresh = vi.fn().mockResolvedValue(undefined)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  render(<QueryClientProvider client={client}><Gallery filters={{}} selected={new Set()} selecting={false} onSelect={vi.fn()} onOpen={vi.fn()} scrollerRef={createRef<HTMLDivElement>()} onPullRefresh={refresh} /></QueryClientProvider>)
+  const scroller = await screen.findByTestId('gallery-scroll')
+
+  // A short pull shows the hint and does nothing on release.
+  fireEvent.touchStart(scroller, { touches: [{ clientY: 0 }] })
+  fireEvent.touchMove(scroller, { touches: [{ clientY: 40 }] })
+  expect(screen.getByText('Pull to refresh')).toBeVisible()
+  fireEvent.touchEnd(scroller)
+  expect(refresh).not.toHaveBeenCalled()
+
+  fireEvent.touchStart(scroller, { touches: [{ clientY: 0 }] })
+  fireEvent.touchMove(scroller, { touches: [{ clientY: 200 }] })
+  expect(screen.getByText('Release to refresh')).toBeVisible()
+  await act(async () => { fireEvent.touchEnd(scroller) })
+  expect(refresh).toHaveBeenCalledTimes(1)
+  await waitFor(() => expect(screen.queryByText('Release to refresh')).not.toBeInTheDocument())
+})
+
+it('leaves scrolling alone when the gallery has no refresh action', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ items: [], nextCursor: null, previousCursor: null })))))
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  render(<QueryClientProvider client={client}><Gallery filters={{}} selected={new Set()} selecting={false} onSelect={vi.fn()} onOpen={vi.fn()} scrollerRef={createRef<HTMLDivElement>()} /></QueryClientProvider>)
+  const scroller = await screen.findByTestId('gallery-scroll')
+  fireEvent.touchStart(scroller, { touches: [{ clientY: 0 }] })
+  fireEvent.touchMove(scroller, { touches: [{ clientY: 200 }] })
+  expect(screen.queryByText('Release to refresh')).not.toBeInTheDocument()
 })

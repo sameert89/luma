@@ -999,6 +999,7 @@ export interface components {
             status: string;
             /** Format: int32 */
             schemaVersion: number;
+            version: string;
         };
         TagGroupPage: {
             items: components["schemas"]["TagSummary"][];

@@ -1,6 +1,6 @@
 import { Check, Image, Search } from 'lucide-react'
 
-export type Theme = 'obsidian' | 'light' | 'catppuccin' | 'crimson' | 'ember' | 'cinema' | 'midnight' | 'oled' | 'forest'
+export type Theme = 'obsidian' | 'light' | 'catppuccin' | 'crimson' | 'ember' | 'cinema' | 'midnight' | 'oled' | 'forest' | 'nord'
 export const themes: Array<{ id: Theme; name: string; description: string }> = [
   { id: 'obsidian', name: 'Dark', description: 'Soft dark surfaces and lavender accents' },
   { id: 'light', name: 'White', description: 'Bright white surfaces and clear blue accents' },
@@ -11,6 +11,7 @@ export const themes: Array<{ id: Theme; name: string; description: string }> = [
   { id: 'midnight', name: 'Midnight blue', description: 'Prime Video-inspired navy with bright blue accents' },
   { id: 'oled', name: 'OLED black', description: 'Pure black, quiet gray surfaces and crisp white accents' },
   { id: 'forest', name: 'Forest', description: 'Media-player charcoal with fresh green accents' },
+  { id: 'nord', name: 'Nord', description: 'Cool arctic greys with a frost-blue accent' },
 ]
 export function ThemePicker({ value, onChange }: { value: Theme; onChange: (theme: Theme) => void }) {
   return <section className="mx-auto min-h-0 w-full max-w-5xl space-y-4 p-5" aria-label="Theme settings">

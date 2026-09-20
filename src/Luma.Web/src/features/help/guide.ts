@@ -1,7 +1,7 @@
 import {
-  Bookmark, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Clapperboard, Download, EllipsisVertical, Eye, EyeOff, FileInput, Film,
+  ArrowDown, Bookmark, Check, ChevronDown, CircleFadingArrowUp, CopyCheck, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Clapperboard, Download, EllipsisVertical, Eye, EyeOff, FileInput, Film,
   FileImage, FolderOpen, Heart, HeartCrack, ImageMinus, Images, Info, ListVideo, Maximize, Minimize, Pause, PictureInPicture2, Play, Plus, Presentation, RefreshCw, Search, Settings,
-  Settings2, Shuffle, SlidersHorizontal, Tag, Timer, Volume2, VolumeX, X, type LucideIcon,
+  Settings2, Shuffle, Sparkles, SlidersHorizontal, Tag, Timer, Volume2, VolumeX, X, type LucideIcon,
 } from 'lucide-react'
 
 /**
@@ -28,6 +28,7 @@ export const guideSections: GuideSection[] = [
       { title: 'Indexing', entries: [
         { label: 'Index folders as I open them', name: 'Set up library', where: 'Opens when you choose a library that has not been indexed yet', what: 'Choose automatic tag import separately from initial discovery. Lazy setup indexes folders as opened; filesystem watching then keeps changed folders current by default. Index everything now performs the initial full scan.' },
         { icons: [RefreshCw], name: 'Background jobs', where: 'Bottom-right of library screens', what: 'Opens the list of indexing, import and export jobs. The icon spins while any job runs.' },
+        { icons: [ArrowDown], name: 'Pull to refresh', where: 'Top of a gallery, on touch screens', what: 'Drag the gallery down from the top to rescan the folder you are in. It never asks about tags: the library’s own tag-import setting in Settings applies.' },
       ] },
       { title: 'Folder and gallery menus', entries: [
         { icons: [EllipsisVertical], name: 'Folder actions', where: 'On every folder and library card, and in the header of the open folder', what: 'Opens the folder menu. A library is its top folder, so its card has the same menu. In the header it also holds the gallery actions below.' },
@@ -54,7 +55,7 @@ export const guideSections: GuideSection[] = [
         { label: 'Reset filters', name: 'Apply filters / Reset filters', where: 'Bottom of Filters and sorting', what: 'Apply uses your changes; Reset removes every filter at once.' },
       ] },
       { title: 'Selecting media', entries: [
-        { label: 'Select media', name: 'Select media / Done selecting', where: 'Beside the folder or gallery actions button', what: 'Shows a checkbox on each thumbnail. Select up to 500 items at a time; use Select all to select the current results.' },
+        { icons: [CopyCheck, Check], name: 'Select media / Done selecting', where: 'Beside the folder or gallery actions button', what: 'Shows a checkbox on each thumbnail. Select up to 500 items at a time; use Select all to select the current results.' },
         { icons: [Tag], name: 'Edit tags', where: 'Selection bar, once items are selected', what: 'Adds or removes one tag on every selected item, or imports their embedded metadata.' },
         { icons: [X], name: 'Clear selection', where: 'Selection bar', what: 'Deselects everything.' },
       ] },
@@ -183,14 +184,17 @@ export const guideSections: GuideSection[] = [
       'Each task shows what it is (indexing, tag import, XMP export or disliked paths export), its state (queued, running, completed, cancelled, failed or interrupted) and its progress.',
       'Interrupted means Luma stopped the task, for example on restart. An interrupted or cancelled task stops at once and never picks up again by itself.',
       'Clear finished only tidies the list. It does not delete media, scan history or metadata checkpoints.',
+      'Finished jobs clear themselves once there are more than ten of a kind, so the list stays short without any tidying.',
       'Cancelling stops further work; it does not undo changes a task has already made.',
     ],
   },
   {
-    id: 'settings', title: 'Settings', summary: 'Theme, album covers, random media links, exports, library tag import and hidden folders',
+    id: 'settings', title: 'Settings', summary: 'Updates, theme, album covers, random media links, exports, library tag import and hidden folders',
     groups: [
       { title: 'Settings sections', entries: [
         { icons: [Settings], name: 'Settings', where: 'Bottom bar or side navigation', what: 'Opens Settings. Your current filters stay in place for when you return.' },
+        { icons: [CircleFadingArrowUp], name: 'Updates', where: 'Top of Settings', what: 'Shows the release this device is running. When the server has a newer one, Refresh to update loads it; Luma also offers that once, in a small message you can close.' },
+        { icons: [Sparkles], name: 'What’s new', where: 'Settings → Updates', what: 'Lists what changed in this release. It opens by itself the first time you load a new version.' },
         { label: 'Theme & appearance', name: 'Theme & appearance', where: 'Settings', what: 'Chooses Luma’s colours on this device.' },
         { label: 'Album covers', name: 'Album covers', where: 'Settings', what: 'Smart covers show a mosaic for albums with three or more photos and fit single photos to the card; Cropped covers fill the card with one photo. Covers you picked yourself keep their photo either way.' },
         { icons: [Shuffle], name: 'Random media URL', where: 'Settings', what: 'Builds a reusable link that returns a random cached photo or GIF preview matching your current browsing filters. It does not serve random videos.' },
@@ -216,6 +220,7 @@ export const gestures: Gesture[] = [
   { gesture: 'Double-tap left or right third', where: 'Videos in the viewer and Reels', result: 'Skips back or forward 10 seconds.' },
   { gesture: 'Press and hold', where: 'Playing videos', result: 'Plays at 2× until you let go.' },
   { gesture: 'Swipe up or down on the right side', where: 'Videos in the normal viewer only', result: 'Raises or lowers the volume, with a brief volume readout.' },
+  { gesture: 'Pull down from the top', where: 'Gallery', result: 'Rescans the folder in view for new, changed and removed files, using the library’s tag-import setting.' },
   { gesture: 'Swipe up or down', where: 'Reels', result: 'Next or previous reel. Mouse wheel and trackpad scrolling do the same.' },
   { gesture: 'Double-tap / triple-tap the centre', where: 'Reels (videos, photos and GIFs)', result: 'Likes / dislikes the reel.' },
   { gesture: 'Tap the bottom strip', where: 'Video reels', result: 'Reveals the seek bar.' },
