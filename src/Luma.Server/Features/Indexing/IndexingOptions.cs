@@ -82,6 +82,16 @@ public sealed class IndexingSetup(Database database, IndexingOptions options)
         var encoderChanged = previousVersion is not null && previousVersion != IndexingOptions.EncoderVersion.ToString();
         await db.ExecuteAsync(new CommandDefinition("""
             UPDATE Libraries SET Enabled=0;
+            -- Park what an interrupted scan had already discovered, before the scan stops being
+            -- 'running' and the jobs can no longer be found through it. The processing worker only
+            -- claims jobs whose scan is running or completed, so leaving them pending puts them
+            -- beyond every worker while they still count as outstanding: the queue then carries
+            -- work that can never be done, and says so for the life of the install. Stopping or
+            -- failing a scan already parks its jobs this way; a restart has to do the same. The
+            -- resume scan queued below adopts waiting jobs back into pending as it rediscovers
+            -- the media, and showing an item adopts its own.
+            UPDATE ProcessingJobs SET State='waiting', Claim=NULL, LeaseUntil=NULL
+              WHERE State IN ('pending','running') AND ScanId IN (SELECT Id FROM Scans WHERE State='running');
             UPDATE Scans SET State='interrupted', FinishedAt=@now, FailureCode='interrupted' WHERE State='running';
             UPDATE ProcessingJobs SET State='pending', Claim=NULL, LeaseUntil=NULL WHERE State='running';
             """, new { now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: cancellationToken));
