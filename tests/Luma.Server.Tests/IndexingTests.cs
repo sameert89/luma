@@ -658,6 +658,24 @@ public sealed class IndexingTests
         Assert.Throws<InvalidOperationException>(() => f.Options.Validate(f.DirectoryPath, f.Database.Path));
     }
 
+    // The migrations analyse Media before a library exists, so a fresh install starts with
+    // statistics describing an empty table. Left there, the planner costs every browse query
+    // against zero rows and walks the library instead of seeking a sort index.
+    [Fact]
+    public async Task Scanning_brings_query_statistics_up_to_the_size_of_the_library()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        const string planned = "SELECT MAX(CAST(stat AS INTEGER)) FROM sqlite_stat1 WHERE tbl='Media'";
+        Assert.Equal(0, await db.ExecuteScalarAsync<long>(planned));
+
+        foreach (var name in new[] { "one.png", "two.png", "three.png" }) await f.CreateImageAsync(name);
+        await f.ScanAsync();
+
+        Assert.Equal(3, await db.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM Media"));
+        Assert.Equal(3, await db.ExecuteScalarAsync<long>(planned));
+    }
+
     [Fact]
     public async Task Tool_cancellation_kills_child_process_promptly()
     {

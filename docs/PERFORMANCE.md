@@ -35,3 +35,62 @@ Client test on a 4 GiB Android device and desktop Chromium, 60 Hz: first visible
 4. Repeat with a representative initial scan and incremental scan running at defaults. Sample process/child RSS, CPU, disk I/O and queue depth every second for 10 minutes. Report peaks and 60-second averages. Verify originals-unavailable browsing and instrument forbidden source/tool calls.
 5. Scroll for 30 minutes through 10k items on desktop and mobile. Collect frame-time/drop metrics, heap snapshots at 0/15/30 minutes, DOM cell counts, retained query pages, network requests and active videos. Exercise viewer open/close and back navigation.
 6. Publish raw samples, exact commands, fixture manifest, query plans, percentile calculation and pass/fail table under `docs/performance/`. Repeat three times, report worst run. Stage 2 only establishes infrastructure; these targets are validated in stages 4–7, not represented as already achieved.
+
+## Folder cover candidates
+
+A folder shows up to five covers drawn from everything beneath it, newest first.
+Proving that a file can actually be shown means a lookup into `CacheEntries` for
+its thumbnail, and that lookup costs one probe per candidate.
+
+Applied to the whole subtree, that is a probe per file in the folder. Measured on
+a 207k-item library, one page of 48 folders visited and sorted **121,207** media
+rows, and probed the cache for each, to light up 240 thumbnails — around 85% of
+what the page cost. The listing therefore narrows to the newest `CoverWindow`
+files per folder by index order first, and only then resolves their thumbnails.
+
+The window is wider than the five covers shown so that files whose thumbnail has
+been evicted are passed over rather than leaving a folder short. Widening it
+costs a probe per folder per extra slot; it should not be raised without a
+measurement.
+
+## Query statistics
+
+SQLite chooses between a seek over a sort index and a scan of the library from
+`sqlite_stat1`. Luma's indexes are designed around that choice, so the numbers
+recorded there are part of the performance contract rather than an incidental
+detail.
+
+Migrations 0010, 0011 and 0022 run `ANALYZE Media`, but on a fresh install they
+run before anything is indexed, and statistics describing an empty table would
+otherwise stand for the life of the install. `ScanWorker` therefore re-analyses
+Media after a scan completes, once the recorded row count and the real one differ
+by an order of magnitude. `PRAGMA analysis_limit=400` samples each index rather
+than reading it whole, keeping the refresh bounded on a library of any size.
+
+This is insurance rather than a tuning knob. Measured on a 207k-item library, the
+folder listing takes the same plan and the same time whether statistics say the
+table is empty or describe it correctly — but with **no** statistics at all the
+planner picks `IX_Media_AutomaticCover` and the same page takes 26x longer. That
+is the failure mode migration 0010 was written against, and keeping the numbers
+truthful is what stops a future index from triggering it.
+
+To check an install, compare what the planner believes against what is there:
+
+```sql
+SELECT (SELECT COUNT(*) FROM Media) AS actual,
+       (SELECT MAX(CAST(stat AS INTEGER)) FROM sqlite_stat1 WHERE tbl='Media') AS planned;
+```
+
+## Storage latency
+
+Browse queries are page reads, so their cost is the number of pages they touch
+multiplied by what a page read costs. On a database kept on an external or
+spinning disk that is allowed to idle, the first read after a quiet period pays
+the drive's spin-up before it does any work: measured at 5-6 seconds for a single
+`COUNT(*)` on a USB 3 mount.
+
+A query that reads far more pages than it needs is therefore cheap in testing,
+where everything is in the OS page cache, and minutes in use. When a report says
+the first request after opening the app is slow and every request after it is
+immediate, measure the endpoints individually rather than the app as a whole: the
+one that is 50x its neighbours is reading pages it does not need.

@@ -63,6 +63,41 @@ public sealed class BrowsingTests
         Assert.Null(Assert.Single(await browser.LibrariesAsync(default)).CoverUrl);
     }
 
+    // Proving a thumbnail exists costs one cache lookup per candidate, so the covers are chosen
+    // from the newest few files beneath a folder rather than from every file beneath it. The window
+    // has to be wide enough that files whose thumbnail was evicted are passed over instead of
+    // leaving the folder short of covers.
+    [Fact]
+    public async Task Folder_covers_skip_newer_media_whose_thumbnail_is_not_ready()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "nested"));
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var nested = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/nested'");
+
+        // Twenty files, newest last. Only the even-numbered ones keep a ready thumbnail.
+        await db.ExecuteAsync("""
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<20)
+            INSERT INTO Media(Id,LibraryId,FolderId,RelativePath,PathKey,FileName,MediaType,MimeType,Extension,
+              SizeBytes,ModifiedAt,IndexedAt,EffectiveDate,LastSeenScanId,Width,Height,ModifiedTicks,ProcessingStatus)
+            SELECT x,1,@nested,'album/nested/p'||x||'.jpg','album/nested/p'||x||'.jpg','p'||x||'.jpg','image','image/jpeg','.jpg',
+              x*1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',1,640,960,x,'ready' FROM n;
+            INSERT INTO CacheEntries(MediaId,SourceRevision,Variant,EncoderVersion,State,RelativePath,SizeBytes,Width,Height,ContentHash,LastAccessAt)
+            SELECT Id,SourceRevision,'thumbnail',1,'ready','t/'||Id||'.webp',1024,320,240,'hash','2026-01-01T00:00:00.0000000Z'
+            FROM Media WHERE Id%2=0;
+            """, new { nested });
+
+        var signer = new CursorSigner(f.Database);
+        await signer.InitializeAsync(default);
+        var album = Assert.Single((await new LibraryBrowser(f.Database, signer).FoldersAsync(1, null, 10, null, default)).Items);
+
+        // The five newest that can actually be shown, newest first, reached past the ten that cannot.
+        Assert.Equal(new[] { 20L, 18, 16, 14, 12 }.Select(id => $"/api/media/{id}/cache/1/thumbnail?v=1"),
+            Assert.IsAssignableFrom<IReadOnlyList<CoverImage>>(album.CoverImages).Select(image => image.Url));
+        Assert.Equal($"/api/media/20/cache/1/thumbnail?v=1", album.CoverUrl);
+    }
+
     [Fact]
     public async Task Missing_preview_does_not_wait_for_the_database_writer()
     {

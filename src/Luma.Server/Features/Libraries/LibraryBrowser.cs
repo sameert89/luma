@@ -81,9 +81,13 @@ public sealed class LibraryBrowser(Database database, CursorSigner cursors)
              WHERE m.Id=f.CoverMediaId AND m.LibraryId=f.LibraryId AND m.Availability='present' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
                AND EXISTS(SELECT 1 FROM FolderAncestry WHERE AncestorId=f.Id AND DescendantId=m.FolderId)),
             (SELECT json_group_array(json(Cover)) FROM (SELECT {CoverJson} Cover
-             FROM FolderAncestry a CROSS JOIN Media m ON m.FolderId=a.DescendantId AND m.LibraryId=f.LibraryId
+             FROM (SELECT m.Id,m.SourceRevision,m.ModifiedTicks FROM FolderAncestry a
+                   CROSS JOIN Media m ON m.FolderId=a.DescendantId AND m.LibraryId=f.LibraryId
+                   WHERE a.AncestorId=f.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND m.FolderId NOT IN ({HiddenFolders.Descendants})
+                   ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverWindow}) m
              CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
-             WHERE a.AncestorId=f.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverCandidates}))) CoverJson
+             WHERE c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
+             ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverCandidates}))) CoverJson
             FROM Folders f WHERE ParentId=@id AND Hidden=0 {seek} ORDER BY {ordering} LIMIT @limit
             """, new { id = current.Id, after = position?.Id, key = position?.Tuple?[0], ticks = position?.Ticks, limit = (limit ?? 100) + 1, encoder = IndexingOptions.EncoderVersion }, cancellationToken: ct))).ToList();
         var more = rows.Count > (limit ?? 100); if (more) rows.RemoveAt(rows.Count - 1); if (backwards) rows.Reverse();
@@ -136,6 +140,13 @@ public sealed class LibraryBrowser(Database database, CursorSigner cursors)
     }
     // Enough candidates for a five-tile mosaic; the client decides how many it shows.
     private const int CoverCandidates = 5;
+    // A folder's covers come from everything beneath it, and the cache lookup that proves a
+    // thumbnail exists costs one probe per candidate. Applied to the whole subtree that is a probe
+    // per file in the folder -- 121k of them on a 200k library to light up 240 thumbnails, which is
+    // most of what a folder listing spends. Narrowing to the newest few by index order first keeps
+    // the probes to this window per folder. It is wider than CoverCandidates so that files whose
+    // thumbnail has been evicted are passed over rather than leaving a folder short of covers.
+    private const int CoverWindow = 32;
     private const string CoverJson = "json_object('url','/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion,'width',c.Width,'height',c.Height)";
     private static readonly System.Text.Json.JsonSerializerOptions CoverJsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web);
     private static IReadOnlyList<CoverImage> CoverImages(string? json) => json is null ? [] : System.Text.Json.JsonSerializer.Deserialize<CoverImage[]>(json, CoverJsonOptions) ?? [];

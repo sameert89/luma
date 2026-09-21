@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Dapper;
+using Luma.Server.Features.Indexing;
 using Luma.Server.Features.Status;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -141,4 +142,43 @@ public sealed class TaskQueueTests
     private static WebApplicationFactory<Program> Host(PipelineFixture f) => new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Testing")
         .UseSetting("Luma:DatabasePath", f.Database.Path).UseSetting("Luma:Indexing:CachePath", f.Options.CachePath)
         .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Test").UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path));
+
+    // A restart during a scan marks it interrupted, and the processing worker only claims jobs
+    // whose scan is running or completed. Jobs left pending under that scan were therefore
+    // unclaimable while still counting as outstanding, so the queue carried work it could never
+    // finish -- 7,663 of them on one install, untouched across days.
+    [Fact]
+    public async Task A_restart_during_a_scan_does_not_strand_the_work_it_had_discovered()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("one.png");
+        await f.CreateImageAsync("two.png");
+        await f.ScanAsync();
+
+        await using var db = await f.Database.OpenAsync(default);
+        // Put the database back into the shape a kill leaves behind: the scan still running,
+        // its jobs pending, one of them claimed by the worker that died with it.
+        await db.ExecuteAsync("""
+            UPDATE Scans SET State='running',FinishedAt=NULL;
+            UPDATE ProcessingJobs SET State='pending',Claim=NULL,LeaseUntil=NULL;
+            UPDATE ProcessingJobs SET State='running',Claim='dead',LeaseUntil='2099' WHERE MediaId=(SELECT MIN(MediaId) FROM ProcessingJobs);
+            """);
+
+        await new IndexingSetup(f.Database, f.Options).InitializeAsync(default);
+
+        Assert.Equal("interrupted", await db.ExecuteScalarAsync<string>("SELECT State FROM Scans WHERE Id=1"));
+        // Nothing is left pending under a scan no worker will ever look at again.
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("""
+            SELECT COUNT(*) FROM ProcessingJobs j WHERE j.State='pending'
+              AND NOT EXISTS(SELECT 1 FROM Scans s WHERE s.Id=j.ScanId AND s.State IN ('running','completed'))
+            """));
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingJobs WHERE State='waiting' AND Claim IS NULL"));
+
+        // Parked, not abandoned: the scan that resumes after the restart takes the work back.
+        var resumed = await db.QuerySingleAsync<ScanRow>(
+            "UPDATE Scans SET State='running' WHERE State='queued' RETURNING *");
+        await f.Scanner.ScanAsync(resumed, f.Root, default);
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingJobs WHERE State='pending'"));
+        Assert.NotNull(await f.ClaimAsync());
+    }
 }

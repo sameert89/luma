@@ -61,3 +61,28 @@ An opt-in background worker checks 100 known paths every 10 seconds without enum
 Initial indexing and rescans expose **do not import tags**, **tags embedded in media**, and **embedded tags plus adjacent XMP sidecars**. These choices affect tag import only; indexing, technical metadata, thumbnails, video posters and on-demand previews are unchanged. Embedded tags are the default; the library retains the choice for demand/startup/automatic scans, and Settings → Libraries shows and changes it without starting work. A new library can instead be set up to index folders only as they are opened. Opening an already indexed folder queues a direct-only tag import for media no import has attempted yet, when the library's mode imports tags. Discovery and metadata queue creation are atomic but extraction is asynchronous after discovery. Restart retains per-file checkpoints/counters and resumes after the durable ID checkpoint; only unfinished selected files are retried. Tags, fingerprint and checkpoint commit together. Automatic passes compare indexed source revision and source/XMP size/mtime (including missing sidecars); manual imports bypass the revision skip. Changed sources during extraction do not get a successful revision. The existing keyword extraction scope is unchanged; this stage imports tags rather than unrelated camera properties.
 
 Cache and metadata workers share ProcessingWorkers as their aggregate decoder limit. Metadata waits behind pending viewport preparation and yields between file transactions. An already running child may finish within its bounded deadline. Browse reads continue through WAL using SQLite/generated cache only. Global tasks combine traversal, cache and metadata stages without treating discovery completion as completed preview generation.
+
+## Work left behind by a restart
+
+A scan discovers media and queues a processing job per file, stamped with the scan
+that found it. The processing worker claims only jobs whose scan is `running` or
+`completed`, so a job whose scan ended in any other state is invisible to every
+worker.
+
+That is deliberate — work belonging to a scan the person stopped should not carry
+on — but it makes the scan's terminal state responsible for the jobs it leaves
+behind. Stopping or failing a scan parks its pending jobs as `waiting`
+(`FinishFailedAsync`); cancelling one mid-flight parks the job the same way
+(`MonitorScanAsync`); and a restart, which marks a running scan `interrupted`,
+must do it too (`IndexingSetup.InitializeAsync`).
+
+Missing that last one strands the jobs: they stay `pending`, so they count as
+outstanding in the queue and in the background jobs list, but no worker will ever
+claim them. They are not self-healing either, because a job row is only rewritten
+when a scan re-persists its media row, which an ordinary rescan skips for files
+that have not changed. One install carried 7,663 such jobs, unchanged across days,
+with the workers spinning over them. Migration 0023 parks jobs already stranded
+this way, including those orphaned by a cancelled or failed scan.
+
+`waiting` is the right home for deferred work: showing an item adopts its own job,
+and a scan that rediscovers the media promotes the rest back to `pending`.
