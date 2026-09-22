@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { expect, it, vi } from 'vitest'
@@ -116,4 +116,41 @@ it('closes an expanded phone search field when nothing was searched and the view
   await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
   rerender(shell('search:q=beach'))
   expect(screen.getByRole('search')).toHaveAttribute('data-open', 'false')
+})
+
+// The suggestion list floats over the filter row, and Clear all filters sits directly under it.
+// Choosing happens on pointer down, so by the time the click arrives the list has gone and the
+// click lands on whatever it was covering -- which cleared the filters instead of picking the
+// suggestion, and made any suggestion over that button impossible to choose.
+it('does not press what the suggestion list was covering', async () => {
+  const onSearch = vi.fn()
+  const onSuggestion = vi.fn()
+  const clearAllFilters = vi.fn()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(suggestions)))),
+  )
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      <Harness onSearch={onSearch} onSuggestion={onSuggestion} />
+      <button type="button" onClick={clearAllFilters}>
+        Clear all filters
+      </button>
+    </QueryClientProvider>,
+  )
+
+  await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'bea')
+  const option = await screen.findByRole('option', { name: /Beach\s*Tag/ })
+
+  // The gesture as a browser delivers it: the list closes on pointer down, then the click lands
+  // on the button now under the finger.
+  fireEvent.pointerDown(option)
+  fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }))
+
+  expect(onSuggestion).toHaveBeenCalledWith(expect.objectContaining({ label: 'Beach' }))
+  expect(clearAllFilters).not.toHaveBeenCalled()
+
+  // Only that one click is swallowed: the next deliberate press works.
+  fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }))
+  expect(clearAllFilters).toHaveBeenCalledTimes(1)
 })

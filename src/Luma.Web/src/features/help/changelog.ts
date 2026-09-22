@@ -6,6 +6,14 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '1.0.10',
+    date: '2026-09-22',
+    headline: 'Search suggestions can be picked again',
+    changes: [
+      'Picking a search suggestion no longer presses whatever sat behind the list. A suggestion over Clear all filters cleared the filters instead of being chosen, which made the suggestions lowest in the list impossible to pick at all.',
+    ],
+  },
+  {
     version: '1.0.9',
     date: '2026-09-22',
     headline: 'Browsing stays quick while a scan runs',
