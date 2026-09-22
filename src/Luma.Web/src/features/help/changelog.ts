@@ -6,6 +6,15 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '1.0.9',
+    date: '2026-09-22',
+    headline: 'Browsing stays quick while a scan runs',
+    changes: [
+      'Opening a folder while a scan is running no longer crawls. Checking the scan\u2019s progress used to count every file it had queued, and both the gallery and the background jobs button did that every three seconds \u2014 on a 200,000-item library, folder listings that answer in about a second went to 52 and 64 seconds. Progress is now kept as it changes rather than recounted.',
+      'A running scan refreshes the collection as it gets through each batch of files, instead of on every progress report. A long scan no longer spends the whole time rebuilding a view that has not changed.',
+    ],
+  },
+  {
     version: '1.0.8',
     date: '2026-09-22',
     headline: 'Folders open quickly, and the queue tells the truth',

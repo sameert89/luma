@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../../lib/api/client'
 import { request, type Scan } from './api'
+import { scanCheckpoint } from './scanCheckpoint'
 import type { operations } from '../../lib/api/generated'
 
 type Accepted = operations['IndexFolder']['responses'][202]['content']['application/json']
@@ -35,7 +36,7 @@ export function useFolderIndexing(folderId?: number) {
         : false,
   })
   const [refreshed, setRefreshed] = useState<string | null>(null)
-  const checkpoint = scan.data ? `${scan.data.id}:${scan.data.state}:${scan.data.discovered}:${scan.data.ready}` : null
+  const checkpoint = scanCheckpoint(scan.data)
   useEffect(() => {
     if (!checkpoint) return
     let disposed = false

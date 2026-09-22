@@ -235,8 +235,11 @@ public static class IndexingEndpoints
             await using var db = await database.OpenAsync(ct);
             var scan = await db.QuerySingleOrDefaultAsync<ScanRow>(new CommandDefinition("SELECT * FROM Scans WHERE Id=@id", new { id }, cancellationToken: ct));
             if (scan is null) return Problem(404, context);
+            // Read the counts rather than aggregating the jobs: this is polled every few seconds
+            // while a scan runs, and counting every job the scan owns made each poll cost the size
+            // of the library (migration 0024).
             var counts = (await db.QueryAsync<JobCount>(new CommandDefinition(
-                "SELECT State,COUNT(*) Count FROM ProcessingJobs WHERE ScanId=@id GROUP BY State", new { id }, cancellationToken: ct)))
+                "SELECT State,Count FROM ScanJobCounts WHERE ScanId=@id AND Count>0", new { id }, cancellationToken: ct)))
                 .ToDictionary(x => x.State, x => x.Count);
             var failures = (await db.QueryAsync<ScanFailure>(new CommandDefinition("""
                 SELECT Id,MediaId,Code,OccurredAt FROM ProcessingFailures WHERE ScanId=@id AND Id>@after ORDER BY Id LIMIT 101

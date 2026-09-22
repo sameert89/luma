@@ -94,3 +94,25 @@ where everything is in the OS page cache, and minutes in use. When a report says
 the first request after opening the app is slow and every request after it is
 immediate, measure the endpoints individually rather than the app as a whole: the
 one that is 50x its neighbours is reading pages it does not need.
+
+## Progress polling
+
+Scan progress is polled every few seconds while a scan runs, by the gallery and by the background
+jobs button, and each answer refreshes the collection.
+
+Both halves of that have to stay independent of library size. `/api/scans/{id}` used to aggregate
+every job the scan owned (`GROUP BY State` over `ProcessingJobs`), so each poll read a row per file
+in the library; migration 0024 keeps the counts as jobs move instead, the way `CacheAccounting`
+keeps the cache size, and the endpoint reads a handful of rows.
+
+Refreshing on every report was the other half: folder tiles are the most expensive thing the server
+draws, and rebuilding them every three seconds competed with the scan's own reads and writes. The
+client now refreshes per batch of work (`scanRefreshItems`), plus immediately when a scan starts or
+settles, so a scan's refresh cost is proportional to what it found rather than to how long it ran.
+
+Measured on a 207k-item install, folder listings during a scan went from 52-64 seconds to the
+~1 second they take when the server is quiet.
+
+Anything else polled while a scan runs should be checked the same way: an endpoint whose cost grows
+with the library is a different thing when it is called once and when it is called every three
+seconds for an hour.
