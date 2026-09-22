@@ -59,6 +59,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 64 * 1024);
 var app = builder.Build();
+app.UseSlowRequestLog();
 app.UseExceptionHandler();
 // Opt-in for deployments that terminate TLS in Kestrel (see docs/DEPLOYMENT.md). Proxies that
 // terminate TLS themselves should set ASPNETCORE_FORWARDEDHEADERS_ENABLED=true instead.

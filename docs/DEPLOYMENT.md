@@ -207,3 +207,23 @@ missing records and are for user review. Luma does not delete media.
 Target acceptance must exercise restart, an upgrade from the previous schema,
 backup/restore, cache loss and unavailable sources on the Pi with the real mounts.
 See [Gate 7 verification](STAGE-7-VERIFICATION.md) for evidence and pending checks.
+
+## Slow request logging
+
+Requests slower than `Luma:SlowRequestMs` (default 500) are logged once each at
+`Warning`, naming the route pattern, the status and the elapsed time. Everything
+faster is silent, so this is safe to leave on.
+
+```sh
+Luma__SlowRequestMs=250   # tighten while investigating
+Luma__SlowRequestMs=0     # turn it off
+```
+
+The route pattern is logged rather than the path, so one slow endpoint produces
+one line per request rather than one per media id, and no file name from the
+library reaches the log.
+
+ASP.NET Core can report the same timing for every request via
+`Logging:LogLevel:Microsoft.AspNetCore.Hosting.Diagnostics=Information`, but a
+gallery requests hundreds of thumbnails per screen, so that writes far more to the
+log than the requests being investigated cost. Prefer the threshold.
