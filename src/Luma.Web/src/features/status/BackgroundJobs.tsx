@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { IconButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { request, type IndexingStatus, type Scan } from '../browse/api'
+import { scanCheckpoint } from '../browse/scanCheckpoint'
 import type { components } from '../../lib/api/generated'
 import { TaskQueue } from './TaskQueue'
 
@@ -76,8 +77,9 @@ function useScanRefresh(libraryId?: number) {
         : false
     },
   }).data
+  const checkpoint = scanCheckpoint(scan)
   useEffect(() => {
-    if (!scan) return
+    if (!checkpoint) return
     for (const key of ['media', 'folders', 'libraries']) void client.invalidateQueries({ queryKey: [key] })
-  }, [client, scan?.id, scan?.state, scan?.ready, scan?.discovered])
+  }, [client, checkpoint])
 }

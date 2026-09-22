@@ -181,4 +181,47 @@ public sealed class TaskQueueTests
         Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingJobs WHERE State='pending'"));
         Assert.NotNull(await f.ClaimAsync());
     }
+
+    // Scan progress is polled every few seconds while a scan runs. Counting every job the scan
+    // owned made each poll cost the size of the library, which starved everything else on a
+    // self-hosted disk; the counts are kept instead, and have to survive every move a job makes.
+    [Fact]
+    public async Task Scan_progress_counts_follow_jobs_between_states_and_scans()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await BrowsingTests.SeedAsync(f, 3);
+        await using var db = await f.Database.OpenAsync(default);
+        async Task<string> CountsAsync(long scanId) => string.Join(",", await db.QueryAsync<string>(
+            "SELECT State||'='||Count FROM ScanJobCounts WHERE ScanId=@scanId AND Count>0 ORDER BY State", new { scanId }));
+
+        await db.ExecuteAsync("""
+            INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt) VALUES(50,1,'completed',@now,@now),(51,1,'completed',@now,@now);
+            INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt)
+            SELECT Id,SourceRevision,@version,50,'image','pending','2026' FROM Media;
+            """, new { version = IndexingOptions.EncoderVersion, now = DateTimeOffset.UtcNow.ToString("O") });
+        Assert.Equal("pending=3", await CountsAsync(50));
+
+        // A state change moves one across.
+        await db.ExecuteAsync("UPDATE ProcessingJobs SET State='ready' WHERE MediaId=1");
+        Assert.Equal("pending=2,ready=1", await CountsAsync(50));
+
+        // Rediscovery re-points a job at whichever scan last saw the file, counts included.
+        await db.ExecuteAsync("UPDATE ProcessingJobs SET ScanId=51 WHERE MediaId=2");
+        Assert.Equal("pending=1,ready=1", await CountsAsync(50));
+        Assert.Equal("pending=1", await CountsAsync(51));
+
+        // Both at once, and deletion.
+        await db.ExecuteAsync("UPDATE ProcessingJobs SET ScanId=51,State='failed' WHERE MediaId=1");
+        Assert.Equal("pending=1", await CountsAsync(50));
+        Assert.Equal("failed=1,pending=1", await CountsAsync(51));
+        await db.ExecuteAsync("DELETE FROM ProcessingJobs WHERE MediaId=1");
+        Assert.Equal("pending=1", await CountsAsync(51));
+
+        // What the endpoint reports matches counting the jobs the slow way.
+        await using var host = Host(f);
+        var progress = await host.CreateClient().GetFromJsonAsync<ScanProgress>("/api/scans/50");
+        var pending = await db.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM ProcessingJobs WHERE ScanId=50 AND State IN ('pending','waiting')");
+        Assert.Equal(pending, progress!.Pending);
+    }
 }
