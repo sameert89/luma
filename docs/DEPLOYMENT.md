@@ -223,6 +223,23 @@ The route pattern is logged rather than the path, so one slow endpoint produces
 one line per request rather than one per media id, and no file name from the
 library reaches the log.
 
+Each line also says what the request arrived to:
+
+```
+GET /api/folders took 64073 ms (status 499, over the 500 ms threshold;
+  on arrival 31 requests were in flight, 27 for this path;
+  thread pool 0 of 32767 workers free, 118 queued).
+```
+
+Read those counts first. A request that was slow on its own is an expensive
+query, and the fix is in the query. A request that arrived to find twenty copies
+of itself already running is a request storm, and the fix is in whatever is
+asking: the copies compete for the same cores and the same disk, each making the
+next slower, and the duration says more about the pile than about the work. A
+thread pool with no free workers and a long queue means requests are waiting for
+a thread rather than for the database, which points at blocking work on the
+thread pool rather than at any one endpoint.
+
 ASP.NET Core can report the same timing for every request via
 `Logging:LogLevel:Microsoft.AspNetCore.Hosting.Diagnostics=Information`, but a
 gallery requests hundreds of thumbnails per screen, so that writes far more to the

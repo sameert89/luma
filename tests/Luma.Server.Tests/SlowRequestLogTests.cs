@@ -33,8 +33,56 @@ public sealed class SlowRequestLogTests
 
         var reported = messages.Where(message => message.Contains("took")).ToArray();
         Assert.Equal(expected, reported.Length > 0);
+        if (!expected) return;
         // The route pattern, not the path: nothing from the library reaches the log.
-        if (expected) Assert.Contains("GET /api/status", Assert.Single(reported));
+        var line = Assert.Single(reported);
+        Assert.Contains("GET /api/status", line);
+        // One request on its own found itself alone, and says so.
+        Assert.Contains("on arrival 1 requests were in flight, 1 for this path", line);
+        Assert.Contains("thread pool", line);
+    }
+
+    // A request that is slow because copies of it are queued behind each other is a different bug
+    // from one that is slow on its own, so the line has to tell them apart.
+    [Fact]
+    public async Task A_request_reports_the_company_it_arrived_to()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var messages = new ConcurrentQueue<string>();
+        await using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder
+            .UseEnvironment("Testing")
+            .UseSetting("Luma:DatabasePath", f.Database.Path).UseSetting("Luma:Indexing:CachePath", f.Options.CachePath)
+            .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Test")
+            .UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path)
+            .UseSetting("Luma:SlowRequestMs", "1")
+            .ConfigureServices(services => services.AddSingleton<ILoggerProvider>(new CaptureProvider(messages))));
+
+        using var client = host.CreateClient();
+        int[] Counts() => messages.Where(message => message.Contains("for this path"))
+            .Select(message => int.Parse(message.Split("on arrival ")[1].Split(' ')[0])).ToArray();
+
+        // Whether requests fired together actually overlap is up to the scheduler, and under a
+        // loaded machine a burst can be served one at a time. Repeating the burst makes the test
+        // depend on overlap happening at all rather than on it happening the first time.
+        var counts = Array.Empty<int>();
+        for (var attempt = 0; attempt < 10 && (counts.Length == 0 || counts.Max() == 1); attempt++)
+        {
+            await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => client.GetAsync("/api/status")));
+            counts = Counts();
+        }
+        Assert.NotEmpty(counts);
+        Assert.True(counts.Max() > 1, $"in-flight counts were {string.Join(",", counts)}");
+        // The tally is returned rather than leaked: a request made once the burst has drained
+        // finds itself alone again. The test server hands the client its response before the
+        // pipeline has finished unwinding, so this settles rather than reading straight away.
+        var alone = 0;
+        for (var attempt = 0; attempt < 50 && alone != 1; attempt++)
+        {
+            await Task.Delay(20);
+            Assert.True((await client.GetAsync("/api/status")).IsSuccessStatusCode);
+            alone = Counts().Last();
+        }
+        Assert.Equal(1, alone);
     }
 
     [Fact]
