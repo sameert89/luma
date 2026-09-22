@@ -6,6 +6,17 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '1.0.8',
+    date: '2026-09-22',
+    headline: 'Folders open quickly, and the queue tells the truth',
+    changes: [
+      'Opening a folder no longer checks every file beneath it to pick the pictures on its tile. On a 200,000-item library that was 121,207 files read to show 240 thumbnails, and it was most of what the page cost: a folder listing measured 4.4 seconds before, and a fraction of a second after. The tiles show the same pictures as before.',
+      'Work that Luma had already found is no longer lost when the server restarts mid-scan. It used to sit in the queue as outstanding forever without ever being picked up — one library carried 7,663 such files — and this release also releases the ones already stuck.',
+      'Luma keeps its own notes on the size of your library up to date, so it keeps choosing the quick way through it as the library grows.',
+      'Requests that take longer than half a second are now noted in the server log, so a slow library can be diagnosed from the log rather than by guesswork. Set Luma:SlowRequestMs to change the half second, or to 0 to turn it off.',
+    ],
+  },
+  {
     version: '1.0.7',
     date: '2026-09-20',
     headline: 'Refreshing a folder behaves',
