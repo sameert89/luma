@@ -2,6 +2,7 @@ import * as Primitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { IconButton } from './Controls'
+import { swallowNextClick } from './dismiss'
 
 let markerSeed = 0
 // A closing modal leaves its history entry with an asynchronous history.back(). A modal that
@@ -22,21 +23,6 @@ function leaveEntry() {
   leaving = done
   window.history.back()
 }
-/**
- * Closing on pointer down means the click that follows lands on whatever is now under the
- * finger, which would press a button the person only meant to tap past. The click is caught
- * once, in the capture phase, so dismissing a sheet only dismisses it.
- */
-export function swallowNextClick() {
-  const swallow = (event: MouseEvent) => {
-    event.stopPropagation()
-    event.preventDefault()
-    window.clearTimeout(timer)
-  }
-  const timer = window.setTimeout(() => window.removeEventListener('click', swallow, true), 500)
-  window.addEventListener('click', swallow, { capture: true, once: true })
-}
-
 function createHistoryMarker() {
   markerSeed += 1
   return `luma-modal-${Date.now().toString(36)}-${markerSeed.toString(36)}`
