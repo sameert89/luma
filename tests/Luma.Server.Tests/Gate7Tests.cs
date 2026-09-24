@@ -43,36 +43,36 @@ public sealed class Gate7Tests
         await db.ExecuteAsync("UPDATE Media SET SizeBytes=(Id%7)*1024,FileName='name-'||(Id%9)||'.jpg',EffectiveDate='2026-01-'||printf('%02d',1+Id%3)||'T00:00:00.0000000Z',RandomKey=Id*100000000000000000");
         var browser = await BrowsingTests.BrowserAsync(f);
         foreach (var group in new[] { "none", "folder", "date", "type" }) foreach (var order in new[] { "asc", "desc" }) foreach (var mediaType in new string?[] { null, "image" })
-                {
-                    var query = new MediaQuery { Limit = 7, Sort = sort, Order = order, GroupBy = group, Seed = "release-fixture", MediaType = mediaType }.Normalize();
-                    var all = await browser.ListAsync(query with { Limit = 200 }, default);
-                    var ids = new List<long>(); var page = await browser.ListAsync(query, default);
-                    while (true)
-                    {
-                        ids.AddRange(page.Items.Select(x => x.Id));
-                        if (page.NextCursor is null) break;
-                        var next = await browser.ListAsync(query with { Cursor = page.NextCursor }, default);
-                        var previous = await browser.ListAsync(query with { Cursor = next.PreviousCursor }, default);
-                        Assert.Equal(page.Items.Select(x => x.Id), previous.Items.Select(x => x.Id));
-                        page = next;
-                    }
-                    Assert.Equal(mediaType is null ? 91 : 73, ids.Count); Assert.Equal(ids.Count, ids.Distinct().Count());
-                    Assert.Equal(all.Items.Select(x => x.Id), ids);
-                    for (var i = 1; i < ids.Count - 1; i += 17)
-                    {
-                        var neighbors = await browser.NeighborsAsync(ids[i], query, default);
-                        Assert.Equal(ids[i - 1], neighbors.Previous!.Id); Assert.Equal(ids[i + 1], neighbors.Next!.Id);
-                    }
-                    if (sort == "shuffle") Assert.Equal(ids, (await browser.ListAsync(query with { Limit = 200 }, default)).Items.Select(x => x.Id));
-                    else
-                    {
-                        var direction = order == "asc" ? "ASC" : "DESC";
-                        var key = sort switch { "captured" => "EffectiveTicks", "name" => "NameKey", "type" => "MediaType", "size" => "SizeBytes", _ => "ModifiedTicks" };
-                        var groupKey = group switch { "folder" => "FolderId ASC,", "date" => "EffectiveTicks/864000000000 ASC,", "type" => "CASE MediaType WHEN 'image' THEN 0 ELSE 1 END ASC,", _ => "" };
-                        var expected = await db.QueryAsync<long>($"SELECT Id FROM Media WHERE @mediaType IS NULL OR MediaType=@mediaType ORDER BY {groupKey}{key} {direction},Id {direction}", new { mediaType });
-                        Assert.Equal(expected, ids);
-                    }
-                }
+        {
+            var query = new MediaQuery { Limit = 7, Sort = sort, Order = order, GroupBy = group, Seed = "release-fixture", MediaType = mediaType }.Normalize();
+            var all = await browser.ListAsync(query with { Limit = 200 }, default);
+            var ids = new List<long>(); var page = await browser.ListAsync(query, default);
+            while (true)
+            {
+                ids.AddRange(page.Items.Select(x => x.Id));
+                if (page.NextCursor is null) break;
+                var next = await browser.ListAsync(query with { Cursor = page.NextCursor }, default);
+                var previous = await browser.ListAsync(query with { Cursor = next.PreviousCursor }, default);
+                Assert.Equal(page.Items.Select(x => x.Id), previous.Items.Select(x => x.Id));
+                page = next;
+            }
+            Assert.Equal(mediaType is null ? 91 : 73, ids.Count); Assert.Equal(ids.Count, ids.Distinct().Count());
+            Assert.Equal(all.Items.Select(x => x.Id), ids);
+            for (var i = 1; i < ids.Count - 1; i += 17)
+            {
+                var neighbors = await browser.NeighborsAsync(ids[i], query, default);
+                Assert.Equal(ids[i - 1], neighbors.Previous!.Id); Assert.Equal(ids[i + 1], neighbors.Next!.Id);
+            }
+            if (sort == "shuffle") Assert.Equal(ids, (await browser.ListAsync(query with { Limit = 200 }, default)).Items.Select(x => x.Id));
+            else
+            {
+                var direction = order == "asc" ? "ASC" : "DESC";
+                var key = sort switch { "captured" => "EffectiveTicks", "name" => "NameKey", "type" => "MediaType", "size" => "SizeBytes", _ => "ModifiedTicks" };
+                var groupKey = group switch { "folder" => "FolderId ASC,", "date" => "EffectiveTicks/864000000000 ASC,", "type" => "CASE MediaType WHEN 'image' THEN 0 ELSE 1 END ASC,", _ => "" };
+                var expected = await db.QueryAsync<long>($"SELECT Id FROM Media WHERE @mediaType IS NULL OR MediaType=@mediaType ORDER BY {groupKey}{key} {direction},Id {direction}", new { mediaType });
+                Assert.Equal(expected, ids);
+            }
+        }
     }
 
     [Fact]

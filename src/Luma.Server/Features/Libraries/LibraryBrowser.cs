@@ -1,4 +1,5 @@
 using Dapper;
+using System.Diagnostics;
 using Luma.Server.Data;
 using Luma.Server.Features.Media;
 using Luma.Server.Http;
@@ -22,7 +23,7 @@ public static class HiddenFolders
     // evaluates it once per statement; the partial index keeps it free when nothing is hidden.
     public const string Descendants = "SELECT a.DescendantId FROM Folders h INDEXED BY IX_Folders_Hidden JOIN FolderAncestry a ON a.AncestorId=h.Id WHERE h.Hidden=1";
 }
-public sealed class LibraryBrowser(Database database, CursorSigner cursors)
+public sealed class LibraryBrowser(Database database, CursorSigner cursors, ILogger<LibraryBrowser>? logger = null)
 {
     public async Task<IReadOnlyList<LibrarySummary>> LibrariesAsync(CancellationToken ct)
     {
@@ -45,59 +46,82 @@ public sealed class LibraryBrowser(Database database, CursorSigner cursors)
         sort ??= "id"; sortOrder ??= "asc";
         if (sort is not ("id" or "name" or "modified") || sortOrder is not ("asc" or "desc")) throw ApiRequestException.Invalid();
         if (limit is < 1 or > 200 || libraryId <= 0 || parentId <= 0 || (libraryId is null && parentId is null)) throw ApiRequestException.Invalid();
-        await using var db = await database.OpenAsync(ct);
-        var current = await db.QuerySingleOrDefaultAsync<FolderRow>(new CommandDefinition("""
-            SELECT f.*,f.CoverMediaId IS NOT NULL CoverOverride,l.Name LibraryName FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
-            WHERE (@parentId IS NOT NULL AND f.Id=@parentId) OR (@parentId IS NULL AND f.LibraryId=@libraryId AND f.PathKey='')
-            """, new { parentId, libraryId }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
-        if (libraryId is not null && current.LibraryId != libraryId) throw ApiRequestException.Invalid();
-        // Name cursors hold the natural sort key (migration 0018); the ":2" retires cursors that held paths.
-        var scope = sort == "id" && sortOrder == "asc" ? $"folders:{current.Id}" : $"folders:{current.Id}:{sort}:{sortOrder}{(sort == "name" ? ":2" : "")}";
-        var position = cursor is null ? null : cursors.Decode(cursor, scope);
-        var backwards = position?.Backward == true;
-        var descending = (sortOrder == "desc") != backwards;
-        var order = descending ? "DESC" : "ASC";
-        var compare = descending ? "<" : ">";
-        if (position is not null && sort == "name" && position.Tuple is not { Length: 1 }) throw new ApiRequestException(400, "invalid_cursor", "Refresh the folder listing.");
-        // Natural name order and directory modified time are both stored keys, so each page is one
-        // index seek (IX_Folders_Parent_Sort / IX_Folders_Parent_Modified).
-        var seek = position is null ? "" : sort switch
+        var watch = Stopwatch.StartNew();
+        var stage = "opening database";
+        var openedMs = 0L;
+        var currentMs = 0L;
+        var listingMs = 0L;
+        try
         {
-            "name" => $"AND (f.SortKey,f.Id) {compare} (@key,@after)",
-            "modified" => $"AND (f.ModifiedTicks,f.Id) {compare} (@ticks,@after)",
-            _ => $"AND f.Id {compare} @after"
-        };
-        var ordering = sort switch { "name" => $"f.SortKey {order},f.Id {order}", "modified" => $"f.ModifiedTicks {order},f.Id {order}", _ => $"f.Id {order}" };
-        string Encode(FolderRow row, bool backward) => sort switch
+            await using var db = await database.OpenAsync(ct);
+            openedMs = watch.ElapsedMilliseconds;
+            stage = "finding current folder";
+            var current = await db.QuerySingleOrDefaultAsync<FolderRow>(new CommandDefinition("""
+                SELECT f.*,f.CoverMediaId IS NOT NULL CoverOverride,l.Name LibraryName FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
+                WHERE (@parentId IS NOT NULL AND f.Id=@parentId) OR (@parentId IS NULL AND f.LibraryId=@libraryId AND f.PathKey='')
+                """, new { parentId, libraryId }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
+            currentMs = watch.ElapsedMilliseconds - openedMs;
+            if (libraryId is not null && current.LibraryId != libraryId) throw ApiRequestException.Invalid();
+            // Name cursors hold the natural sort key (migration 0018); the ":2" retires cursors that held paths.
+            var scope = sort == "id" && sortOrder == "asc" ? $"folders:{current.Id}" : $"folders:{current.Id}:{sort}:{sortOrder}{(sort == "name" ? ":2" : "")}";
+            var position = cursor is null ? null : cursors.Decode(cursor, scope);
+            var backwards = position?.Backward == true;
+            var descending = (sortOrder == "desc") != backwards;
+            var order = descending ? "DESC" : "ASC";
+            var compare = descending ? "<" : ">";
+            if (position is not null && sort == "name" && position.Tuple is not { Length: 1 }) throw new ApiRequestException(400, "invalid_cursor", "Refresh the folder listing.");
+            // Natural name order and directory modified time are both stored keys, so each page is one
+            // index seek (IX_Folders_Parent_Sort / IX_Folders_Parent_Modified).
+            var seek = position is null ? "" : sort switch
+            {
+                "name" => $"AND (f.SortKey,f.Id) {compare} (@key,@after)",
+                "modified" => $"AND (f.ModifiedTicks,f.Id) {compare} (@ticks,@after)",
+                _ => $"AND f.Id {compare} @after"
+            };
+            var ordering = sort switch { "name" => $"f.SortKey {order},f.Id {order}", "modified" => $"f.ModifiedTicks {order},f.Id {order}", _ => $"f.Id {order}" };
+            string Encode(FolderRow row, bool backward) => sort switch
+            {
+                "name" => cursors.Encode(scope, [row.SortKey], row.Id, backward),
+                "modified" => cursors.Encode(scope, row.ModifiedTicks, row.Id, backward),
+                _ => cursors.Encode(scope, 0, row.Id, backward)
+            };
+            stage = "listing folders and covers";
+            var rows = (await db.QueryAsync<FolderRow>(new CommandDefinition($"""
+                SELECT f.*,f.CoverMediaId IS NOT NULL CoverOverride,
+                COALESCE((SELECT json_array({CoverJson})
+                 FROM Media m JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
+                 WHERE m.Id=f.CoverMediaId AND m.LibraryId=f.LibraryId AND m.Availability='present' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
+                   AND EXISTS(SELECT 1 FROM FolderAncestry WHERE AncestorId=f.Id AND DescendantId=m.FolderId)),
+                (SELECT json_group_array(json(Cover)) FROM (SELECT {CoverJson} Cover
+                 FROM (SELECT m.Id,m.SourceRevision,m.ModifiedTicks FROM FolderAncestry a
+                       CROSS JOIN Media m ON m.Id IN (
+                         SELECT candidate.Id FROM Media candidate INDEXED BY IX_Media_ReadyFolderCover
+                         WHERE candidate.FolderId=a.DescendantId AND candidate.Availability='present' AND candidate.ProcessingStatus='ready'
+                         ORDER BY candidate.ModifiedTicks DESC,candidate.Id DESC LIMIT {CoverWindow})
+                       WHERE a.AncestorId=f.Id AND m.FolderId NOT IN ({HiddenFolders.Descendants})
+                       ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverWindow}) m
+                 CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
+                 WHERE c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
+                 ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverCandidates}))) CoverJson
+                FROM Folders f WHERE ParentId=@id AND Hidden=0 {seek} ORDER BY {ordering} LIMIT @limit
+                """, new { id = current.Id, after = position?.Id, key = position?.Tuple?[0], ticks = position?.Ticks, limit = (limit ?? 100) + 1, encoder = IndexingOptions.EncoderVersion }, cancellationToken: ct))).ToList();
+            listingMs = watch.ElapsedMilliseconds - openedMs - currentMs;
+            var more = rows.Count > (limit ?? 100); if (more) rows.RemoveAt(rows.Count - 1); if (backwards) rows.Reverse();
+            stage = "loading ancestors";
+            var ancestors = await db.QueryAsync<FolderRow>(new CommandDefinition("""
+                SELECT f.*,l.Name LibraryName FROM FolderAncestry a JOIN Folders f ON f.Id=a.AncestorId JOIN Libraries l ON l.Id=f.LibraryId
+                WHERE a.DescendantId=@id AND a.AncestorId<>@id ORDER BY f.Id
+                """, new { id = current.Id }, cancellationToken: ct));
+            return new(ToSummary(current), ancestors.Select(ToSummary).ToArray(), rows.Select(ToSummary).ToArray(),
+                rows.Count > 0 && (backwards ? position is not null : more) ? Encode(rows[^1], false) : null,
+                rows.Count > 0 && (backwards ? more : position is not null) ? Encode(rows[0], true) : null);
+        }
+        finally
         {
-            "name" => cursors.Encode(scope, [row.SortKey], row.Id, backward),
-            "modified" => cursors.Encode(scope, row.ModifiedTicks, row.Id, backward),
-            _ => cursors.Encode(scope, 0, row.Id, backward)
-        };
-        var rows = (await db.QueryAsync<FolderRow>(new CommandDefinition($"""
-            SELECT f.*,f.CoverMediaId IS NOT NULL CoverOverride,
-            COALESCE((SELECT json_array({CoverJson})
-             FROM Media m JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
-             WHERE m.Id=f.CoverMediaId AND m.LibraryId=f.LibraryId AND m.Availability='present' AND m.FolderId NOT IN ({HiddenFolders.Descendants}) AND c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
-               AND EXISTS(SELECT 1 FROM FolderAncestry WHERE AncestorId=f.Id AND DescendantId=m.FolderId)),
-            (SELECT json_group_array(json(Cover)) FROM (SELECT {CoverJson} Cover
-             FROM (SELECT m.Id,m.SourceRevision,m.ModifiedTicks FROM FolderAncestry a
-                   CROSS JOIN Media m ON m.FolderId=a.DescendantId AND m.LibraryId=f.LibraryId
-                   WHERE a.AncestorId=f.Id AND m.Availability='present' AND m.ProcessingStatus='ready' AND m.FolderId NOT IN ({HiddenFolders.Descendants})
-                   ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverWindow}) m
-             CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
-             WHERE c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
-             ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverCandidates}))) CoverJson
-            FROM Folders f WHERE ParentId=@id AND Hidden=0 {seek} ORDER BY {ordering} LIMIT @limit
-            """, new { id = current.Id, after = position?.Id, key = position?.Tuple?[0], ticks = position?.Ticks, limit = (limit ?? 100) + 1, encoder = IndexingOptions.EncoderVersion }, cancellationToken: ct))).ToList();
-        var more = rows.Count > (limit ?? 100); if (more) rows.RemoveAt(rows.Count - 1); if (backwards) rows.Reverse();
-        var ancestors = await db.QueryAsync<FolderRow>(new CommandDefinition("""
-            SELECT f.*,l.Name LibraryName FROM FolderAncestry a JOIN Folders f ON f.Id=a.AncestorId JOIN Libraries l ON l.Id=f.LibraryId
-            WHERE a.DescendantId=@id AND a.AncestorId<>@id ORDER BY f.Id
-            """, new { id = current.Id }, cancellationToken: ct));
-        return new(ToSummary(current), ancestors.Select(ToSummary).ToArray(), rows.Select(ToSummary).ToArray(),
-            rows.Count > 0 && (backwards ? position is not null : more) ? Encode(rows[^1], false) : null,
-            rows.Count > 0 && (backwards ? more : position is not null) ? Encode(rows[0], true) : null);
+            if (watch.ElapsedMilliseconds >= 500)
+                logger?.LogWarning("Folder listing stage {Stage} after {TotalMs} ms (open {OpenMs} ms, current {CurrentMs} ms, covers {CoversMs} ms; library {LibraryId}, parent {ParentId}, limit {Limit}, sort {Sort}, canceled {Canceled})",
+                    stage, watch.ElapsedMilliseconds, openedMs, currentMs, listingMs, libraryId, parentId, limit, sort, ct.IsCancellationRequested);
+        }
     }
     public async Task SetCoverAsync(long folder, long? mediaId, CancellationToken ct)
     {
@@ -141,11 +165,10 @@ public sealed class LibraryBrowser(Database database, CursorSigner cursors)
     // Enough candidates for a five-tile mosaic; the client decides how many it shows.
     private const int CoverCandidates = 5;
     // A folder's covers come from everything beneath it, and the cache lookup that proves a
-    // thumbnail exists costs one probe per candidate. Applied to the whole subtree that is a probe
-    // per file in the folder -- 121k of them on a 200k library to light up 240 thumbnails, which is
-    // most of what a folder listing spends. Narrowing to the newest few by index order first keeps
-    // the probes to this window per folder. It is wider than CoverCandidates so that files whose
-    // thumbnail has been evicted are passed over rather than leaving a folder short of covers.
+    // thumbnail exists costs one probe per candidate. Each descendant folder contributes at most
+    // this many ready files through an index seek; their newest 32 overall then probe the cache.
+    // Taking 32 from each descendant preserves the newest 32 across the entire subtree, without
+    // scanning and sorting all media in that subtree on every page load.
     private const int CoverWindow = 32;
     private const string CoverJson = "json_object('url','/api/media/' || m.Id || '/cache/' || m.SourceRevision || '/thumbnail?v=' || c.EncoderVersion,'width',c.Width,'height',c.Height)";
     private static readonly System.Text.Json.JsonSerializerOptions CoverJsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web);
