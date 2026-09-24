@@ -72,7 +72,7 @@ public sealed class BrowsingTests
     {
         await using var f = await PipelineFixture.CreateAsync();
         Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "nested"));
-        await f.ScanAsync();
+        var scan = await f.ScanAsync();
         await using var db = await f.Database.OpenAsync(default);
         var nested = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/nested'");
 
@@ -82,11 +82,11 @@ public sealed class BrowsingTests
             INSERT INTO Media(Id,LibraryId,FolderId,RelativePath,PathKey,FileName,MediaType,MimeType,Extension,
               SizeBytes,ModifiedAt,IndexedAt,EffectiveDate,LastSeenScanId,Width,Height,ModifiedTicks,ProcessingStatus)
             SELECT x,1,@nested,'album/nested/p'||x||'.jpg','album/nested/p'||x||'.jpg','p'||x||'.jpg','image','image/jpeg','.jpg',
-              x*1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',1,640,960,x,'ready' FROM n;
+              x*1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',@scanId,640,960,x,'ready' FROM n;
             INSERT INTO CacheEntries(MediaId,SourceRevision,Variant,EncoderVersion,State,RelativePath,SizeBytes,Width,Height,ContentHash,LastAccessAt)
             SELECT Id,SourceRevision,'thumbnail',1,'ready','t/'||Id||'.webp',1024,320,240,'hash','2026-01-01T00:00:00.0000000Z'
             FROM Media WHERE Id%2=0;
-            """, new { nested });
+            """, new { nested, scanId = scan.Id });
 
         var signer = new CursorSigner(f.Database);
         await signer.InitializeAsync(default);
@@ -104,7 +104,7 @@ public sealed class BrowsingTests
         await using var f = await PipelineFixture.CreateAsync();
         Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "first"));
         Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "second"));
-        await f.ScanAsync();
+        var scan = await f.ScanAsync();
         await using var db = await f.Database.OpenAsync(default);
         var first = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/first'");
         var second = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/second'");
@@ -113,16 +113,16 @@ public sealed class BrowsingTests
             INSERT INTO Media(Id,LibraryId,FolderId,RelativePath,PathKey,FileName,MediaType,MimeType,Extension,
               SizeBytes,ModifiedAt,IndexedAt,EffectiveDate,LastSeenScanId,ModifiedTicks,ProcessingStatus)
             SELECT x,1,@first,'album/first/'||x,'album/first/'||x,x||'.jpg','image','image/jpeg','.jpg',
-              1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',1,x,'ready' FROM n;
+              1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',@scanId,x,'ready' FROM n;
             WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<40)
             INSERT INTO Media(Id,LibraryId,FolderId,RelativePath,PathKey,FileName,MediaType,MimeType,Extension,
               SizeBytes,ModifiedAt,IndexedAt,EffectiveDate,LastSeenScanId,ModifiedTicks,ProcessingStatus)
             SELECT 40+x,1,@second,'album/second/'||x,'album/second/'||x,x||'.jpg','image','image/jpeg','.jpg',
-              1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',1,20+x,'ready' FROM n;
+              1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',@scanId,20+x,'ready' FROM n;
             INSERT INTO CacheEntries(MediaId,SourceRevision,Variant,EncoderVersion,State,RelativePath,SizeBytes,Width,Height,ContentHash,LastAccessAt)
             SELECT Id,SourceRevision,'thumbnail',1,'ready','t/'||Id||'.webp',1024,320,240,'hash','2026-01-01T00:00:00.0000000Z'
             FROM Media;
-            """, new { first, second });
+            """, new { first, second, scanId = scan.Id });
         var signer = new CursorSigner(f.Database);
         await signer.InitializeAsync(default);
         var album = Assert.Single((await new LibraryBrowser(f.Database, signer).FoldersAsync(1, null, 10, null, default)).Items);
