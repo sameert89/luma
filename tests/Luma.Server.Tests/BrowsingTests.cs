@@ -71,10 +71,11 @@ public sealed class BrowsingTests
     public async Task Folder_covers_skip_newer_media_whose_thumbnail_is_not_ready()
     {
         await using var f = await PipelineFixture.CreateAsync();
-        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "nested"));
         var scan = await f.ScanAsync();
         await using var db = await f.Database.OpenAsync(default);
-        var nested = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/nested'");
+        var root = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE LibraryId=1 AND PathKey=''");
+        var albumFolder = await CreateCoverFolderAsync(db, root, "album", scan.Id);
+        var nested = await CreateCoverFolderAsync(db, albumFolder, "album/nested", scan.Id);
 
         // Twenty files, newest last. Only the even-numbered ones keep a ready thumbnail.
         await db.ExecuteAsync("""
@@ -102,12 +103,12 @@ public sealed class BrowsingTests
     public async Task Folder_covers_rank_bounded_candidates_from_multiple_descendants()
     {
         await using var f = await PipelineFixture.CreateAsync();
-        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "first"));
-        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "second"));
         var scan = await f.ScanAsync();
         await using var db = await f.Database.OpenAsync(default);
-        var first = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/first'");
-        var second = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/second'");
+        var root = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE LibraryId=1 AND PathKey=''");
+        var albumFolder = await CreateCoverFolderAsync(db, root, "album", scan.Id);
+        var first = await CreateCoverFolderAsync(db, albumFolder, "album/first", scan.Id);
+        var second = await CreateCoverFolderAsync(db, albumFolder, "album/second", scan.Id);
         await db.ExecuteAsync("""
             WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<40)
             INSERT INTO Media(Id,LibraryId,FolderId,RelativePath,PathKey,FileName,MediaType,MimeType,Extension,
@@ -413,6 +414,18 @@ public sealed class BrowsingTests
 
     internal static async Task<MediaBrowser> BrowserAsync(PipelineFixture f)
     { var signer = new CursorSigner(f.Database); await signer.InitializeAsync(default); return new(f.Database, signer); }
+    private static async Task<long> CreateCoverFolderAsync(Microsoft.Data.Sqlite.SqliteConnection db, long parent, string path, long scanId)
+    {
+        var id = await db.ExecuteScalarAsync<long>("""
+            INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)
+            VALUES(1,@parent,@path,@path,@scanId) RETURNING Id
+            """, new { parent, path, scanId });
+        await db.ExecuteAsync("""
+            INSERT INTO FolderAncestry VALUES(@id,@id);
+            INSERT INTO FolderAncestry SELECT AncestorId,@id FROM FolderAncestry WHERE DescendantId=@parent;
+            """, new { id, parent });
+        return id;
+    }
     internal static async Task SeedAsync(PipelineFixture f, int count)
     {
         await f.ScanAsync(); await using var db = await f.Database.OpenAsync(default);
