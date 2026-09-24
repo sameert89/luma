@@ -94,7 +94,7 @@ if (mode == "decode-benchmark")
     using (var image = new Image<Rgb24>(1920, 1080))
     {
         for (var y = 0; y < image.Height; y++) for (var x = 0; x < image.Width; x++)
-                image[x, y] = new((byte)(x % 256), (byte)(y % 256), (byte)((x + y) % 256));
+            image[x, y] = new((byte)(x % 256), (byte)(y % 256), (byte)((x + y) % 256));
         await image.SaveAsJpegAsync(source);
     }
     var thumbnail = Path.Combine(directory, "thumbnail.webp");

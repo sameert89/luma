@@ -350,14 +350,14 @@ public sealed class MetadataJobs(Database database, IndexingOptions options, ILo
             // XMP reader locates one, by its self-delimiting <?xpacket?> wrapper.
             if (source.MediaType != "image") keywords.AddRange(await MetadataKeywords.ReadEmbeddedXmpPacketAsync(path, timeout.Token));
             if (request.IncludeSidecars) foreach (var candidate in new[] { path + ".xmp", Path.ChangeExtension(path, ".xmp") }.Distinct())
-                {
-                    if (!File.Exists(candidate)) continue;
-                    SourcePaths.Check(root, candidate);
-                    await using var stream = new FileStream(candidate, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous);
-                    if (stream.Length > MetadataKeywords.MaximumMetadataBytes) throw new InvalidDataException();
-                    var bytes = new byte[(int)stream.Length]; await stream.ReadExactlyAsync(bytes, timeout.Token);
-                    keywords.AddRange(MetadataKeywords.ReadXmp(bytes));
-                }
+            {
+                if (!File.Exists(candidate)) continue;
+                SourcePaths.Check(root, candidate);
+                await using var stream = new FileStream(candidate, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous);
+                if (stream.Length > MetadataKeywords.MaximumMetadataBytes) throw new InvalidDataException();
+                var bytes = new byte[(int)stream.Length]; await stream.ReadExactlyAsync(bytes, timeout.Token);
+                keywords.AddRange(MetadataKeywords.ReadXmp(bytes));
+            }
             var normalized = new Dictionary<string, string>();
             foreach (var keyword in keywords)
             {
@@ -463,11 +463,11 @@ public sealed class MetadataJobs(Database database, IndexingOptions options, ILo
         var file = new FileInfo(path);
         var fingerprint = $"{file.Length}:{file.LastWriteTimeUtc.Ticks}";
         if (sidecars) foreach (var candidate in new[] { path + ".xmp", Path.ChangeExtension(path, ".xmp") }.Distinct())
-            {
-                var adjacent = new FileInfo(candidate);
-                if (adjacent.Exists) SourcePaths.Check(root, candidate);
-                fingerprint += adjacent.Exists ? $"|{adjacent.Length}:{adjacent.LastWriteTimeUtc.Ticks}" : "|missing";
-            }
+        {
+            var adjacent = new FileInfo(candidate);
+            if (adjacent.Exists) SourcePaths.Check(root, candidate);
+            fingerprint += adjacent.Exists ? $"|{adjacent.Length}:{adjacent.LastWriteTimeUtc.Ticks}" : "|missing";
+        }
         return fingerprint;
     }
     private sealed class MetadataChangedException : IOException;
