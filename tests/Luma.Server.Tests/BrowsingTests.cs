@@ -99,6 +99,38 @@ public sealed class BrowsingTests
     }
 
     [Fact]
+    public async Task Folder_covers_rank_bounded_candidates_from_multiple_descendants()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "first"));
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "second"));
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var first = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/first'");
+        var second = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE PathKey='album/second'");
+        await db.ExecuteAsync("""
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<40)
+            INSERT INTO Media(Id,LibraryId,FolderId,RelativePath,PathKey,FileName,MediaType,MimeType,Extension,
+              SizeBytes,ModifiedAt,IndexedAt,EffectiveDate,LastSeenScanId,ModifiedTicks,ProcessingStatus)
+            SELECT x,1,@first,'album/first/'||x,'album/first/'||x,x||'.jpg','image','image/jpeg','.jpg',
+              1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',1,x,'ready' FROM n;
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<40)
+            INSERT INTO Media(Id,LibraryId,FolderId,RelativePath,PathKey,FileName,MediaType,MimeType,Extension,
+              SizeBytes,ModifiedAt,IndexedAt,EffectiveDate,LastSeenScanId,ModifiedTicks,ProcessingStatus)
+            SELECT 40+x,1,@second,'album/second/'||x,'album/second/'||x,x||'.jpg','image','image/jpeg','.jpg',
+              1024,'2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z','2026-01-01T00:00:00.0000000Z',1,20+x,'ready' FROM n;
+            INSERT INTO CacheEntries(MediaId,SourceRevision,Variant,EncoderVersion,State,RelativePath,SizeBytes,Width,Height,ContentHash,LastAccessAt)
+            SELECT Id,SourceRevision,'thumbnail',1,'ready','t/'||Id||'.webp',1024,320,240,'hash','2026-01-01T00:00:00.0000000Z'
+            FROM Media;
+            """, new { first, second });
+        var signer = new CursorSigner(f.Database);
+        await signer.InitializeAsync(default);
+        var album = Assert.Single((await new LibraryBrowser(f.Database, signer).FoldersAsync(1, null, 10, null, default)).Items);
+        Assert.Equal(new[] { 80L, 79, 78, 77, 76 }.Select(id => $"/api/media/{id}/cache/1/thumbnail?v=1"),
+            album.CoverImages!.Select(image => image.Url));
+    }
+
+    [Fact]
     public async Task Missing_preview_does_not_wait_for_the_database_writer()
     {
         await using var f = await PipelineFixture.CreateAsync();
