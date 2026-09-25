@@ -57,6 +57,7 @@ import {
 import packageJson from '../../package.json'
 
 type Section = 'library' | 'reels' | 'search' | 'collections' | 'settings' | 'help'
+const sections: Section[] = ['library', 'reels', 'search', 'collections', 'settings', 'help']
 // Help is opened from another destination and returns to it; `from` keeps that across a refresh.
 type HelpOrigin = Exclude<Section, 'help'>
 const helpOrigins: HelpOrigin[] = ['library', 'reels', 'search', 'collections', 'settings']
@@ -69,6 +70,8 @@ type HistorySnapshot = {
   returnToViewer?: boolean
   lumaModal?: string
 }
+type PersistedView = Pick<HistorySnapshot, 'filters' | 'section' | 'helpOrigin' | 'mediaId'>
+const persistedViewKey = 'luma-last-view-v1'
 
 // Reels play everything that moves: videos and animated GIFs.
 const reelsMediaType = 'motion'
@@ -110,7 +113,7 @@ function readFilters(): Filters {
 function readSection(): Section {
   const params = new URLSearchParams(window.location.search)
   const view = params.get('view')
-  return view === 'reels' ? 'reels' : view === 'help' ? 'help' : params.get('q') ? 'search' : 'library'
+  return sections.find(section => section === view) ?? (params.get('q') ? 'search' : 'library')
 }
 
 function readHelpOrigin(): HelpOrigin {
@@ -118,10 +121,25 @@ function readHelpOrigin(): HelpOrigin {
   return helpOrigins.find(origin => origin === from) ?? 'library'
 }
 
+function readPersistedView(): PersistedView | null {
+  if (window.location.search) return null
+  try {
+    const value = JSON.parse(localStorage.getItem(persistedViewKey) ?? 'null') as PersistedView | null
+    if (!value || !value.filters || !value.section || !sections.includes(value.section)) return null
+    return value
+  } catch {
+    return null
+  }
+}
+
 export function App() {
-  const [filters, setFilters] = useState<Filters>(readFilters)
-  const [section, setSection] = useState<Section>(readSection)
-  const [helpOrigin, setHelpOrigin] = useState<HelpOrigin>(readHelpOrigin)
+  // An installed PWA can be relaunched at its start URL after Android closes it. History state and
+  // the previous query string are then gone, so keep the last real destination independently.
+  // An explicit URL always wins, preserving shared links and browser history semantics.
+  const [persistedView] = useState(readPersistedView)
+  const [filters, setFilters] = useState<Filters>(() => persistedView?.filters ?? readFilters())
+  const [section, setSection] = useState<Section>(() => persistedView?.section ?? readSection())
+  const [helpOrigin, setHelpOrigin] = useState<HelpOrigin>(() => persistedView?.helpOrigin ?? readHelpOrigin())
   const [search, setSearch] = useState(filters.q ?? '')
   const [searchFocusRequested, setSearchFocusRequested] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
@@ -159,10 +177,10 @@ export function App() {
   const activeRef = useRef<Media | null>(null)
   activeRef.current = active
   const [restoreId] = useState(() => {
-    const id = Number(new URLSearchParams(window.location.search).get('media'))
+    const id = Number(new URLSearchParams(window.location.search).get('media') ?? persistedView?.mediaId)
     return Number.isSafeInteger(id) && id > 0 ? id : null
   })
-  const [restoreViewer] = useState(() => new URLSearchParams(window.location.search).get('view') !== 'reels')
+  const [restoreViewer] = useState(() => section !== 'reels')
   const restored = useQuery({
     queryKey: ['restore-media', restoreId],
     queryFn: ({ signal }) => request<Media>(`/api/media/${restoreId}`, signal),
@@ -264,6 +282,9 @@ export function App() {
       active?.id ?? (section === 'reels' ? reelId : null) ?? (restoreId && !restoredOnce.current ? restoreId : null)
     if (mediaId) params.set('media', String(mediaId))
     if (section === 'reels') params.set('view', 'reels')
+    if (section === 'search') params.set('view', 'search')
+    if (section === 'collections') params.set('view', 'collections')
+    if (section === 'settings') params.set('view', 'settings')
     if (section === 'help') {
       params.set('view', 'help')
       params.set('from', helpOrigin)
@@ -278,6 +299,7 @@ export function App() {
     }
     if (!mediaId) delete state.mediaId
     window.history.replaceState(state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
+    localStorage.setItem(persistedViewKey, JSON.stringify({ filters, section, helpOrigin, ...(mediaId ? { mediaId } : {}) }))
   }, [filters, active?.id, section, restoreId, reelId, helpOrigin])
   useEffect(() => {
     if (!window.history.state)

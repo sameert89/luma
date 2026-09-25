@@ -63,6 +63,34 @@ function browsingApi() {
 }
 
 describe('browsing shell', () => {
+  it('restores the last screen and filters when the PWA relaunches at its start URL', async () => {
+    browsingApi()
+    resetStorage()
+    window.history.replaceState(null, '', '/?libraryId=1&folderId=2&preference=liked')
+    const mount = () =>
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+          <App />
+        </QueryClientProvider>,
+      )
+
+    mount()
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await waitFor(() => expect(window.location.search).toContain('view=reels'))
+    expect(window.location.search).toContain('preference=liked')
+    cleanup()
+
+    // Android commonly relaunches an installed PWA at `/`, without the closed tab's URL/history.
+    window.history.replaceState(null, '', '/')
+    mount()
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Reels' })[0]).toHaveAttribute('aria-current', 'page'))
+    await waitFor(() => expect(window.location.search).toContain('view=reels'))
+    expect(window.location.search).toContain('libraryId=1')
+    expect(window.location.search).toContain('folderId=2')
+    expect(window.location.search).toContain('preference=liked')
+  })
+
   it('selects shuffle and reshuffles without randomUUID on HTTP hosts', async () => {
     vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
     browsingApi()
@@ -161,7 +189,7 @@ describe('browsing shell', () => {
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Beach{Enter}')
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     await userEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
-    expect(window.location.search).toBe('')
+    expect(window.location.search).toBe('?view=search')
     expect(screen.getByRole('combobox', { name: 'Search media' })).toHaveValue('')
   })
 
@@ -330,7 +358,7 @@ describe('browsing shell', () => {
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Beach{Enter}')
     expect(window.location.search).toContain('q=Beach')
     await userEvent.click(screen.getByRole('button', { name: 'Clear search' }))
-    expect(window.location.search).toBe('')
+    expect(window.location.search).toBe('?view=search')
     expect(screen.getByRole('combobox', { name: 'Search media' })).toHaveValue('')
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
   })
@@ -1156,7 +1184,7 @@ describe('help', () => {
     ).toBe(false)
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('heading', { name: 'Theme & appearance' })).toBeVisible()
-    expect(window.location.search).toBe('?libraryId=1&folderId=2&mediaType=video')
+    expect(window.location.search).toBe('?libraryId=1&folderId=2&mediaType=video&view=settings')
     await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
     expect(await screen.findByRole('heading', { name: 'Trips' })).toBeVisible()
   })
@@ -1179,7 +1207,7 @@ describe('help', () => {
     ).toBe(false)
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('heading', { name: 'Theme & appearance' })).toBeVisible()
-    expect(window.location.search).toBe('?libraryId=1&folderId=2')
+    expect(window.location.search).toBe('?libraryId=1&folderId=2&view=settings')
   })
 })
 

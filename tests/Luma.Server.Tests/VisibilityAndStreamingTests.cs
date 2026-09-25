@@ -82,6 +82,23 @@ public sealed class VisibilityAndStreamingTests
     }
 
     [Fact]
+    public async Task Default_reels_query_seeks_the_motion_ordering_index()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var query = new MediaQuery { MediaType = "motion", Limit = 2 }.Normalize();
+        var (predicate, parameters) = query.Predicate();
+        parameters.Add("limit", query.Limit);
+
+        var plan = string.Join('\n', (await db.QueryAsync(
+            $"EXPLAIN QUERY PLAN SELECT m.* FROM Media m WHERE {predicate} ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT @limit",
+            parameters)).Select(row => (string)row.detail));
+
+        Assert.Contains("IX_Media_MotionModified", plan);
+        Assert.DoesNotContain("USE TEMP B-TREE FOR ORDER BY", plan);
+    }
+
+    [Fact]
     public async Task Original_streams_bound_open_ranges_and_revalidate_with_a_strong_validator()
     {
         await using var fixture = await PipelineFixture.CreateAsync();
