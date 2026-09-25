@@ -6,6 +6,16 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '1.0.10',
+    date: '2026-09-25',
+    headline: 'Reels opens quickly and your place survives a restart',
+    changes: [
+      'Reels no longer searches through the photo ordering index to find videos and animated GIFs. Motion-only ordering indexes keep its first page and next/previous lookups proportional to the moving media in the library.',
+      'Media listings no longer fail with “This search took too long” after an arbitrary two seconds. They run until they finish or the browser cancels them; cancellation still interrupts the database immediately.',
+      'Closing a tab or installed app no longer loses the screen and filters you were using. Relaunching Luma at its start URL restores the last Library, Search, Collections, Settings, Help or Reels destination, its folder and filters, and an open viewer or reel.',
+    ],
+  },
+  {
     version: '1.0.9',
     date: '2026-09-22',
     headline: 'Browsing stays quick while a scan runs',

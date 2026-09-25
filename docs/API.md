@@ -58,7 +58,7 @@ All tables/indexes below are introduced with the owning feature's migration and 
 | shuffle | Persist a uniformly generated 63-bit random key and `(availability,randomKey,id)` index. Seed maps to a pivot; seek from pivot then wrap once, cursor records segment/key/ID. Seed rotates a fixed random permutation, not an independent permutation; filters apply before page limit. Grouping + shuffle rotates within each group |
 | random image | Same filtered random-key pivot with wrap, LIMIT 1, cache-ready images only. Unequal key gaps create selection bias: acceptable for decoration, not statistical sampling. No `ORDER BY random()` over a full result |
 
-Rare broad substring/multifilter queries have a 2 s database execution deadline; return 503 `query_timeout` with narrower-search guidance. This is a safety ceiling, not permission to exceed common-query budgets. Candidate strategies must be measured in their implementation stage; no performance result is claimed by this contract.
+Media queries run until they complete or the caller cancels the request. Cancellation interrupts SQLite promptly. Query plans and indexes must keep common requests within the performance budgets; the API does not turn slower valid requests into `503 query_timeout` responses.
 
 ## Remaining endpoint behavior
 

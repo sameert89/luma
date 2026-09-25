@@ -74,138 +74,134 @@ public sealed class MediaBrowser(Database database, CursorSigner cursors)
     public async Task<MediaPage> ListAsync(MediaQuery query, CancellationToken ct)
     {
         await using var db = await database.OpenAsync(ct);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(TimeSpan.FromSeconds(2));
-        using var interrupt = deadline.Token.Register(() => SQLitePCL.raw.sqlite3_interrupt(db.Handle));
-        try
+        // A fixed deadline turns a missing query index into a broken user experience and makes
+        // cold-but-valid requests fail on slower self-hosted storage. The caller still owns the
+        // request lifetime; interrupt SQLite immediately if it disconnects or cancels.
+        using var interrupt = ct.Register(() => SQLitePCL.raw.sqlite3_interrupt(db.Handle));
+        using var tx = db.BeginTransaction(deferred: true);
+        if (query.FolderId is { } folder)
         {
-            using var tx = db.BeginTransaction(deferred: true);
-            if (query.FolderId is { } folder)
-            {
-                var library = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition("SELECT LibraryId FROM Folders WHERE Id=@folder", new { folder }, tx, cancellationToken: deadline.Token));
-                if (library is null) throw ApiRequestException.Missing();
-                if (query.LibraryId is { } root && library != root) throw ApiRequestException.Invalid("The folder belongs to another library.");
-            }
-            var (predicate, p) = query.Predicate();
-            var fingerprint = query.Fingerprint();
-            var position = query.Cursor is null ? null : cursors.Decode(query.Cursor, fingerprint);
-            var backward = position?.Backward == true;
-            var ordering = new MediaOrdering(query);
-            List<MediaRow> rows;
-            if (query.Sort == "shuffle")
-            {
-                rows = [];
-                var grouped = query.GroupBy != "none";
-                var tuple = position?.Tuple;
-                var segmentIndex = grouped ? 1 : 0;
-                long? group = grouped && tuple is not null ? long.Parse(tuple[0], System.Globalization.CultureInfo.InvariantCulture) : null;
-                var segment = tuple is not null ? int.Parse(tuple[segmentIndex], System.Globalization.CultureInfo.InvariantCulture) : backward ? 1 : 0;
-                var direction = backward ? "DESC" : "ASC";
-                var firstGroup = true;
-                while (rows.Count < query.Limit.Value + 1)
-                {
-                    if (grouped && (!firstGroup || group is null))
-                    {
-                        var (groupPredicate, groupParameters) = query.Predicate();
-                        var seeking = group is not null;
-                        if (seeking) groupParameters.Add("group", group);
-                        group = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(ordering.NextGroup(groupPredicate, seeking, backward), groupParameters, tx, cancellationToken: deadline.Token));
-                        if (group is null) break;
-                        segment = backward ? 1 : 0;
-                    }
-                    for (var part = segment; part >= 0 && part <= 1 && rows.Count < query.Limit.Value + 1; part += backward ? -1 : 1)
-                    {
-                        var (basePredicate, parameters) = query.Predicate();
-                        parameters.Add("pivot", ordering.Pivot);
-                        parameters.Add("limit", query.Limit.Value + 1 - rows.Count);
-                        basePredicate += part == 0 ? " AND m.RandomKey>=@pivot" : " AND m.RandomKey<@pivot";
-                        if (grouped) { basePredicate += " AND " + ordering.GroupFilter; parameters.Add("group", group); }
-                        if (position is not null && firstGroup && part == segment)
-                        {
-                            parameters.Add("key", long.Parse(tuple![segmentIndex + 1], System.Globalization.CultureInfo.InvariantCulture));
-                            parameters.Add("id", position.Id);
-                            basePredicate += $" AND (m.RandomKey,m.Id) {(backward ? "<" : ">")} (@key,@id)";
-                        }
-                        rows.AddRange(Stamped(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {basePredicate} ORDER BY m.RandomKey {direction},m.Id {direction} LIMIT @limit", parameters, tx, cancellationToken: deadline.Token)), grouped ? group : null));
-                    }
-                    if (!grouped) break;
-                    firstGroup = false;
-                }
-            }
-            else if (query.GroupBy != "none")
-            {
-                rows = [];
-                long? group = position?.Tuple is { } tuple ? long.Parse(tuple[0], System.Globalization.CultureInfo.InvariantCulture) : null;
-                var firstGroup = true;
-                while (rows.Count < query.Limit.Value + 1)
-                {
-                    if (!firstGroup || group is null)
-                    {
-                        var (groupPredicate, groupParameters) = query.Predicate();
-                        var seeking = group is not null;
-                        if (seeking) groupParameters.Add("group", group);
-                        group = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(ordering.NextGroup(groupPredicate, seeking, backward), groupParameters, tx, cancellationToken: deadline.Token));
-                        if (group is null) break;
-                    }
-                    var (withinPredicate, parameters) = query.Predicate();
-                    withinPredicate += " AND " + ordering.GroupFilter;
-                    parameters.Add("group", group);
-                    parameters.Add("limit", query.Limit.Value + 1 - rows.Count);
-                    if (query.Sort == "type")
-                    {
-                        rows.AddRange(Stamped(await TypeRowsAsync(db, tx, query, withinPredicate, parameters, firstGroup ? position : null, backward, query.Limit.Value + 1 - rows.Count, deadline.Token), group));
-                        firstGroup = false;
-                        continue;
-                    }
-                    var ascending = (query.Order == "asc") != backward;
-                    if (position is not null && firstGroup)
-                    {
-                        object key = query.Sort is "name" or "type" ? position.Tuple![1] : long.Parse(position.Tuple![1], System.Globalization.CultureInfo.InvariantCulture);
-                        parameters.Add("key", key); parameters.Add("id", position.Id);
-                        withinPredicate += $" AND ({ordering.KeyExpression},m.Id) {(ascending ? ">" : "<")} (@key,@id)";
-                    }
-                    var direction = ascending ? "ASC" : "DESC";
-                    rows.AddRange(Stamped(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {withinPredicate} ORDER BY {ordering.KeyExpression} {direction},m.Id {direction} LIMIT @limit", parameters, tx, cancellationToken: deadline.Token)), group));
-                    firstGroup = false;
-                }
-            }
-            else if (query.Sort == "type")
-            {
-                var (typePredicate, parameters) = query.Predicate();
-                rows = await TypeRowsAsync(db, tx, query, typePredicate, parameters, position, backward, query.Limit.Value + 1, deadline.Token);
-            }
-            else
-            {
-                // Only plain sorts page by a cursor seek; the branches above build their own predicates.
-                if (position is not null) predicate += " AND " + ordering.Seek(position, p, backward);
-                p.Add("limit", query.Limit!.Value + 1);
-                rows = (await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {predicate} ORDER BY {ordering.Order(backward)} LIMIT @limit", p, tx, cancellationToken: deadline.Token))).ToList();
-            }
-            var more = rows.Count > query.Limit;
-            if (more) rows.RemoveAt(rows.Count - 1);
-            if (backward) rows.Reverse();
-            var folderLabels = query.GroupBy == "folder" ? (await db.QueryAsync<GroupName>(new CommandDefinition("SELECT f.Id,CASE WHEN f.RelativePath='' THEN l.Name ELSE l.Name||' / '||f.RelativePath END Name FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId WHERE f.Id IN (SELECT value FROM json_each(@ids))", new { ids = JsonSerializer.Serialize(rows.Select(x => x.FolderId).Distinct()) }, tx, cancellationToken: deadline.Token))).ToDictionary(x => x.Id, x => x.Name) : [];
-            var tagLabels = query.GroupBy == "tag" ? (await db.QueryAsync<GroupName>(new CommandDefinition("SELECT t.Id,t.Name FROM Tags t WHERE t.Id IN (SELECT value FROM json_each(@ids))", new { ids = JsonSerializer.Serialize(rows.Select(x => x.GroupValue).Distinct()) }, tx, cancellationToken: deadline.Token))).ToDictionary(x => x.Id, x => x.Name) : [];
-            var items = (await SummariesAsync(db, tx, rows, deadline.Token)).Select((item, i) => item with
-            {
-                GroupKey = ordering.GroupKey(rows[i]),
-                GroupLabel = query.GroupBy switch
-                {
-                    "folder" => folderLabels.GetValueOrDefault(item.FolderId),
-                    "type" => item.MediaType == "image" ? "Photos" : "Videos",
-                    "date" => ordering.GroupKey(rows[i]),
-                    "tag" => rows[i].GroupValue is { } tag ? tagLabels.GetValueOrDefault(tag) : null,
-                    _ => null
-                }
-            }).ToArray();
-            tx.Commit();
-            if (rows.Count == 0) return new(items, null, null, query.Seed);
-            return new(items,
-                (backward ? position is not null : more) ? cursors.Encode(fingerprint, ordering.Tuple(rows[^1]), rows[^1].Id, false) : null,
-                (backward ? more : position is not null) ? cursors.Encode(fingerprint, ordering.Tuple(rows[0]), rows[0].Id, true) : null, query.Seed);
+            var library = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition("SELECT LibraryId FROM Folders WHERE Id=@folder", new { folder }, tx, cancellationToken: ct));
+            if (library is null) throw ApiRequestException.Missing();
+            if (query.LibraryId is { } root && library != root) throw ApiRequestException.Invalid("The folder belongs to another library.");
         }
-        catch (Exception error) when (deadline.IsCancellationRequested && !ct.IsCancellationRequested && error is SqliteException or OperationCanceledException)
-        { throw new ApiRequestException(503, "query_timeout", "This search took too long. Try narrowing the filters."); }
+        var (predicate, p) = query.Predicate();
+        var fingerprint = query.Fingerprint();
+        var position = query.Cursor is null ? null : cursors.Decode(query.Cursor, fingerprint);
+        var backward = position?.Backward == true;
+        var ordering = new MediaOrdering(query);
+        List<MediaRow> rows;
+        if (query.Sort == "shuffle")
+        {
+            rows = [];
+            var grouped = query.GroupBy != "none";
+            var tuple = position?.Tuple;
+            var segmentIndex = grouped ? 1 : 0;
+            long? group = grouped && tuple is not null ? long.Parse(tuple[0], System.Globalization.CultureInfo.InvariantCulture) : null;
+            var segment = tuple is not null ? int.Parse(tuple[segmentIndex], System.Globalization.CultureInfo.InvariantCulture) : backward ? 1 : 0;
+            var direction = backward ? "DESC" : "ASC";
+            var firstGroup = true;
+            while (rows.Count < query.Limit.Value + 1)
+            {
+                if (grouped && (!firstGroup || group is null))
+                {
+                    var (groupPredicate, groupParameters) = query.Predicate();
+                    var seeking = group is not null;
+                    if (seeking) groupParameters.Add("group", group);
+                    group = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(ordering.NextGroup(groupPredicate, seeking, backward), groupParameters, tx, cancellationToken: ct));
+                    if (group is null) break;
+                    segment = backward ? 1 : 0;
+                }
+                for (var part = segment; part >= 0 && part <= 1 && rows.Count < query.Limit.Value + 1; part += backward ? -1 : 1)
+                {
+                    var (basePredicate, parameters) = query.Predicate();
+                    parameters.Add("pivot", ordering.Pivot);
+                    parameters.Add("limit", query.Limit.Value + 1 - rows.Count);
+                    basePredicate += part == 0 ? " AND m.RandomKey>=@pivot" : " AND m.RandomKey<@pivot";
+                    if (grouped) { basePredicate += " AND " + ordering.GroupFilter; parameters.Add("group", group); }
+                    if (position is not null && firstGroup && part == segment)
+                    {
+                        parameters.Add("key", long.Parse(tuple![segmentIndex + 1], System.Globalization.CultureInfo.InvariantCulture));
+                        parameters.Add("id", position.Id);
+                        basePredicate += $" AND (m.RandomKey,m.Id) {(backward ? "<" : ">")} (@key,@id)";
+                    }
+                    rows.AddRange(Stamped(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {basePredicate} ORDER BY m.RandomKey {direction},m.Id {direction} LIMIT @limit", parameters, tx, cancellationToken: ct)), grouped ? group : null));
+                }
+                if (!grouped) break;
+                firstGroup = false;
+            }
+        }
+        else if (query.GroupBy != "none")
+        {
+            rows = [];
+            long? group = position?.Tuple is { } tuple ? long.Parse(tuple[0], System.Globalization.CultureInfo.InvariantCulture) : null;
+            var firstGroup = true;
+            while (rows.Count < query.Limit.Value + 1)
+            {
+                if (!firstGroup || group is null)
+                {
+                    var (groupPredicate, groupParameters) = query.Predicate();
+                    var seeking = group is not null;
+                    if (seeking) groupParameters.Add("group", group);
+                    group = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(ordering.NextGroup(groupPredicate, seeking, backward), groupParameters, tx, cancellationToken: ct));
+                    if (group is null) break;
+                }
+                var (withinPredicate, parameters) = query.Predicate();
+                withinPredicate += " AND " + ordering.GroupFilter;
+                parameters.Add("group", group);
+                parameters.Add("limit", query.Limit.Value + 1 - rows.Count);
+                if (query.Sort == "type")
+                {
+                    rows.AddRange(Stamped(await TypeRowsAsync(db, tx, query, withinPredicate, parameters, firstGroup ? position : null, backward, query.Limit.Value + 1 - rows.Count, ct), group));
+                    firstGroup = false;
+                    continue;
+                }
+                var ascending = (query.Order == "asc") != backward;
+                if (position is not null && firstGroup)
+                {
+                    object key = query.Sort is "name" or "type" ? position.Tuple![1] : long.Parse(position.Tuple![1], System.Globalization.CultureInfo.InvariantCulture);
+                    parameters.Add("key", key); parameters.Add("id", position.Id);
+                    withinPredicate += $" AND ({ordering.KeyExpression},m.Id) {(ascending ? ">" : "<")} (@key,@id)";
+                }
+                var direction = ascending ? "ASC" : "DESC";
+                rows.AddRange(Stamped(await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {withinPredicate} ORDER BY {ordering.KeyExpression} {direction},m.Id {direction} LIMIT @limit", parameters, tx, cancellationToken: ct)), group));
+                firstGroup = false;
+            }
+        }
+        else if (query.Sort == "type")
+        {
+            var (typePredicate, parameters) = query.Predicate();
+            rows = await TypeRowsAsync(db, tx, query, typePredicate, parameters, position, backward, query.Limit.Value + 1, ct);
+        }
+        else
+        {
+            // Only plain sorts page by a cursor seek; the branches above build their own predicates.
+            if (position is not null) predicate += " AND " + ordering.Seek(position, p, backward);
+            p.Add("limit", query.Limit!.Value + 1);
+            rows = (await db.QueryAsync<MediaRow>(new CommandDefinition($"SELECT m.* FROM Media m WHERE {predicate} ORDER BY {ordering.Order(backward)} LIMIT @limit", p, tx, cancellationToken: ct))).ToList();
+        }
+        var more = rows.Count > query.Limit;
+        if (more) rows.RemoveAt(rows.Count - 1);
+        if (backward) rows.Reverse();
+        var folderLabels = query.GroupBy == "folder" ? (await db.QueryAsync<GroupName>(new CommandDefinition("SELECT f.Id,CASE WHEN f.RelativePath='' THEN l.Name ELSE l.Name||' / '||f.RelativePath END Name FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId WHERE f.Id IN (SELECT value FROM json_each(@ids))", new { ids = JsonSerializer.Serialize(rows.Select(x => x.FolderId).Distinct()) }, tx, cancellationToken: ct))).ToDictionary(x => x.Id, x => x.Name) : [];
+        var tagLabels = query.GroupBy == "tag" ? (await db.QueryAsync<GroupName>(new CommandDefinition("SELECT t.Id,t.Name FROM Tags t WHERE t.Id IN (SELECT value FROM json_each(@ids))", new { ids = JsonSerializer.Serialize(rows.Select(x => x.GroupValue).Distinct()) }, tx, cancellationToken: ct))).ToDictionary(x => x.Id, x => x.Name) : [];
+        var items = (await SummariesAsync(db, tx, rows, ct)).Select((item, i) => item with
+        {
+            GroupKey = ordering.GroupKey(rows[i]),
+            GroupLabel = query.GroupBy switch
+            {
+                "folder" => folderLabels.GetValueOrDefault(item.FolderId),
+                "type" => item.MediaType == "image" ? "Photos" : "Videos",
+                "date" => ordering.GroupKey(rows[i]),
+                "tag" => rows[i].GroupValue is { } tag ? tagLabels.GetValueOrDefault(tag) : null,
+                _ => null
+            }
+        }).ToArray();
+        tx.Commit();
+        if (rows.Count == 0) return new(items, null, null, query.Seed);
+        return new(items,
+            (backward ? position is not null : more) ? cursors.Encode(fingerprint, ordering.Tuple(rows[^1]), rows[^1].Id, false) : null,
+            (backward ? more : position is not null) ? cursors.Encode(fingerprint, ordering.Tuple(rows[0]), rows[0].Id, true) : null, query.Seed);
     }
 
     // Seek IDs within each of the two types. SQLite's text tuple range otherwise
