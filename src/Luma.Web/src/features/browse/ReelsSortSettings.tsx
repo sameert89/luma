@@ -43,8 +43,8 @@ export function ReelsSortSettings() {
         </Field>
       </div>
       <p className="text-sm leading-relaxed text-muted">
-        Applies each time you open Reels. You can still change the order from Filters while you watch, and Watch on Reels
-        from a photo or video keeps the order you were browsing in, so it carries on from that item.
+        Applies each time you open Reels. You can still change the order from Filters while you watch, and Watch on
+        Reels from a photo or video keeps the order you were browsing in, so it carries on from that item.
       </p>
     </SettingsSection>
   )

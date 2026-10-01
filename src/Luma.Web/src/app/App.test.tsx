@@ -85,7 +85,9 @@ describe('browsing shell', () => {
     window.history.replaceState(null, '', '/')
     mount()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Reels' })[0]).toHaveAttribute('aria-current', 'page'))
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Reels' })[0]).toHaveAttribute('aria-current', 'page'),
+    )
     await waitFor(() => expect(window.location.search).toContain('view=reels'))
     expect(window.location.search).toContain('libraryId=1')
     expect(window.location.search).toContain('folderId=2')

@@ -63,7 +63,8 @@ export type SortFields = Pick<Filters, 'sort' | 'order' | 'seed'>
 export function reelsSortFields(choice: ReelsSort, from: Filters): SortFields {
   if (choice.sort === 'library') return { sort: from.sort, order: from.order, seed: from.seed }
   if (choice.sort === 'shuffle') return { sort: 'shuffle', order: undefined, seed: shuffleSeed() }
-  if (choice.sort === 'modified' && choice.order === 'desc') return { sort: undefined, order: undefined, seed: undefined }
+  if (choice.sort === 'modified' && choice.order === 'desc')
+    return { sort: undefined, order: undefined, seed: undefined }
   return { sort: choice.sort, order: choice.order, seed: undefined }
 }
 

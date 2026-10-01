@@ -301,7 +301,10 @@ export function App() {
     }
     if (!mediaId) delete state.mediaId
     window.history.replaceState(state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
-    localStorage.setItem(persistedViewKey, JSON.stringify({ filters, section, helpOrigin, ...(mediaId ? { mediaId } : {}) }))
+    localStorage.setItem(
+      persistedViewKey,
+      JSON.stringify({ filters, section, helpOrigin, ...(mediaId ? { mediaId } : {}) }),
+    )
   }, [filters, active?.id, section, restoreId, reelId, helpOrigin])
   useEffect(() => {
     if (!window.history.state)

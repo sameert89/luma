@@ -362,6 +362,49 @@ public sealed class Gate7Tests
         Assert.True(await db.ExecuteScalarAsync<bool>("SELECT WantPreview FROM ProcessingJobs"));
     }
 
+    // A pick that browsers cannot decode used to send the endpoint searching the whole library
+    // for some other image with a cached preview. With few previews that walk read most of the
+    // database -- over a gigabyte for one image on a 200k library -- and with none it ended in a
+    // 503 even though photos that could be shown were right there. It now serves the nearest one
+    // that can be shown, and still asks for the undecodable one's preview for next time.
+    [Fact]
+    public async Task Random_serves_a_showable_photo_when_it_picks_one_browsers_cannot_decode()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("shown.png");
+        await f.CreateImageAsync("scanned.tiff");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        // Every pivot lands on the TIFF first, and no previews exist anywhere.
+        await db.ExecuteAsync("""
+            UPDATE Media SET RandomKey=9223372036854775807 WHERE Extension='.tiff';
+            UPDATE Media SET RandomKey=0 WHERE Extension='.png';
+            """);
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM CacheEntries WHERE Variant='preview'"));
+        await using var host = Host(f); using var client = host.CreateClient();
+
+        var response = await client.GetAsync("/api/random");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/png", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("no-store", response.Headers.CacheControl!.ToString());
+        // The TIFF still gets its preview prepared, so it can be shown on a later pick.
+        Assert.True(await db.ExecuteScalarAsync<bool>("SELECT j.WantPreview FROM ProcessingJobs j JOIN Media m ON m.Id=j.MediaId WHERE m.Extension='.tiff'"));
+    }
+
+    [Fact]
+    public async Task Random_says_nothing_can_be_shown_when_no_match_is_decodable_or_cached()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await f.CreateImageAsync("scanned.tiff");
+        await f.ScanAsync();
+        await using var host = Host(f); using var client = host.CreateClient();
+
+        var response = await client.GetAsync("/api/random");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
     private static WebApplicationFactory<Program> Host(PipelineFixture f) => new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseEnvironment("Testing")
         .UseSetting("Luma:DatabasePath", f.Database.Path).UseSetting("Luma:Indexing:CachePath", f.Options.CachePath)
         .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Test").UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path));
