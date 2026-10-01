@@ -14,6 +14,7 @@ export const releases: Release[] = [
       'Settings has a default order for Reels on this device, such as Shuffle for a new feed each time you open it. Leaving Reels puts the library back in its own order.',
       'The Random media URL no longer searches the whole library when it lands on a TIFF. With few previews prepared, that search could read over a gigabyte for one picture and slow everything else down while it ran; it now shows the nearest photo it can, straight away.',
       'The Random media URL also stops answering “nothing to show” when it lands on a TIFF before any previews exist, as long as there are photos it can show.',
+      'Picking a search suggestion no longer presses whatever sat behind the list. A suggestion over Clear all filters cleared the filters instead of being chosen, which made the suggestions lowest in the list impossible to pick.',
     ],
   },
   {
