@@ -1,5 +1,5 @@
 import { SettingsSection } from '../components/ui/SettingsSection'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bookmark,
   Check,
@@ -38,6 +38,8 @@ import { ActiveFilters } from '../features/browse/ActiveFilters'
 import { RandomUrls } from '../features/browse/RandomUrls'
 import { Gallery } from '../features/browse/Gallery'
 import { Reels } from '../features/browse/Reels'
+import { ReelsSortSettings } from '../features/browse/ReelsSortSettings'
+import { reelsSort, reelsSortFields, sameSort, type SortFields } from '../features/browse/reelsSort'
 import { Viewer } from '../features/browse/Viewer'
 import { HiddenFolders } from '../features/browse/HiddenFolders'
 import { LibrarySettings, LibrarySetup } from '../features/browse/LibrarySetup'
@@ -299,7 +301,10 @@ export function App() {
     }
     if (!mediaId) delete state.mediaId
     window.history.replaceState(state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
-    localStorage.setItem(persistedViewKey, JSON.stringify({ filters, section, helpOrigin, ...(mediaId ? { mediaId } : {}) }))
+    localStorage.setItem(
+      persistedViewKey,
+      JSON.stringify({ filters, section, helpOrigin, ...(mediaId ? { mediaId } : {}) }),
+    )
   }, [filters, active?.id, section, restoreId, reelId, helpOrigin])
   useEffect(() => {
     if (!window.history.state)
@@ -391,21 +396,37 @@ export function App() {
     }
     apply({ libraryId: item.id, folderId: item.rootFolderId })
   }
+  // Filters carry between Library and Reels on purpose, but a default order chosen for Reels in
+  // Settings is about Reels: a feed that opens shuffled should not leave the library shuffled. On
+  // the way out, the order the library had is put back -- unless it was changed inside Reels, in
+  // which case that choice was the person's own and carries like any other filter.
+  const reelsSortSwap = useRef<{ from: SortFields; opened: SortFields } | null>(null)
+  function leavingReels(value: Filters): Filters {
+    const swap = reelsSortSwap.current
+    reelsSortSwap.current = null
+    // Not keyed on the section: Reels, then Settings or Help, then Library is still leaving Reels.
+    if (!swap) return value
+    const now = { sort: value.sort, order: value.order, seed: value.seed }
+    return sameSort(now, swap.opened) ? { ...value, ...swap.from } : value
+  }
   function navigateSection(target: Section) {
     setSearchFocusRequested(target === 'search')
     if (target === 'search' && section !== 'search') searchOrigin.current = 'search'
     if (target === 'collections') apply({}, target)
-    else if (target === 'reels')
+    else if (target === 'reels') {
+      const from = { sort: filters.sort, order: filters.order, seed: filters.seed }
+      const opened = reelsSortFields(reelsSort(), filters)
+      reelsSortSwap.current = sameSort(from, opened) ? null : { from, opened }
       apply(
         ungroupTags({
           ...filters,
+          ...opened,
           recursive: filters.folderId ? true : filters.recursive,
           mediaType: filters.mediaType ?? reelsMediaType,
         }),
         target,
       )
-    else if (target === 'library') apply(filters, target)
-    else if (target === 'search') apply(filters, target)
+    } else if (target === 'library' || target === 'search') apply(leavingReels(filters), target)
     else {
       window.history.pushState({ filters, section: target }, '', window.location.href)
       setSection(target)
@@ -481,32 +502,21 @@ export function App() {
       apply({ ...libraryMemory.current, q: undefined }, 'library')
     else apply({}, 'search')
   }
-  // Pulling down the gallery rescans what is in view. Unlike the rescan dialog it asks nothing:
-  // the library's own tag-import setting from Settings decides how tags are read.
-  const rescanFolderId = section === 'library' ? (filters.folderId ?? library?.rootFolderId) : undefined
-  const pullRescan = useMutation({
-    mutationKey: ['background-task'],
-    mutationFn: async () => {
-      if (rescanFolderId)
-        // shallow: a gesture can only cost one directory listing, where Rescan folder in the
-        // menu says what it costs and walks everything below. prioritize: this is the folder in
-        // view, so a scan already on its way to it moves it to the front rather than refusing.
-        await request(`/api/folders/${rescanFolderId}/scans`, undefined, 'POST', {
-          metadataMode: library?.metadataMode ?? 'embedded',
-          prioritize: true,
-          shallow: true,
-        })
-    },
-    onSuccess: async () => {
-      await Promise.all(
-        ['tasks', 'indexing', 'scan', 'media', 'folders', 'libraries'].map(key =>
-          client.invalidateQueries({ queryKey: [key] }),
-        ),
-      )
-      setRefresh(value => value + 1)
-    },
-    onError: (error: unknown) => showToast(errorMessage(error), 'danger'),
-  })
+  // Pulling down the gallery refreshes what is on screen and asks the server to do nothing else.
+  // It used to queue a folder scan, and people read the job appearing in the queue as the app
+  // starting something heavy they had not asked for; finding files added on disk is Rescan
+  // folder's job, which says so. Resetting rather than invalidating starts the listing over from
+  // its first page: invalidating would refetch every page still held, one after another.
+  // The gallery is not remounted here: it is the gallery that holds the pull spinner, and a pull
+  // only ever starts at the top, so the reset alone is a refresh. The header button, which can be
+  // pressed deep in a listing, remounts it as well to land back at the top.
+  async function refreshView() {
+    await Promise.all([
+      client.resetQueries({ queryKey: ['media'] }),
+      client.resetQueries({ queryKey: ['folders'] }),
+      client.invalidateQueries({ queryKey: ['libraries'] }),
+    ])
+  }
   function select(id: number) {
     setSelected(old => {
       const next = new Set(old)
@@ -803,6 +813,7 @@ export function App() {
               <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
               <ThemePicker value={theme} onChange={setTheme} />
               <AlbumCoverSettings />
+              <ReelsSortSettings />
               <SettingsSection
                 title="Random media URL"
                 description="Generate a reusable random-media link using your current browsing filters."
@@ -898,9 +909,8 @@ export function App() {
                             }
                             onSlideshow={() => void startSlideshow()}
                             onRefresh={() => {
-                              void client.invalidateQueries({ queryKey: ['media'] })
-                              void client.invalidateQueries({ queryKey: ['folders'] })
-                              setRefresh(x => x + 1)
+                              setRefresh(value => value + 1)
+                              void refreshView()
                             }}
                             filtersVisible={filtersVisible}
                             onToggleFilters={toggleFilters}
@@ -1062,11 +1072,7 @@ export function App() {
                       scopeError={section === 'library' ? folders.error : null}
                       restoreScrollTop={restoreScrollTop}
                       onScrollPosition={recordScroll}
-                      onPullRefresh={() =>
-                        pullRescan.mutateAsync().catch(() => {
-                          /* reported in the gallery header */
-                        })
-                      }
+                      onPullRefresh={refreshView}
                     />
                   )}
                 </>

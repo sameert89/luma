@@ -128,7 +128,7 @@ export const guideSections: GuideSection[] = [
             icons: [ArrowDown],
             name: 'Pull to refresh',
             where: 'Top of a gallery, on touch screens',
-            what: 'Drag the gallery down from the top to check the folder you are in. It reads that one folder, so it costs the same whatever is inside it, and never asks about tags: the library’s own tag-import setting in Settings applies.',
+            what: 'Drag the gallery down from the top to load what you are looking at again. It only refreshes the screen and starts no job; to look for files added on disk, use Rescan folder in the folder menu.',
           },
         ],
       },
@@ -782,6 +782,12 @@ export const guideSections: GuideSection[] = [
             name: 'Album covers',
             where: 'Settings',
             what: 'Smart covers show a mosaic for albums with three or more photos and fit single photos to the card; Cropped covers fill the card with one photo. Covers you picked yourself keep their photo either way.',
+          },
+          {
+            label: 'Reels',
+            name: 'Reels default order',
+            where: 'Settings',
+            what: 'Chooses the order Reels opens in on this device, such as Shuffle for a new feed each visit. Same as the library keeps whatever order the library is in. Leaving Reels gives the library its own order back.',
           },
           {
             icons: [Shuffle],

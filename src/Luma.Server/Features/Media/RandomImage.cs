@@ -35,6 +35,23 @@ public sealed class RandomImage(Database database, CacheContent cache, OriginalC
         if (pick is null) throw ApiRequestException.Missing();
         if (pick.Ready) return await cache.ServeAsync(pick.Id, pick.SourceRevision, "preview", IndexingOptions.EncoderVersion, context, ct, true);
         await MediaBrowser.PrioritizeAsync(db, [pick.Id], true, ct);
+        if (!BrowserImages.Contains(pick.Extension))
+        {
+            // This one cannot be shown until the preview just requested exists. Searching the whole
+            // library for some other cached preview is a walk whose length grows as previews get
+            // rarer: with few previews it read most of the database, over a gigabyte for one image,
+            // and a photo frame polling this URL did that again every few seconds. Take the nearest
+            // match that can be shown now instead -- a format browsers decode, or one whose preview
+            // is ready -- which in a library of mostly such formats is a row or two from the pivot.
+            var shown = $" AND (m.Extension IN ({BrowserImageList}) OR {preview})";
+            var substitute = await db.QuerySingleOrDefaultAsync<Pick>(new CommandDefinition($"SELECT m.Id,m.SourceRevision,m.Extension,{preview} Ready FROM Media m WHERE {predicate} {shown} AND m.RandomKey>=@pivot ORDER BY m.RandomKey,m.Id LIMIT 1", p, cancellationToken: ct))
+                ?? await db.QuerySingleOrDefaultAsync<Pick>(new CommandDefinition($"SELECT m.Id,m.SourceRevision,m.Extension,{preview} Ready FROM Media m WHERE {predicate} {shown} AND m.RandomKey<@pivot ORDER BY m.RandomKey,m.Id LIMIT 1", p, cancellationToken: ct));
+            // Nothing matching can be shown at all, so the preview search below would find nothing
+            // either: say so now rather than walking the library a second time to learn it.
+            if (substitute is null) throw new ApiRequestException(503, "cache_unavailable", "No matching cached preview is ready.");
+            if (substitute.Ready) return await cache.ServeAsync(substitute.Id, substitute.SourceRevision, "preview", IndexingOptions.EncoderVersion, context, ct, true);
+            pick = substitute;
+        }
         if (BrowserImages.Contains(pick.Extension))
         {
             try
@@ -53,5 +70,7 @@ public sealed class RandomImage(Database database, CacheContent cache, OriginalC
         return await cache.ServeAsync(row.Id, row.SourceRevision, "preview", IndexingOptions.EncoderVersion, context, ct, true);
     }
     private static readonly HashSet<string> BrowserImages = new([".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"], StringComparer.OrdinalIgnoreCase);
+    // Indexing stores extensions lower-cased, so the constant list matches them as written.
+    private static readonly string BrowserImageList = string.Join(",", BrowserImages.Select(extension => $"'{extension}'"));
     private sealed class Pick { public long Id { get; set; } public long SourceRevision { get; set; } public string Extension { get; set; } = ""; public bool Ready { get; set; } }
 }

@@ -6,6 +6,18 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '1.0.11',
+    date: '2026-10-01',
+    headline: 'Pull to refresh just refreshes, and Reels opens your way',
+    changes: [
+      'Pulling down a gallery now loads what you are looking at again and nothing else. It used to start a folder scan, which showed up as a job you had not asked for; to look for files added on disk, use Rescan folder in the folder menu.',
+      'Settings has a default order for Reels on this device, such as Shuffle for a new feed each time you open it. Leaving Reels puts the library back in its own order.',
+      'The Random media URL no longer searches the whole library when it lands on a TIFF. With few previews prepared, that search could read over a gigabyte for one picture and slow everything else down while it ran; it now shows the nearest photo it can, straight away.',
+      'The Random media URL also stops answering “nothing to show” when it lands on a TIFF before any previews exist, as long as there are photos it can show.',
+      'Picking a search suggestion no longer presses whatever sat behind the list. A suggestion over Clear all filters cleared the filters instead of being chosen, which made the suggestions lowest in the list impossible to pick.',
+    ],
+  },
+  {
     version: '1.0.10',
     date: '2026-09-25',
     headline: 'Reels opens quickly and your place survives a restart',

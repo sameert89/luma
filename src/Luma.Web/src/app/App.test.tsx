@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
+import { setReelsSort } from '../features/browse/reelsSort'
 import packageJson from '../../package.json'
 
 // Clears the app's stored state but keeps What's new past its once-per-release popup,
@@ -84,7 +85,9 @@ describe('browsing shell', () => {
     window.history.replaceState(null, '', '/')
     mount()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Reels' })[0]).toHaveAttribute('aria-current', 'page'))
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Reels' })[0]).toHaveAttribute('aria-current', 'page'),
+    )
     await waitFor(() => expect(window.location.search).toContain('view=reels'))
     expect(window.location.search).toContain('libraryId=1')
     expect(window.location.search).toContain('folderId=2')
@@ -1431,22 +1434,16 @@ it('remembers filter-row visibility separately for Reels', async () => {
   }
 })
 
-it('pulls the folder in view to the front of a running scan, and says a refusal in a toast', async () => {
-  const rescans: string[] = []
+// Pull to refresh used to queue a folder scan. People read the job appearing in the queue as
+// the app starting something heavy they had not asked for, so it now does what the gesture
+// means everywhere else: fetch what is on screen again, and nothing more.
+it('pulls to refresh the listing without asking the server to scan anything', async () => {
+  const requests: { url: string; method: string }[] = []
   vi.stubGlobal(
     'fetch',
     vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      requests.push({ url, method: init?.method ?? 'GET' })
       if (url.endsWith('/index') && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
-      if (url.includes('/scans') && init?.method === 'POST') {
-        rescans.push(String(init.body))
-        // A scan the running one will never reach still refuses, which is what the person sees.
-        return Promise.resolve(
-          new Response(JSON.stringify({ code: 'conflict', title: 'A scan for this library is already running.' }), {
-            status: 409,
-            headers: { 'Content-Type': 'application/problem+json' },
-          }),
-        )
-      }
       const data =
         url === '/api/libraries'
           ? [{ id: 1, name: 'Photos', rootFolderId: 1, metadataMode: 'xmp' }]
@@ -1470,6 +1467,10 @@ it('pulls the folder in view to the front of a running scan, and says a refusal 
     </QueryClientProvider>,
   )
   await screen.findByRole('heading', { name: 'Trips' })
+  await waitFor(() => expect(requests.some(request => request.url.startsWith('/api/media?'))).toBe(true))
+  const before = requests.length
+  const listings = () => requests.slice(before).filter(request => request.method === 'GET')
+
   const scroller = screen.getByTestId('gallery-scroll')
   fireEvent.touchStart(scroller, { touches: [{ clientY: 0 }] })
   fireEvent.touchMove(scroller, { touches: [{ clientY: 200 }] })
@@ -1477,13 +1478,71 @@ it('pulls the folder in view to the front of a running scan, and says a refusal 
     fireEvent.touchEnd(scroller)
   })
 
-  // The folder in view, its library's own tag setting, one directory deep, moved to the front.
-  expect(JSON.parse(rescans[0])).toEqual({ metadataMode: 'xmp', prioritize: true, shallow: true })
-  const toast = await screen.findByRole('alert')
-  expect(toast).toHaveTextContent('already running')
-  // In a toast that can be closed, not pinned above the collection.
-  await userEvent.click(within(toast).getByRole('button', { name: 'Dismiss' }))
+  // The collection and the folder listing are fetched again...
+  await waitFor(() => expect(listings().some(request => request.url.startsWith('/api/media?'))).toBe(true))
+  expect(listings().some(request => request.url.startsWith('/api/folders?'))).toBe(true)
+  // ...and nothing is asked of the server: no scan, no job, no write of any kind.
+  expect(requests.slice(before).filter(request => request.method !== 'GET')).toEqual([])
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+// A default order for Reels is about Reels: opening the feed shuffled must not leave the
+// library shuffled, while the library's own order still applies when Settings says to keep it.
+it('opens Reels in the order chosen in Settings, and gives the library its own order back', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/index') && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
+      const data =
+        url === '/api/libraries'
+          ? [{ id: 1, name: 'Photos', rootFolderId: 1, metadataMode: 'xmp' }]
+          : url.startsWith('/api/folders?')
+            ? { current: { id: 1, libraryId: 1, name: 'Photos' }, ancestors: [], items: [] }
+            : url.startsWith('/api/indexing')
+              ? { libraries: [] }
+              : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(
+        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }),
+  )
+  window.history.replaceState(null, '', '/?libraryId=1&sort=name&order=asc')
+  resetStorage()
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      <App />
+    </QueryClientProvider>,
+  )
+  try {
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Settings' }))[0])
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Default order' }), 'shuffle')
+    // Direction means nothing for a shuffle.
+    expect(screen.getByRole('combobox', { name: 'Default direction' })).toBeDisabled()
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reels' })[0])
+    const reels = new URLSearchParams(window.location.search)
+    expect(reels.get('sort')).toBe('shuffle')
+    expect(reels.get('seed')).toMatch(/^[0-9a-f]{32}$/)
+    expect(reels.get('mediaType')).toBe('motion')
+
+    // Back to the library, which was sorted by name before Reels was opened.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
+    const library = new URLSearchParams(window.location.search)
+    expect(library.get('sort')).toBe('name')
+    expect(library.get('order')).toBe('asc')
+    expect(library.get('seed')).toBeNull()
+
+    // Keeping the library's order leaves Reels in it, as before the setting existed.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Default order' }), 'library')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Reels' })[0])
+    expect(new URLSearchParams(window.location.search).get('sort')).toBe('name')
+  } finally {
+    // The choice is held for the session, so put it back for the tests after this one.
+    setReelsSort({ sort: 'library', order: 'desc' })
+  }
 })
 
 it('points the page at the manifest built for the chosen theme, and tints browser chrome with it', async () => {

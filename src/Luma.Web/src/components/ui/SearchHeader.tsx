@@ -3,6 +3,7 @@ import { useDeferredValue, useEffect, useId, useRef, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { IconButton, Input } from './Controls'
 import { tagTone } from './TagTone'
+import { swallowNextClick } from './dismiss'
 import { request } from '../../features/browse/api'
 import type { components } from '../../lib/api/generated'
 
@@ -183,9 +184,14 @@ export function SearchHeader({
                       role="option"
                       aria-selected={index === activeIndex}
                       className={`flex min-h-11 cursor-pointer items-center gap-3 px-3 text-sm ${index === activeIndex ? 'bg-surface' : 'hover:bg-surface'}`}
-                      // Choosing on pointer down keeps focus in the field (a click would blur it first).
+                      // Choosing on pointer down keeps focus in the field (a click would blur it
+                      // first). The list is gone by the time the click arrives, so that click has
+                      // to be swallowed: it would otherwise land on whatever the list was
+                      // covering, which is Clear all filters often enough to make a suggestion
+                      // under it impossible to pick.
                       onPointerDown={event => {
                         event.preventDefault()
+                        swallowNextClick()
                         choose(suggestion)
                       }}
                       onMouseEnter={() => setActiveIndex(index)}
