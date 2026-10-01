@@ -204,7 +204,7 @@ export function Gallery({
           </span>
           <span className="sr-only">
             {pull.refreshing
-              ? 'Refreshing this folder…'
+              ? 'Refreshing…'
               : pull.distance >= pullThreshold
                 ? 'Release to refresh'
                 : 'Pull to refresh'}
