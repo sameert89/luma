@@ -1,4 +1,5 @@
 using Luma.Server.Data;
+using Luma.Server.Features.Files;
 using Luma.Server.Features.Status;
 using Luma.Server.Http;
 using Luma.Server.Features.Indexing;
@@ -23,7 +24,9 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton<Database>();
-builder.Services.AddSingleton<Luma.Server.Features.Files.MutationAccess>();
+builder.Services.AddSingleton<MutationAccess>();
+builder.Services.AddSingleton<FileOperations>();
+builder.Services.AddSingleton<FileOperationWorker>();
 builder.Services.AddSingleton<MigrationRunner>();
 builder.Services.AddSingleton<CursorSigner>();
 builder.Services.AddSingleton<MediaBrowser>();
@@ -48,6 +51,7 @@ builder.Services.AddSingleton<ScanWorker>();
 builder.Services.AddSingleton<AutomaticLibraryRefresh>();
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
+    builder.Services.AddHostedService(services => services.GetRequiredService<FileOperationWorker>());
     builder.Services.AddHostedService(services => services.GetRequiredService<ScanWorker>());
     builder.Services.AddHostedService(services => services.GetRequiredService<AutomaticLibraryRefresh>());
     builder.Services.AddHostedService<ProcessingWorker>();
@@ -78,6 +82,7 @@ api.MapIndexing();
 api.MapMedia();
 api.MapPlayback();
 api.MapTasks();
+api.MapFileOperations();
 api.MapSearchSuggestions();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseRouting();

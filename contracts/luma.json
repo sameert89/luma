@@ -2553,6 +2553,26 @@
         }
       }
     },
+    "/api/files/capabilities": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileCapabilities",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileCapabilities"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/search/suggestions": {
       "get": {
         "tags": [
@@ -2585,6 +2605,130 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/SearchSuggestion"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CreateFileOperation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperationAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileOperation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CancelFileOperation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/files/trash": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetRecycledFiles",
+        "parameters": [
+          {
+            "name": "libraryId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileOperation"
                   }
                 }
               }
@@ -2798,6 +2942,133 @@
         "properties": {
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "FileCapabilities": {
+        "required": [
+          "accessConfigured",
+          "libraries"
+        ],
+        "type": "object",
+        "properties": {
+          "accessConfigured": {
+            "type": "boolean"
+          },
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileCapability"
+            }
+          }
+        }
+      },
+      "FileCapability": {
+        "required": [
+          "libraryId",
+          "writable"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "writable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FileOperation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true
+          },
+          "recycleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDirectory": {
+            "type": "boolean"
+          },
+          "sourceSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sourceModifiedTicks": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "restored": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FileOperationAccepted": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "FileOperationRequest": {
+        "required": [
+          "libraryId",
+          "kind",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true
+          },
+          "recycleId": {
+            "type": "string",
+            "nullable": true
           }
         }
       },

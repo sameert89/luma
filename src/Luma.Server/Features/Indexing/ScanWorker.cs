@@ -40,7 +40,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 await using var db = await database.OpenAsync(ct);
                 var scan = await db.QuerySingleOrDefaultAsync<ScanRow>(new CommandDefinition("""
                     UPDATE Scans SET State='running' WHERE Id=(SELECT s.Id FROM Scans s JOIN Libraries l ON l.Id=s.LibraryId
-                    WHERE s.State='queued' AND l.Enabled=1 ORDER BY s.Priority DESC,s.Id LIMIT 1) AND State='queued' RETURNING *
+                    WHERE s.State='queued' AND l.Enabled=1 AND NOT EXISTS(SELECT 1 FROM FileOperations o WHERE o.LibraryId=s.LibraryId AND o.State IN ('queued','running','reserved','deleting','published','finalizing','needsAttention')) ORDER BY s.Priority DESC,s.Id LIMIT 1) AND State='queued' RETURNING *
                     """, cancellationToken: ct));
                 if (scan is null) { await Task.Delay(1000, ct); continue; }
                 using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);

@@ -624,6 +624,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search/suggestions": {
         parameters: {
             query?: never;
@@ -632,6 +648,70 @@ export interface paths {
             cookie?: never;
         };
         get: operations["GetSearchSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateFileOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CancelFileOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRecycledFiles"];
         put?: never;
         post?: never;
         delete?: never;
@@ -698,6 +778,45 @@ export interface components {
         };
         CreateTagRequest: {
             name: string;
+        };
+        FileCapabilities: {
+            accessConfigured: boolean;
+            libraries: components["schemas"]["FileCapability"][];
+        };
+        FileCapability: {
+            /** Format: int64 */
+            libraryId: number;
+            writable: boolean;
+        };
+        FileOperation: {
+            id?: string;
+            /** Format: int64 */
+            libraryId?: number;
+            kind?: string;
+            source?: string;
+            destination?: string | null;
+            recycleId?: string | null;
+            isDirectory?: boolean;
+            /** Format: int64 */
+            sourceSize?: number;
+            /** Format: int64 */
+            sourceModifiedTicks?: number;
+            state?: string;
+            createdAt?: string;
+            finishedAt?: string | null;
+            failureCode?: string | null;
+            restored?: boolean;
+        };
+        FileOperationAccepted: {
+            id: string;
+        };
+        FileOperationRequest: {
+            /** Format: int64 */
+            libraryId: number;
+            kind: string;
+            source: string;
+            destination?: string | null;
+            recycleId?: string | null;
         };
         FolderPage: {
             current: components["schemas"]["FolderSummary"];
@@ -2406,6 +2525,26 @@ export interface operations {
             };
         };
     };
+    GetFileCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileCapabilities"];
+                };
+            };
+        };
+    };
     GetSearchSuggestions: {
         parameters: {
             query?: {
@@ -2425,6 +2564,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchSuggestion"][];
+                };
+            };
+        };
+    };
+    CreateFileOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperationAccepted"];
+                };
+            };
+        };
+    };
+    GetFileOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperation"];
+                };
+            };
+        };
+    };
+    CancelFileOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetRecycledFiles: {
+        parameters: {
+            query: {
+                libraryId: number;
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperation"][];
                 };
             };
         };

@@ -1,4 +1,5 @@
 using Dapper;
+using Luma.Server.Features.Files;
 using Luma.Server.Data;
 using Luma.Server.Features.Tags;
 using Luma.Server.Features.Indexing;
@@ -19,14 +20,23 @@ public static class TaskEndpoints
             await using var db = await database.OpenAsync(ct);
             using var tx = db.BeginTransaction();
             await db.ExecuteAsync(new CommandDefinition($"""
+                UPDATE FileOperations SET QueueDismissed=1 WHERE State IN ('completed','cancelled') AND QueueDismissed=0;
                 UPDATE MetadataJobs SET QueueDismissed=1 WHERE QueueDismissed=0 AND {MetadataFinished};
                 UPDATE Scans SET QueueDismissed=1 WHERE QueueDismissed=0 AND {ScanFinished};
                 """, transaction: tx, cancellationToken: ct));
             tx.Commit();
             return TypedResults.NoContent();
         }).WithName("ClearFinishedBackgroundTasks");
-        app.MapPost("/api/tasks/{id}/clear", async (string id, Database database, CancellationToken ct) =>
+        app.MapPost("/api/tasks/{id}/clear", async (string id, Database database, MutationAccess access, HttpContext context, CancellationToken ct) =>
         {
+            if (id.StartsWith("file-", StringComparison.Ordinal))
+            {
+                access.Authorize(context);
+                await using var filesDb = await database.OpenAsync(ct);
+                if (await filesDb.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET QueueDismissed=1 WHERE Id=@key AND State IN ('completed','cancelled')", new { key = id[5..] }, cancellationToken: ct)) == 0)
+                    throw new ApiRequestException(409, "operation_unresolved", "Only completed or cancelled file operations can be cleared.");
+                return TypedResults.NoContent();
+            }
             var (kind, key) = Parse(id);
             var (table, finished) = kind == "scan" ? ("Scans", ScanFinished) : ("MetadataJobs", MetadataFinished);
             await using var db = await database.OpenAsync(ct);
@@ -35,8 +45,14 @@ public static class TaskEndpoints
                 throw new ApiRequestException(409, "conflict", "Only finished tasks can be cleared. Cancel it first.");
             return TypedResults.NoContent();
         }).WithName("ClearBackgroundTask");
-        app.MapPost("/api/tasks/{id}/cancel", async (string id, MetadataJobs jobs, CancellationToken ct) =>
+        app.MapPost("/api/tasks/{id}/cancel", async (string id, MetadataJobs jobs, FileOperations operations, MutationAccess access, HttpContext context, CancellationToken ct) =>
         {
+            if (id.StartsWith("file-", StringComparison.Ordinal))
+            {
+                access.Authorize(context);
+                await operations.CancelAsync(id[5..], ct);
+                return Results.NoContent();
+            }
             var (kind, key) = Parse(id);
             if (kind == "scan") return Results.Redirect($"/api/scans/{key}/cancel", preserveMethod: true);
             await jobs.CancelAsync(key, ct);
@@ -86,6 +102,11 @@ public static class TaskEndpoints
                 FROM (SELECT * FROM Scans WHERE QueueDismissed=0 OR State='completed' AND
                   EXISTS(SELECT 1 FROM ProcessingJobs WHERE ScanId=Scans.Id AND State IN ('pending','running')) ORDER BY Id DESC LIMIT 50) s
                 LEFT JOIN Libraries l ON l.Id=s.LibraryId LEFT JOIN Folders f ON f.Id=s.FolderId
+                UNION ALL
+                SELECT 'file-'||Id,Kind,State,CreatedAt,CASE WHEN State='completed' THEN 1 ELSE 0 END,
+                  CASE WHEN State='needsAttention' THEN 1 ELSE 0 END,CASE WHEN State='queued' THEN 1 ELSE 0 END,
+                  Source||CASE WHEN Destination IS NULL THEN '' ELSE ' → '||Destination END
+                FROM (SELECT * FROM FileOperations WHERE QueueDismissed=0 ORDER BY CreatedAt DESC LIMIT 50)
                 ORDER BY CreatedAt DESC LIMIT 100
                 """, cancellationToken: ct))).Select(x => new BackgroundTask(x.Id, x.Kind, x.State, x.CreatedAt, x.Processed, x.Failed, x.Pending, x.Scope)).ToArray());
         }).WithName("GetBackgroundTasks");

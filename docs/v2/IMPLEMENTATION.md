@@ -69,3 +69,9 @@ Progress stores current page, state, last-read time and reader preferences by co
 Existing installations and Docker mounts stay read-only by default. Add append-only numbered SQL migrations; never edit shipped checksums. Configuration is authoritative for writable roots and access secrets; expose capabilities, never the secret, in ordinary library responses. Use generated OpenAPI TypeScript contracts. Preserve old query/deep links and PWA restoration. Update versioned schema assertions deliberately.
 
 Required commands: backend build and tests, frontend build/tests/lint, generated-contract consistency and targeted browser tests. Establish baseline failures before changing code. Run indexing/browse performance tools on equivalent fixtures and distinguish measured results from expectations. Release remains blocked until filesystem recovery, upload recovery and comic resource limits are verified.
+
+## Implemented increments
+
+- Mutation capability boundary: opt-in `LibraryOptions.Writable`, `Luma:Files:AccessToken` (minimum 32 UTF-8 bytes), Bearer authorization and same-origin browser checks. Browsing is unchanged. Client code must keep the secret in memory rather than localStorage.
+- Public relative paths reject traversal, internal staging, symlinks (including dangling links), Windows reserved names and excessive depth. Index traversal/watchers exclude staging at any nesting level.
+- First mutation implementation deliberately serializes each library and rejects an enqueue during indexing or unresolved work. Same-library moves only; no implicit overwrite or automatic recovery that guesses a public source's identity. `needsAttention` blocks further writes/indexing for that root until an administrator resolves the evidence. Automatic retention cleanup, cross-device moves, bulk batches and attention-resolution UI are not yet implemented.
