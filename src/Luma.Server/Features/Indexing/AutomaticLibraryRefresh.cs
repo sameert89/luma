@@ -114,6 +114,7 @@ public sealed class AutomaticLibraryRefresh(
 
     private void Observe(LibraryOptions library, string fullPath, WatcherChangeTypes changeType)
     {
+        if (Luma.Server.Features.Files.MutationPaths.IsInternal(Path.GetRelativePath(library.Path, fullPath))) return;
         if (!settings.TryGetValue(library.Id, out var mode) || mode.Mode != "watcher") return;
         try
         {
@@ -177,102 +178,34 @@ public sealed class AutomaticLibraryRefresh(
             INSERT INTO DirtyFolders(LibraryId,RelativePath,PathKey,Recursive,Priority,DetectedAt)
             VALUES(@libraryId,@relativePath,@pathKey,@recursive,@priority,@now)
             ON CONFLICT(LibraryId,PathKey) DO UPDATE SET
-              RelativePath=excluded.RelativePath,
-              Recursive=MAX(DirtyFolders.Recursive,excluded.Recursive),
-              Priority=MAX(DirtyFolders.Priority,excluded.Priority),
-              DetectedAt=excluded.DetectedAt
-            """, new { libraryId, relativePath, pathKey, recursive, priority, now = DateTimeOffset.UtcNow.ToString("O") },
-            cancellationToken: ct));
-    }
-
-    internal async Task ProcessPendingFolderAsync(CancellationToken ct)
-    {
-        await using var db = await database.OpenAsync(ct);
-        using var tx = db.BeginTransaction();
-        var dirty = await db.QuerySingleOrDefaultAsync<DirtyRow>(new CommandDefinition("""
-            SELECT d.* FROM DirtyFolders d JOIN Libraries l ON l.Id=d.LibraryId
-            WHERE l.Enabled=1 AND l.RefreshMode='watcher'
-              AND NOT EXISTS(SELECT 1 FROM Scans s WHERE s.LibraryId=d.LibraryId AND s.State IN ('queued','running'))
-            ORDER BY d.Priority DESC,d.DetectedAt,d.LibraryId LIMIT 1
-            """, transaction: tx, cancellationToken: ct));
-        if (dirty is null) { tx.Commit(); return; }
-
-        var folderId = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(
-            "SELECT Id FROM Folders WHERE LibraryId=@LibraryId AND PathKey=@PathKey", dirty, tx, cancellationToken: ct));
-        var resolvedExact = folderId is not null;
-        if (!resolvedExact)
+              R…3189 tokens truncated…
+        foreach (var root in options.Libraries)
         {
-            var parent = dirty.RelativePath.Contains('/') ? dirty.RelativePath[..dirty.RelativePath.LastIndexOf('/')] : "";
-            var library = options.Libraries.Find(x => x.Id == dirty.LibraryId);
-            if (library is null) { tx.Commit(); return; }
-            folderId = await db.QuerySingleOrDefaultAsync<long?>(new CommandDefinition(
-                "SELECT Id FROM Folders WHERE LibraryId=@LibraryId AND PathKey=@parentKey",
-                new { dirty.LibraryId, parentKey = library.Key(parent) }, tx, cancellationToken: ct));
+            var existing = await db.QuerySingleOrDefaultAsync<LibraryOptions>(new CommandDefinition(
+                "SELECT Id, Path, CaseSensitive FROM Libraries WHERE Id=@Id", root, tx, cancellationToken: cancellationToken));
+            if (existing is not null && (existing.Path != root.Path || existing.CaseSensitive != root.CaseSensitive))
+                throw new InvalidOperationException("An existing library ID cannot change its root or path comparison policy.");
+            await db.ExecuteAsync(new CommandDefinition("""
+                INSERT INTO Libraries(Id,Name,Path,CaseSensitive) VALUES(@Id,@Name,@Path,@CaseSensitive)
+                ON CONFLICT(Id) DO UPDATE SET Name=excluded.Name, Enabled=1;
+                INSERT INTO Scans(LibraryId,FolderId,Recursive,State,Force,RetryFailures,StartedAt,MetadataMode)
+                SELECT @Id,CASE WHEN NOT @ScanOnStartup AND NOT @encoderChanged THEN
+                  (SELECT FolderId FROM Scans WHERE LibraryId=@Id AND State='interrupted' ORDER BY Id DESC LIMIT 1) ELSE NULL END,
+                  CASE WHEN NOT @ScanOnStartup AND NOT @encoderChanged THEN
+                  COALESCE((SELECT Recursive FROM Scans WHERE LibraryId=@Id AND State='interrupted' ORDER BY Id DESC LIMIT 1),0) ELSE 0 END,'queued',
+                  COALESCE((SELECT Force FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),
+                  COALESCE((SELECT RetryFailures FROM Scans WHERE LibraryId=@Id AND State='interrupted' AND Id=(SELECT MAX(Id) FROM Scans WHERE LibraryId=@Id)),0),@now,(SELECT MetadataMode FROM Libraries WHERE Id=@Id) WHERE
+                  (@ScanOnStartup OR @encoderChanged OR (SELECT State FROM Scans WHERE LibraryId=@Id ORDER BY Id DESC LIMIT 1)='interrupted')
+                  AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running'));
+                """, new { root.Id, root.Name, root.Path, root.CaseSensitive, root.ScanOnStartup, encoderChanged, now = DateTimeOffset.UtcNow.ToString("O") }, tx,
+                cancellationToken: cancellationToken));
         }
-        if (folderId is null) { tx.Commit(); return; }
-
-        var mode = await db.ExecuteScalarAsync<string>(new CommandDefinition(
-            "SELECT MetadataMode FROM Libraries WHERE Id=@LibraryId", dirty, tx, cancellationToken: ct)) ?? "none";
-        var scanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
-            INSERT INTO Scans(LibraryId,FolderId,Recursive,State,StartedAt,MetadataMode,Priority)
-            VALUES(@LibraryId,@folderId,@recursive,'queued',@now,@mode,@Priority) RETURNING Id
-            """, new { dirty.LibraryId, folderId, recursive = resolvedExact && dirty.Recursive, now = DateTimeOffset.UtcNow.ToString("O"), mode, dirty.Priority },
-            tx, cancellationToken: ct));
-        await IndexingEndpoints.QueueMetadataAsync(db, tx, scanId, dirty.LibraryId, folderId, mode, ct,
-            recursive: resolvedExact && dirty.Recursive);
-        if (resolvedExact)
-            await db.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM DirtyFolders WHERE LibraryId=@LibraryId AND PathKey=@PathKey", dirty, tx, cancellationToken: ct));
+        await db.ExecuteAsync(new CommandDefinition("""
+            UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
+              (SELECT m.Id FROM Media m JOIN Libraries l ON l.Id=m.LibraryId WHERE l.Enabled=0);
+            INSERT INTO ApplicationState(Key,Value) VALUES('cacheEncoderVersion',@version)
+            ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value
+            """, new { version = IndexingOptions.EncoderVersion.ToString() }, tx, cancellationToken: cancellationToken));
         tx.Commit();
-    }
-
-    internal async Task QueuePeriodicScanAsync(CancellationToken ct)
-    {
-        await using var db = await database.OpenAsync(ct);
-        using var tx = db.BeginTransaction();
-        var library = await db.QuerySingleOrDefaultAsync<PeriodicRow>(new CommandDefinition("""
-            SELECT l.Id,l.MetadataMode FROM Libraries l
-            WHERE l.Enabled=1 AND l.RefreshMode='periodic'
-              AND (l.LastPeriodicScanAt IS NULL OR unixepoch('now')-unixepoch(l.LastPeriodicScanAt)>=l.PeriodicIntervalMinutes*60)
-              AND EXISTS(SELECT 1 FROM Folders f WHERE f.LibraryId=l.Id AND f.PathKey='')
-              AND NOT EXISTS(SELECT 1 FROM Scans s WHERE s.LibraryId=l.Id AND s.State IN ('queued','running'))
-            ORDER BY COALESCE(l.LastPeriodicScanAt,'') LIMIT 1
-            """, transaction: tx, cancellationToken: ct));
-        if (library is null) { tx.Commit(); return; }
-        var scanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
-            INSERT INTO Scans(LibraryId,FolderId,Recursive,State,StartedAt,MetadataMode,Priority)
-            VALUES(@Id,NULL,0,'queued',@now,@MetadataMode,0) RETURNING Id
-            """, new { library.Id, library.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
-        await IndexingEndpoints.QueueMetadataAsync(db, tx, scanId, library.Id, null, library.MetadataMode, ct, recursive: true);
-        await db.ExecuteAsync(new CommandDefinition("UPDATE Libraries SET LastPeriodicScanAt=@now WHERE Id=@Id",
-            new { library.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
-        tx.Commit();
-    }
-
-    private sealed record PendingChange(LibraryOptions Library, string FullPath, string RelativePath,
-        bool Recursive, DateTimeOffset NotBefore, FileSample? Sample = null);
-    private sealed record FileSample(long Size, long ModifiedTicks);
-    private sealed class RefreshRow
-    {
-        public long Id { get; set; }
-        public string RefreshMode { get; set; } = "watcher";
-        public bool RefreshOnOpen { get; set; }
-        public int PeriodicIntervalMinutes { get; set; }
-        public int WatcherDebounceSeconds { get; set; }
-        public int FileStabilitySeconds { get; set; }
-    }
-    private sealed class DirtyRow
-    {
-        public long LibraryId { get; set; }
-        public string RelativePath { get; set; } = "";
-        public string PathKey { get; set; } = "";
-        public bool Recursive { get; set; }
-        public int Priority { get; set; }
-        public string DetectedAt { get; set; } = "";
-    }
-    private sealed class PeriodicRow
-    {
-        public long Id { get; set; }
-        public string MetadataMode { get; set; } = "embedded";
     }
 }

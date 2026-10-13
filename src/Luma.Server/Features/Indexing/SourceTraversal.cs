@@ -20,6 +20,7 @@ internal static class SourceTraversal
             {
                 if (!current.MoveNext()) { stack.Pop().Dispose(); continue; }
                 var entry = current.Current;
+                if (Luma.Server.Features.Files.MutationPaths.IsInternal(Path.GetRelativePath(root, entry.FullName))) continue;
                 yield return entry;
                 if (recursive && entry.Attributes.HasFlag(FileAttributes.Directory) && skipDirectory?.Invoke(entry.FullName) != true)
                 {

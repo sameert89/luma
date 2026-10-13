@@ -23,6 +23,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton<Database>();
+builder.Services.AddSingleton<Luma.Server.Features.Files.MutationAccess>();
 builder.Services.AddSingleton<MigrationRunner>();
 builder.Services.AddSingleton<CursorSigner>();
 builder.Services.AddSingleton<MediaBrowser>();
@@ -108,6 +109,7 @@ if (Directory.Exists(app.Environment.WebRootPath))
 // Build-time OpenAPI extraction must not create or migrate a database.
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
+    _ = app.Services.GetRequiredService<Luma.Server.Features.Files.MutationAccess>();
     await app.Services.GetRequiredService<MigrationRunner>().ApplyAsync(app.Lifetime.ApplicationStopping);
     // Browsing depends on WAL: without it every read blocks writers (and vice versa), and
     // requests fail with "database is locked" under indexing load.
