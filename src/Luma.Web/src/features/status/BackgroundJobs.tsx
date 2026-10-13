@@ -14,7 +14,7 @@ export function BackgroundJobsDialog({ open, onOpenChange }: { open: boolean; on
       open={open}
       onOpenChange={onOpenChange}
       title="Background jobs"
-      description="Indexing, metadata imports and exports. Rescan a folder or library from its ⋯ menu."
+      description="Uploads, file operations, indexing and metadata jobs. Rescan a folder or library from its ⋯ menu."
       sheet
     >
       <div className="p-5">
@@ -36,7 +36,11 @@ export function BackgroundJobsButton({ libraryId }: { libraryId?: number }) {
     queryFn: ({ signal }) => request<components['schemas']['BackgroundTask'][]>('/api/tasks', signal),
     refetchInterval: 3000,
   })
-  const busy = !!starting || !!tasks.data?.some(task => task.state === 'queued' || task.state === 'running')
+  const busy =
+    !!starting ||
+    !!tasks.data?.some(task =>
+      ['queued', 'running', 'reserved', 'deleting', 'published', 'finalizing'].includes(task.state),
+    )
   useScanRefresh(libraryId)
   const icon = (
     <RefreshCw className={`size-6 ${busy ? 'text-accent motion-safe:animate-spin' : ''}`} aria-hidden="true" />

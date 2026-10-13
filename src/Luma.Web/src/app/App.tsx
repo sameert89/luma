@@ -1,3 +1,5 @@
+import { FileAccess } from '../features/files/FileAccess'
+import { FileToolbar } from '../features/files/FileToolbar'
 import { SettingsSection } from '../components/ui/SettingsSection'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -827,6 +829,7 @@ export function App() {
                 <MetadataExchange dislikes heading={false} />
               </SettingsSection>
               <LibrarySettings />
+              <FileAccess />
               <HiddenFolders />
               <SettingsSection title="Help" description="See what each button, gesture and keyboard shortcut does.">
                 <QuietLink
@@ -921,6 +924,11 @@ export function App() {
                       )}
                     </div>
                   </div>
+                  {section === 'library' && filters.libraryId && filters.folderId && (
+                    <div className="flex flex-wrap gap-2">
+                      <FileToolbar libraryId={filters.libraryId} folderId={filters.folderId} selected={selected} />
+                    </div>
+                  )}
                   {section === 'library' && folders.data && (
                     <>
                       {folders.data.ancestors.length > 0 && (
