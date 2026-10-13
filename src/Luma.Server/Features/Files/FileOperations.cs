@@ -28,8 +28,13 @@ public sealed class FileOperations(Database database, IndexingOptions options)
             throw ApiRequestException.Invalid("Choose a distinct destination outside the source subtree.");
         var operation = new FileOperation
         {
-            Id = Guid.NewGuid().ToString("N"), LibraryId = root.Id, Kind = request.Kind, Source = source,
-            Destination = destination, RecycleId = request.RecycleId, CreatedAt = DateTimeOffset.UtcNow.ToString("O")
+            Id = Guid.NewGuid().ToString("N"),
+            LibraryId = root.Id,
+            Kind = request.Kind,
+            Source = source,
+            Destination = destination,
+            RecycleId = request.RecycleId,
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O")
         };
         await using var db = await OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
