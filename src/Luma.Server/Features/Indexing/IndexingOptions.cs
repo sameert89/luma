@@ -67,6 +67,8 @@ public sealed class LibraryOptions
     // A configured path is not consent to immediately consume a large library.
     // First indexing is initiated from the library card or an explicit scan command.
     public bool ScanOnStartup { get; set; }
+    // Explicit server configuration; existing installations remain read-only.
+    public bool Writable { get; set; }
     public string Key(string relativePath) => CaseSensitive ? relativePath : relativePath.ToUpperInvariant();
 }
 
