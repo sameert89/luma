@@ -15,6 +15,9 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await RecoverAsync(stoppingToken);
+        // Read-only installations have no mutation work to claim. Recovery still records
+        // unresolved old operations, but ordinary browsing needs no extra writer polling.
+        if (!operations.HasWritableLibraries) return;
         while (!stoppingToken.IsCancellationRequested)
         {
             try

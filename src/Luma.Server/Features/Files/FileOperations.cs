@@ -10,6 +10,7 @@ namespace Luma.Server.Features.Files;
 // originals; the source is reserved in an operation-owned path before publication or deletion.
 public sealed class FileOperations(Database database, IndexingOptions options)
 {
+    internal bool HasWritableLibraries => options.Libraries.Any(root => root.Writable);
     internal const string ActiveStates = "'queued','running','reserved','deleting','published','finalizing','needsAttention'";
     public LibraryOptions WritableRoot(long id)
     {
