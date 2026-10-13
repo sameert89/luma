@@ -2613,6 +2613,87 @@
         }
       }
     },
+    "/api/files/access": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CheckMutationAccess",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/files/location": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileLocation",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "mediaId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileLocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/items": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CreateFileItemOperation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperationAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/operations": {
       "post": {
         "tags": [
@@ -2730,6 +2811,171 @@
                   "items": {
                     "$ref": "#/components/schemas/FileOperation"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/uploads": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CreateUploadSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/uploads/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetUploadSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "AppendUploadChunk",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/uploads/{id}/finalize": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "FinalizeUploadSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/uploads/{id}/{action}": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ChangeUploadSessionState",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
                 }
               }
             }
@@ -2979,6 +3225,52 @@
           }
         }
       },
+      "FileItemRequest": {
+        "required": [
+          "libraryId",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "mediaId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "folderId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FileLocation": {
+        "required": [
+          "libraryId",
+          "relativePath"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "relativePath": {
+            "type": "string"
+          }
+        }
+      },
       "FileOperation": {
         "type": "object",
         "properties": {
@@ -3000,6 +3292,10 @@
             "nullable": true
           },
           "recycleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "uploadId": {
             "type": "string",
             "nullable": true
           },
@@ -4070,6 +4366,63 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "UploadRequest": {
+        "required": [
+          "libraryId",
+          "target",
+          "sizeBytes"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "UploadSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "committedOffset": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "nullable": true
           }
         }
       },

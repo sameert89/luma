@@ -656,6 +656,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CheckMutationAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileLocation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateFileItemOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files/operations": {
         parameters: {
             query?: never;
@@ -714,6 +762,70 @@ export interface paths {
         get: operations["GetRecycledFiles"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateUploadSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetUploadSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["AppendUploadChunk"];
+        trace?: never;
+    };
+    "/api/files/uploads/{id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["FinalizeUploadSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/uploads/{id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ChangeUploadSessionState"];
         delete?: never;
         options?: never;
         head?: never;
@@ -788,6 +900,21 @@ export interface components {
             libraryId: number;
             writable: boolean;
         };
+        FileItemRequest: {
+            /** Format: int64 */
+            libraryId: number;
+            kind: string;
+            /** Format: int64 */
+            mediaId?: number | null;
+            /** Format: int64 */
+            folderId?: number | null;
+            destination?: string | null;
+        };
+        FileLocation: {
+            /** Format: int64 */
+            libraryId: number;
+            relativePath: string;
+        };
         FileOperation: {
             id?: string;
             /** Format: int64 */
@@ -796,6 +923,7 @@ export interface components {
             source?: string;
             destination?: string | null;
             recycleId?: string | null;
+            uploadId?: string | null;
             isDirectory?: boolean;
             /** Format: int64 */
             sourceSize?: number;
@@ -1133,6 +1261,27 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
+        };
+        UploadRequest: {
+            /** Format: int64 */
+            libraryId: number;
+            target: string;
+            /** Format: int64 */
+            sizeBytes: number;
+        };
+        UploadSession: {
+            id?: string;
+            /** Format: int64 */
+            libraryId?: number;
+            target?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            /** Format: int64 */
+            committedOffset?: number;
+            state?: string;
+            createdAt?: string;
+            updatedAt?: string;
+            operationId?: string | null;
         };
         WatchState: {
             /** Format: int64 */
@@ -2568,6 +2717,71 @@ export interface operations {
             };
         };
     };
+    CheckMutationAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetFileLocation: {
+        parameters: {
+            query?: {
+                folderId?: number;
+                mediaId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileLocation"];
+                };
+            };
+        };
+    };
+    CreateFileItemOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperationAccepted"];
+                };
+            };
+        };
+    };
     CreateFileOperation: {
         parameters: {
             query?: never;
@@ -2653,6 +2867,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FileOperation"][];
+                };
+            };
+        };
+    };
+    CreateUploadSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    GetUploadSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    AppendUploadChunk: {
+        parameters: {
+            query: {
+                offset: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    FinalizeUploadSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    ChangeUploadSessionState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                action: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
                 };
             };
         };

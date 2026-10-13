@@ -36,6 +36,7 @@ public sealed class FileOperations(Database database, IndexingOptions options)
         if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"""
             SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@Id AND State IN ({ActiveStates}))
               OR EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running'))
+              OR EXISTS(SELECT 1 FROM UploadSessions WHERE LibraryId=@Id AND State IN ('waitingForClient','paused','finalizing'))
             """, root, tx, cancellationToken: ct)))
             throw new ApiRequestException(409, "library_busy", "Finish indexing or the active file operation before changing this library.");
         if (request.Kind is "restore" or "purge")

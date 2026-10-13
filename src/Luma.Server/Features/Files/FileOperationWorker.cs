@@ -62,15 +62,15 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             var root = operations.WritableRoot(row.LibraryId);
             // Losing access is not deletion, and cannot trigger cleanup.
             _ = MutationPaths.Resolve(root, "", allowRoot: true);
-            var category = row.Kind is "recycle" or "restore" or "purge" ? MutationPaths.TrashDirectory : MutationPaths.OperationsDirectory;
-            var staging = MutationPaths.Internal(root, category, row.RecycleId ?? row.Id);
-            var source = row.Kind is "restore" or "purge" ? staging : MutationPaths.Resolve(root, row.Source);
+            var category = row.Kind == "upload" ? MutationPaths.UploadDirectory : row.Kind is "recycle" or "restore" or "purge" ? MutationPaths.TrashDirectory : MutationPaths.OperationsDirectory;
+            var staging = MutationPaths.Internal(root, category, row.UploadId ?? row.RecycleId ?? row.Id);
+            var source = row.Kind is "upload" or "restore" or "purge" ? staging : MutationPaths.Resolve(root, row.Source);
             var destination = row.Kind == "mkdir" ? row.Source : row.Destination;
             if (row.State == "running")
             {
                 // A crash after reservation but before the state write has an owned staging path.
                 // A public source alone cannot distinguish the original from its replacement.
-                if (recovering && row.Kind is not ("restore" or "purge") && !Exists(staging))
+                if (recovering && row.Kind is not ("upload" or "restore" or "purge") && !Exists(staging))
                     throw Attention("interrupted_before_reservation");
                 if (!Exists(staging))
                 {
@@ -85,7 +85,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                         else File.Move(source, staging, overwrite: false);
                     }
                 }
-                else if (!recovering && row.Kind is not ("restore" or "purge")) throw Attention("staging_conflict");
+                else if (!recovering && row.Kind is not ("upload" or "restore" or "purge")) throw Attention("staging_conflict");
                 Checkpoint?.Invoke("reserved-filesystem");
                 await StateAsync(row, "reserved", ct);
                 Checkpoint?.Invoke("reserved-journal");
@@ -127,7 +127,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             if (row.State is "published" or "finalizing")
             {
                 if (row.Kind == "recycle" && !Exists(staging)) throw Attention("staging_unavailable");
-                if (row.Kind is "move" or "restore" or "mkdir")
+                if (row.Kind is "upload" or "move" or "restore" or "mkdir")
                 {
                     var target = MutationPaths.Resolve(root, destination!);
                     if (!Exists(target)) throw Attention("destination_unavailable");
@@ -195,6 +195,18 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 await db.ExecuteAsync(new CommandDefinition("UPDATE Media SET FileName=@name,FolderId=@parentId WHERE Id IN (SELECT MediaId FROM OperationMedia WHERE OperationId=@snapshot)", new { name = Path.GetFileName(target), parentId, snapshot }, tx, cancellationToken: ct));
         }
         else if (row.Kind == "mkdir") await EnsureFolderAsync(db, tx, root, row.Source, ct);
+        else if (row.Kind == "upload")
+        {
+            var parentPath = row.Destination!.Contains('/') ? row.Destination[..row.Destination.LastIndexOf('/')] : "";
+            var folderId = await EnsureFolderAsync(db, tx, root, parentPath, ct);
+            // Existing scan worker discovers the safely published original; no scan in browse handlers.
+            await db.ExecuteAsync(new CommandDefinition("""
+                INSERT INTO Scans(LibraryId,FolderId,State,StartedAt,MetadataMode)
+                  SELECT @LibraryId,@folderId,'queued',@now,MetadataMode FROM Libraries WHERE Id=@LibraryId
+                    AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'));
+                UPDATE UploadSessions SET State='completed',UpdatedAt=@now WHERE Id=@UploadId;
+                """, new { row.LibraryId, row.UploadId, folderId, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+        }
         if (row.Kind is "restore" or "purge")
             await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET Restored=1 WHERE Id=@RecycleId", row, tx, cancellationToken: ct));
         await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='completed',FinishedAt=@now,FailureCode=NULL WHERE Id=@Id", new { row.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));

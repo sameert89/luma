@@ -12,6 +12,7 @@ public sealed class FileOperation
     public string Source { get; set; } = "";
     public string? Destination { get; set; }
     public string? RecycleId { get; set; }
+    public string? UploadId { get; set; }
     public bool IsDirectory { get; set; }
     public long SourceSize { get; set; }
     public long SourceModifiedTicks { get; set; }
@@ -21,3 +22,6 @@ public sealed class FileOperation
     public string? FailureCode { get; set; }
     public bool Restored { get; set; }
 }
+
+public sealed record FileLocation(long LibraryId, string RelativePath);
+public sealed record FileItemRequest(long LibraryId, string Kind, long? MediaId = null, long? FolderId = null, string? Destination = null);

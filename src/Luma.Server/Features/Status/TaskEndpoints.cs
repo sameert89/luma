@@ -1,5 +1,6 @@
 using Dapper;
 using Luma.Server.Features.Files;
+using Luma.Server.Features.Uploads;
 using Luma.Server.Data;
 using Luma.Server.Features.Tags;
 using Luma.Server.Features.Indexing;
@@ -20,6 +21,7 @@ public static class TaskEndpoints
             await using var db = await database.OpenAsync(ct);
             using var tx = db.BeginTransaction();
             await db.ExecuteAsync(new CommandDefinition($"""
+                UPDATE UploadSessions SET QueueDismissed=1 WHERE State IN ('completed','cancelled');
                 UPDATE FileOperations SET QueueDismissed=1 WHERE State IN ('completed','cancelled') AND QueueDismissed=0;
                 UPDATE MetadataJobs SET QueueDismissed=1 WHERE QueueDismissed=0 AND {MetadataFinished};
                 UPDATE Scans SET QueueDismissed=1 WHERE QueueDismissed=0 AND {ScanFinished};
@@ -29,6 +31,14 @@ public static class TaskEndpoints
         }).WithName("ClearFinishedBackgroundTasks");
         app.MapPost("/api/tasks/{id}/clear", async (string id, Database database, MutationAccess access, HttpContext context, CancellationToken ct) =>
         {
+            if (id.StartsWith("upload-", StringComparison.Ordinal))
+            {
+                access.Authorize(context);
+                await using var uploadDb = await database.OpenAsync(ct);
+                if (await uploadDb.ExecuteAsync(new CommandDefinition("UPDATE UploadSessions SET QueueDismissed=1 WHERE Id=@key AND State IN ('completed','cancelled')", new { key = id[7..] }, cancellationToken: ct)) == 0)
+                    throw new ApiRequestException(409, "upload_unresolved", "Only completed or cancelled uploads can be cleared.");
+                return TypedResults.NoContent();
+            }
             if (id.StartsWith("file-", StringComparison.Ordinal))
             {
                 access.Authorize(context);
@@ -45,8 +55,14 @@ public static class TaskEndpoints
                 throw new ApiRequestException(409, "conflict", "Only finished tasks can be cleared. Cancel it first.");
             return TypedResults.NoContent();
         }).WithName("ClearBackgroundTask");
-        app.MapPost("/api/tasks/{id}/cancel", async (string id, MetadataJobs jobs, FileOperations operations, MutationAccess access, HttpContext context, CancellationToken ct) =>
+        app.MapPost("/api/tasks/{id}/cancel", async (string id, MetadataJobs jobs, FileOperations operations, UploadSessions uploads, MutationAccess access, HttpContext context, CancellationToken ct) =>
         {
+            if (id.StartsWith("upload-", StringComparison.Ordinal))
+            {
+                access.Authorize(context);
+                await uploads.ChangeStateAsync(id[7..], "cancel", ct);
+                return Results.NoContent();
+            }
             if (id.StartsWith("file-", StringComparison.Ordinal))
             {
                 access.Authorize(context);
@@ -107,6 +123,10 @@ public static class TaskEndpoints
                   CASE WHEN State='needsAttention' THEN 1 ELSE 0 END,CASE WHEN State='queued' THEN 1 ELSE 0 END,
                   Source||CASE WHEN Destination IS NULL THEN '' ELSE ' → '||Destination END
                 FROM (SELECT * FROM FileOperations WHERE QueueDismissed=0 ORDER BY CreatedAt DESC LIMIT 50)
+                UNION ALL
+                SELECT 'upload-'||u.Id,'upload',COALESCE(CASE WHEN o.State='needsAttention' THEN o.State END,u.State),u.CreatedAt,u.CommittedOffset,0,u.SizeBytes-u.CommittedOffset,u.Target
+                FROM (SELECT * FROM UploadSessions WHERE QueueDismissed=0 ORDER BY CreatedAt DESC LIMIT 50) u
+                LEFT JOIN FileOperations o ON o.Id=u.OperationId
                 ORDER BY CreatedAt DESC LIMIT 100
                 """, cancellationToken: ct))).Select(x => new BackgroundTask(x.Id, x.Kind, x.State, x.CreatedAt, x.Processed, x.Failed, x.Pending, x.Scope)).ToArray());
         }).WithName("GetBackgroundTasks");
