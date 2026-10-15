@@ -5,7 +5,7 @@ using Luma.Server.Http;
 
 namespace Luma.Server.Features.Uploads;
 
-public sealed record UploadRequest(long LibraryId, string Target, long SizeBytes);
+public sealed record UploadRequest(long LibraryId, string Target, long SizeBytes, string? RequestId = null);
 public sealed class UploadSession
 {
     public string Id { get; set; } = "";
@@ -35,22 +35,38 @@ public sealed class UploadSessions(Database database, FileOperations operations,
         var root = operations.WritableRoot(request.LibraryId);
         var target = MutationPaths.Normalize(request.Target);
         if (request.SizeBytes < 0 || request.SizeBytes > maximumFile) throw new ApiRequestException(413, "upload_size_limit", "The upload exceeds the configured file-size limit.");
+        if (request.RequestId is not null && !Guid.TryParseExact(request.RequestId, "N", out _)) throw ApiRequestException.Invalid();
         await creation.WaitAsync(ct);
         try
         {
             await using var db = await operations.OpenJournalAsync(ct);
             using var tx = db.BeginTransaction();
+            if (request.RequestId is not null)
+            {
+                var previous = await db.QuerySingleOrDefaultAsync<UploadSession>(new CommandDefinition("SELECT * FROM UploadSessions WHERE Id=@RequestId", request, tx, cancellationToken: ct));
+                if (previous is not null)
+                {
+                    if (previous.LibraryId != root.Id || previous.Target != target || previous.SizeBytes != request.SizeBytes)
+                        throw new ApiRequestException(409, "upload_request_mismatch", "This upload request ID already belongs to a different file.");
+                    return previous;
+                }
+            }
             var (count, reserved) = await db.QuerySingleAsync<(long Count, long Reserved)>(new CommandDefinition(
                 "SELECT COUNT(*),COALESCE(SUM(SizeBytes),0) FROM UploadSessions WHERE State IN ('waitingForClient','paused','finalizing')", transaction: tx, cancellationToken: ct));
             if (count >= 128 || request.SizeBytes > stagingQuota - reserved) throw new ApiRequestException(409, "upload_capacity", "The upload session or staging-space limit has been reached.");
             if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"""
                 SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@LibraryId AND State IN ({FileOperations.ActiveStates}))
-                  OR EXISTS(SELECT 1 FROM UploadSessions WHERE LibraryId=@LibraryId AND Target=@target AND State IN ('waitingForClient','paused','finalizing'))
-                """, new { request.LibraryId, target }, tx, cancellationToken: ct)))
+
+                """, new { request.LibraryId }, tx, cancellationToken: ct)))
                 throw new ApiRequestException(409, "library_busy", "A conflicting operation or upload is active.");
+            var activeTargets = await db.QueryAsync<string>(new CommandDefinition("SELECT Target FROM UploadSessions WHERE LibraryId=@LibraryId AND State IN ('waitingForClient','paused','finalizing')", request, tx, cancellationToken: ct));
+            // Admission caps this list at 128. Apply the configured root's Unicode case policy,
+            // rather than SQLite's ASCII-only upper/collation behavior.
+            if (activeTargets.Any(existing => root.Key(existing) == root.Key(target)))
+                throw new ApiRequestException(409, "library_busy", "An upload already reserves this destination.");
             FileOperations.EnsureDestination(root, target);
             var now = DateTimeOffset.UtcNow.ToString("O");
-            var session = new UploadSession { Id = Guid.NewGuid().ToString("N"), LibraryId = root.Id, Target = target, SizeBytes = request.SizeBytes, CreatedAt = now, UpdatedAt = now };
+            var session = new UploadSession { Id = request.RequestId ?? Guid.NewGuid().ToString("N"), LibraryId = root.Id, Target = target, SizeBytes = request.SizeBytes, CreatedAt = now, UpdatedAt = now };
             await db.ExecuteAsync(new CommandDefinition("INSERT INTO UploadSessions(Id,LibraryId,Target,SizeBytes,CreatedAt,UpdatedAt) VALUES(@Id,@LibraryId,@Target,@SizeBytes,@CreatedAt,@UpdatedAt)", session, tx, cancellationToken: ct));
             tx.Commit();
             // File creation can be retried lazily. A durable offset of zero never assumes it exists.
@@ -118,15 +134,19 @@ public sealed class UploadSessions(Database database, FileOperations operations,
         {
             var session = await GetAsync(id, ct);
             var root = operations.WritableRoot(session.LibraryId);
+            if (action == "cancel" && session.State == "cancelled") return session;
             if (session.State is not ("waitingForClient" or "paused")) throw new ApiRequestException(409, "upload_not_active", "The upload is no longer waiting for data.");
             var state = action switch { "pause" => "paused", "resume" => "waitingForClient", "cancel" => "cancelled", _ => throw ApiRequestException.Invalid() };
-            await using var db = await operations.OpenJournalAsync(ct);
-            await db.ExecuteAsync(new CommandDefinition("UPDATE UploadSessions SET State=@state,UpdatedAt=@now WHERE Id=@id", new { id, state, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
             if (state == "cancelled")
             {
                 var path = MutationPaths.Internal(root, MutationPaths.UploadDirectory, id);
-                if (File.Exists(path)) File.Delete(path);
+                try { File.Delete(path); }
+                catch (DirectoryNotFoundException) { /* No staging was created, or it was already removed. */ }
             }
+            // Release the durable reservation only after staging deletion succeeds. A crash
+            // before this checkpoint leaves a cancellable session, never untracked staged bytes.
+            await using var db = await operations.OpenJournalAsync(ct);
+            await db.ExecuteAsync(new CommandDefinition("UPDATE UploadSessions SET State=@state,UpdatedAt=@now WHERE Id=@id", new { id, state, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
             session.State = state;
             return session;
         }

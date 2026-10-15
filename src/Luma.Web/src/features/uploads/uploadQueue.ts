@@ -12,6 +12,7 @@ export type QueuedUpload = {
   size: number
   lastModified: number
   id?: string
+  requestId?: string
   file?: File
   offset: number
   state: string
@@ -27,7 +28,12 @@ let sequence = 0
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) ?? '[]') as QueuedUpload[]
   queue = saved
-    .filter(item => typeof item.id === 'string' && typeof item.target === 'string' && Number.isSafeInteger(item.size))
+    .filter(
+      item =>
+        (typeof item.id === 'string' || typeof item.requestId === 'string') &&
+        typeof item.target === 'string' &&
+        Number.isSafeInteger(item.size),
+    )
     .map(item => ({ ...item, state: 'reselect' }))
 } catch {
   /* Server sessions remain authoritative if browser state is corrupt. */
@@ -46,14 +52,15 @@ function update(key: string, value: Partial<QueuedUpload>) {
       storageKey,
       JSON.stringify(
         queue
-          .filter(item => item.id && !['completed', 'cancelled'].includes(item.state))
-          .map(({ key, libraryId, target, size, lastModified, id, offset }) => ({
+          .filter(item => (item.id || item.requestId) && !['completed', 'cancelled'].includes(item.state))
+          .map(({ key, libraryId, target, size, lastModified, id, requestId, offset }) => ({
             key,
             libraryId,
             target,
             size,
             lastModified,
             id,
+            requestId,
             offset,
           })),
       ),
@@ -91,16 +98,25 @@ export async function addUploads(files: File[], libraryId: number, destination: 
       folders.add([destination, ...parts.slice(0, depth)].filter(Boolean).join('/'))
   }
   for (const source of folders) {
-    try {
-      const operation = await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
-        libraryId,
-        kind: 'mkdir',
-        source,
-      })
-      await waitForOperation(operation.id)
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 409 || !error.message.includes('destination already exists'))
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const operation = await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
+          libraryId,
+          kind: 'mkdir',
+          source,
+        })
+        await waitForOperation(operation.id)
+        break
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          if (error.problem?.code === 'directory_exists') break
+          if (error.problem?.code === 'library_busy' && attempt < 29) {
+            await sleep(1000)
+            continue
+          }
+        }
         throw error
+      }
     }
   }
   for (const file of files.filter(file => !resumed.has(file))) {
@@ -116,6 +132,7 @@ export async function addUploads(files: File[], libraryId: number, destination: 
         lastModified: file.lastModified,
         offset: 0,
         state: 'queued',
+        requestId: crypto.randomUUID().replaceAll('-', ''),
       },
     ]
     update(key, {})
@@ -138,12 +155,15 @@ async function transfer(item: QueuedUpload) {
   const controller = new AbortController()
   update(item.key, { controller })
   try {
+    const requestId = item.requestId ?? crypto.randomUUID().replaceAll('-', '')
+    update(item.key, { requestId })
     let session = item.id
       ? await request<Session>(`/api/files/uploads/${item.id}`, controller.signal)
       : await request<Session>('/api/files/uploads', controller.signal, 'POST', {
           libraryId: item.libraryId,
           target: item.target,
           sizeBytes: item.size,
+          requestId,
         })
     update(item.key, { id: session.id, offset: session.committedOffset })
     if (session.state === 'paused')
@@ -198,7 +218,7 @@ async function transfer(item: QueuedUpload) {
     }
     update(item.key, { state: 'completed', offset: item.size, controller: undefined, file: undefined })
   } catch (error) {
-    if (!['paused', 'cancelled'].includes(queue.find(entry => entry.key === item.key)?.state ?? ''))
+    if (!['paused', 'cancelled', 'cancelling'].includes(queue.find(entry => entry.key === item.key)?.state ?? ''))
       update(item.key, {
         state: 'failed',
         controller: undefined,
@@ -214,12 +234,34 @@ export async function uploadAction(key: string, action: 'pause' | 'resume' | 'ca
       update(key, { state: 'reselect' })
       return
     }
-    if (item.id) await request(`/api/files/uploads/${item.id}/resume`, undefined, 'POST')
+    // transfer() queries authoritative state and resumes only a paused session.
     update(key, { state: 'queued', error: undefined })
     pump()
     return
   }
-  update(key, { state: action === 'pause' ? 'paused' : 'cancelled' })
+  update(key, { state: action === 'pause' ? 'paused' : 'cancelling' })
   item.controller?.abort()
-  if (item.id) await request(`/api/files/uploads/${item.id}/${action}`, undefined, 'POST')
+  try {
+    let id = item.id
+    if (!id && item.requestId) {
+      // Bind the same request ID even if creation's response was lost or is still in flight.
+      id = (
+        await request<Session>('/api/files/uploads', undefined, 'POST', {
+          libraryId: item.libraryId,
+          target: item.target,
+          sizeBytes: item.size,
+          requestId: item.requestId,
+        })
+      ).id
+    }
+    if (id) await request(`/api/files/uploads/${id}/${action}`, undefined, 'POST')
+    update(key, { id, state: action === 'pause' ? 'paused' : 'cancelled', controller: undefined })
+  } catch (error) {
+    update(key, {
+      state: 'failed',
+      controller: undefined,
+      error: error instanceof Error ? error.message : 'Could not update upload.',
+    })
+    throw error
+  }
 }

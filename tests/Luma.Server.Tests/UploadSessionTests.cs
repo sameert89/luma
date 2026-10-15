@@ -18,6 +18,72 @@ public sealed class UploadSessionTests
     }
 
     [Fact]
+    public async Task Retrying_creation_after_a_lost_response_returns_the_durable_session()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (_, uploads, _) = Services(f);
+        var id = Guid.NewGuid().ToString("N");
+        var request = new UploadRequest(1, "photo.jpg", 3, id);
+        await uploads.CreateAsync(request, default);
+        await uploads.AppendAsync(id, 0, new MemoryStream("abc"u8.ToArray()), 3, default);
+        var restarted = new UploadSessions(f.Database, new FileOperations(f.Database, f.Options), new ConfigurationBuilder().Build());
+        var checkpoint = await restarted.CreateAsync(request, default);
+        Assert.Equal(id, checkpoint.Id);
+        Assert.Equal(3, checkpoint.CommittedOffset);
+        var conflict = await Assert.ThrowsAsync<ApiRequestException>(() => restarted.CreateAsync(request with { Target = "different.jpg" }, default));
+        Assert.Equal("upload_request_mismatch", conflict.Code);
+        await using var db = await f.Database.OpenAsync(default);
+        Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM UploadSessions"));
+    }
+
+    [Fact]
+    public async Task Active_destinations_respect_the_root_case_policy()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        f.Root.CaseSensitive = false;
+        var (_, uploads, _) = Services(f);
+        await uploads.CreateAsync(new(1, "Photo.jpg", 3), default);
+        var conflict = await Assert.ThrowsAsync<ApiRequestException>(() => uploads.CreateAsync(new(1, "photo.JPG", 3), default));
+        Assert.Equal("library_busy", conflict.Code);
+    }
+
+    [Fact]
+    public async Task Failed_staging_deletion_keeps_the_session_reserved_until_cancel_retries()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, uploads, _) = Services(f);
+        var upload = await uploads.CreateAsync(new(1, "photo.jpg", 3), default);
+        await uploads.AppendAsync(upload.Id, 0, new MemoryStream("abc"u8.ToArray()), 3, default);
+        var staging = Path.Combine(f.Root.Path, ".luma-uploads", upload.Id, "content");
+        File.Delete(staging);
+        Directory.CreateDirectory(staging);
+        await Assert.ThrowsAnyAsync<IOException>(async () =>
+        {
+            try { await uploads.ChangeStateAsync(upload.Id, "cancel", default); }
+            catch (UnauthorizedAccessException error) { throw new IOException("Staging is not a file", error); }
+        });
+        Assert.Equal("waitingForClient", (await uploads.GetAsync(upload.Id, default)).State);
+        await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "mkdir", "new"), default));
+        Directory.Delete(staging);
+        await uploads.ChangeStateAsync(upload.Id, "cancel", default);
+        Assert.Equal("cancelled", (await uploads.ChangeStateAsync(upload.Id, "cancel", default)).State);
+    }
+
+    [Fact]
+    public async Task Upload_folder_creation_distinguishes_a_directory_from_a_file_collision()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, _, _) = Services(f);
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "chapter"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "file"), "original");
+        var folder = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "mkdir", "chapter"), default));
+        Assert.Equal("directory_exists", folder.Code);
+        var file = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "mkdir", "file"), default));
+        Assert.Equal("destination_exists", file.Code);
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "file")));
+    }
+
+    [Fact]
     public async Task Offset_is_durable_and_duplicate_chunks_cannot_append_twice()
     {
         await using var f = await PipelineFixture.CreateAsync();

@@ -1472,6 +1472,7 @@ export interface components {
             target: string;
             /** Format: int64 */
             sizeBytes: number;
+            requestId?: string | null;
         };
         UploadSession: {
             id?: string;

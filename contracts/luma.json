@@ -4877,6 +4877,10 @@
           "sizeBytes": {
             "type": "integer",
             "format": "int64"
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
           }
         }
       },

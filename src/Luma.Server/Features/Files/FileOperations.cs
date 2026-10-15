@@ -69,6 +69,8 @@ public sealed class FileOperations(Database database, IndexingOptions options)
         else
         {
             operation.IsDirectory = true;
+            if (Directory.Exists(MutationPaths.Resolve(root, source)))
+                throw new ApiRequestException(409, "directory_exists", "The destination folder already exists.");
             EnsureDestination(root, source);
         }
         if (operation.Destination is not null)
