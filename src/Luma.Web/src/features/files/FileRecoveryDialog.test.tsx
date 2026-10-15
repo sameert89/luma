@@ -65,20 +65,18 @@ describe('operation recovery review', () => {
   it('shows changed evidence errors and clears confirmation after a rejected recovery', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockImplementation((_path: string, init?: RequestInit) =>
-          Promise.resolve(
-            init?.method === 'POST'
-              ? new Response(JSON.stringify({ title: 'Evidence changed', code: 'recovery_changed' }), {
-                  status: 409,
-                  headers: { 'Content-Type': 'application/problem+json' },
-                })
-              : new Response(JSON.stringify({ ...evidence, actions: ['confirmPublished'] }), {
-                  headers: { 'Content-Type': 'application/json' },
-                }),
-          ),
+      vi.fn().mockImplementation((_path: string, init?: RequestInit) =>
+        Promise.resolve(
+          init?.method === 'POST'
+            ? new Response(JSON.stringify({ title: 'Evidence changed', code: 'recovery_changed' }), {
+                status: 409,
+                headers: { 'Content-Type': 'application/problem+json' },
+              })
+            : new Response(JSON.stringify({ ...evidence, actions: ['confirmPublished'] }), {
+                headers: { 'Content-Type': 'application/json' },
+              }),
         ),
+      ),
     )
     mount()
     const confirm = await screen.findByRole('button', { name: 'Confirm destination and finish' })
