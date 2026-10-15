@@ -5,7 +5,11 @@ import packageJson from '../package.json'
 
 // What's new opens by itself once per release. Tests start past it; the ones about the
 // release notes themselves clear this key first.
-beforeEach(() => localStorage.setItem('luma-version-seen', packageJson.version))
+beforeEach(() => {
+  localStorage.setItem('luma-version-seen', packageJson.version)
+  for (const experience of ['gallery', 'flick', 'panels'])
+    sessionStorage.setItem(`luma-introduction-${experience}`, '1')
+})
 afterEach(() => {
   // Anything that chooses or closes on pointer down arms a one-shot guard that swallows the click
   // which follows (components/ui/dismiss). A browser always spends that guard: the click lands on

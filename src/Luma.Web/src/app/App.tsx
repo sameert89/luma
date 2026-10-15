@@ -1,3 +1,4 @@
+import { useAppearance, AppearanceBackdrop, AppearanceSettings, AppIntroduction } from './appearance/Appearance'
 import { AppSwitcher, type Experience } from './navigation/AppSwitcher'
 import { readExperience, saveExperience, sectionPath } from './navigation/experienceState'
 import { FileAccess } from '../features/files/FileAccess'
@@ -158,6 +159,7 @@ function readPersistedView(): PersistedView | null {
 }
 
 export function App() {
+  const appearance = useAppearance()
   // An installed PWA can be relaunched at its start URL after Android closes it. History state and
   // the previous query string are then gone, so keep the last real destination independently.
   // An explicit URL always wins, preserving shared links and browser history semantics.
@@ -763,7 +765,8 @@ export function App() {
     ) : undefined
   return (
     <div
-      className="flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas text-ink"
+      className="luma-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas text-ink"
+      data-background={appearance.value.background !== 'none'}
       onScrollCapture={event => {
         const target = event.target
         // Gallery suppresses virtualizer-driven scroll events while it restores itself;
@@ -776,6 +779,8 @@ export function App() {
           recordScroll(target.scrollTop)
       }}
     >
+      <AppearanceBackdrop appearance={appearance} />
+      <AppIntroduction experience={experience} appearance={appearance.value} />
       <a
         href="#collection"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-accent focus:p-3 focus:text-on-accent"
@@ -884,6 +889,7 @@ export function App() {
             <div className="overflow-auto" data-scroll-restore>
               <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
               <ThemePicker value={theme} onChange={setTheme} />
+              <AppearanceSettings appearance={appearance} />
               <AlbumCoverSettings />
               <ReelsSortSettings />
               <SettingsSection

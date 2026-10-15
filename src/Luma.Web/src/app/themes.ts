@@ -7,7 +7,19 @@
  * for everything the page itself paints. A test holds the two together.
  */
 export type Theme =
-  'obsidian' | 'light' | 'catppuccin' | 'crimson' | 'ember' | 'cinema' | 'midnight' | 'oled' | 'forest' | 'nord'
+  | 'obsidian'
+  | 'light'
+  | 'catppuccin'
+  | 'crimson'
+  | 'ember'
+  | 'cinema'
+  | 'midnight'
+  | 'oled'
+  | 'forest'
+  | 'nord'
+  | 'sakura'
+  | 'celestial'
+  | 'manga'
 
 export type ThemeOption = { id: Theme; name: string; description: string; canvas: string }
 
@@ -37,6 +49,19 @@ export const themes: ThemeOption[] = [
   },
   { id: 'forest', name: 'Forest', description: 'Media-player charcoal with fresh green accents', canvas: '#0e1411' },
   { id: 'nord', name: 'Nord', description: 'Cool arctic greys with a frost-blue accent', canvas: '#2e3440' },
+  {
+    id: 'sakura',
+    name: 'Sakura dusk',
+    description: 'Ink-violet surfaces with soft blossom accents',
+    canvas: '#221b2b',
+  },
+  {
+    id: 'celestial',
+    name: 'Celestial',
+    description: 'Deep night skies and luminous ice-blue accents',
+    canvas: '#101c2c',
+  },
+  { id: 'manga', name: 'Manga paper', description: 'Warm paper, dark ink and quiet violet accents', canvas: '#f5f1e7' },
 ]
 
 /** Where the build writes each theme's manifest, and where the page points at it. */
