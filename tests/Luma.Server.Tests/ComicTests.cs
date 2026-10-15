@@ -88,8 +88,8 @@ public sealed class ComicTests
         await using var db = await f.Database.OpenAsync(default);
         return await db.ExecuteScalarAsync<long>("""
             INSERT INTO Comics(LibraryId,RelativePath,PathKey,Format,Title,PageCount,SourceSize,SourceModifiedTicks,AddedAt)
-              VALUES(1,@path,@path,'zip','Book',3,1,1,'2026-01-01') RETURNING Id
-            """, new { path });
+              VALUES(1,@path,@key,'zip','Book',3,1,1,'2026-01-01') RETURNING Id
+            """, new { path, key = f.Root.Key(path) });
     }
     [Fact]
     public async Task Reading_time_heartbeats_are_deduplicated_bounded_and_pause_with_zero_delta()
@@ -165,10 +165,13 @@ public sealed class ComicTests
         var listed = await library.ListAsync(null, null, null, null, null, default);
         Assert.Equal("{\"mode\":\"continuous\"}", Assert.Single(listed.Items).Settings);
     }
-    [Fact]
-    public async Task Controlled_recycle_restore_preserves_comic_identity_and_reading_progress()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Controlled_recycle_restore_preserves_comic_identity_and_reading_progress(bool caseSensitive)
     {
         await using var f = await PipelineFixture.CreateAsync();
+        f.Root.CaseSensitive = caseSensitive;
         var path = "book.cbz";
         await File.WriteAllTextAsync(Path.Combine(f.Root.Path, path), "comic");
         var id = await SeedAsync(f, path);
