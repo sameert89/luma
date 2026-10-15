@@ -9,6 +9,7 @@ type Task = components['schemas']['BackgroundTask']
 const kindLabels: Record<string, string> = {
   indexing: 'Indexing',
   upload: 'Upload',
+  comics: 'Comic discovery',
   mkdir: 'New folder',
   move: 'Move / rename',
   recycle: 'Recycle',

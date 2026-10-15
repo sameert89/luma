@@ -295,7 +295,7 @@ export function Viewer({
               <Info className="size-4" />
             </IconButton>
             {motion && onWatchReels && (
-              <IconButton label="Watch on Reels" className={actionButton} onClick={() => onWatchReels(item)}>
+              <IconButton label="Watch on Flick" className={actionButton} onClick={() => onWatchReels(item)}>
                 <Clapperboard className="size-4" />
               </IconButton>
             )}

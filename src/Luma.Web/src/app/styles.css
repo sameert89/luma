@@ -488,3 +488,8 @@
   --color-accent: #88c0d0;
   --color-on-accent: #2e3440;
 }
+
+/* Comic covers use a shared book proportion across themes. */
+.aspect-book {
+  aspect-ratio: 2 / 3;
+}

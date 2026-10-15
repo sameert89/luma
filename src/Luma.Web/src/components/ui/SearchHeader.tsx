@@ -1,5 +1,5 @@
 import { FileImage, FolderOpen, Search, SlidersHorizontal, Tag, X } from 'lucide-react'
-import { useDeferredValue, useEffect, useId, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { IconButton, Input } from './Controls'
 import { tagTone } from './TagTone'
@@ -25,6 +25,7 @@ export function SearchHeader({
   onFilters,
   searchRequested,
   scope = '',
+  logo,
 }: {
   value: string
   onChange: (value: string) => void
@@ -35,6 +36,7 @@ export function SearchHeader({
   onFilters: () => void
   searchRequested: boolean
   scope?: string
+  logo?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 639px)').matches ?? false)
@@ -90,17 +92,19 @@ export function SearchHeader({
   }
   return (
     <header className="relative z-30 flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:px-6">
-      <a
-        href="/"
-        className={`shrink-0 text-xl font-semibold tracking-tight ${mobile && open ? 'hidden' : ''}`}
-        aria-label="Luma home"
-        onClick={event => {
-          event.preventDefault()
-          onHome()
-        }}
-      >
-        luma<span className="text-accent">.</span>
-      </a>
+      {logo ?? (
+        <a
+          href="/"
+          className={`shrink-0 text-xl font-semibold tracking-tight ${mobile && open ? 'hidden' : ''}`}
+          aria-label="Luma home"
+          onClick={event => {
+            event.preventDefault()
+            onHome()
+          }}
+        >
+          luma<span className="text-accent">.</span>
+        </a>
+      )}
       <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
         <form
           role="search"

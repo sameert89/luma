@@ -4,7 +4,7 @@ export function setMutationToken(value: string) {
   token = value
 }
 export function mutationHeaders(path: string): Record<string, string> {
-  return token && (path.startsWith('/api/files') || path.startsWith('/api/tasks'))
+  return token && (path.startsWith('/api/files') || path.startsWith('/api/tasks') || path.startsWith('/api/panels'))
     ? { Authorization: `Bearer ${token}` }
     : {}
 }

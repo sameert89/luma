@@ -30,8 +30,7 @@ export function FileAccess() {
       description="Unlock explicitly writable libraries for this tab. Read-only libraries stay protected."
     >
       <p className="text-sm text-muted">
-        Configure Luma:Files:AccessToken on the server and Writable=true for each writable library. The token stays in
-        memory; enter it again after refreshing.
+        The access token stays in this tab. Unlock file management again after refreshing.
       </p>
       {unlocked ? (
         <QuietButton

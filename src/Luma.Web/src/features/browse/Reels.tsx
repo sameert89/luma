@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ChevronDown,
   ChevronUp,
-  Clapperboard,
   Info,
   LoaderCircle,
+  Clapperboard,
   Settings2,
   SlidersHorizontal,
   Eye,
@@ -259,7 +259,7 @@ export function Reels({
   }
   const liked = item.preference === 'liked'
   return (
-    <section ref={root} aria-label="Reels" className="relative flex min-h-0 flex-1 flex-col bg-black">
+    <section ref={root} aria-label="Flick" className="relative flex min-h-0 flex-1 flex-col bg-black">
       {/* Reels loop until the person moves on; auto-scroll advances at the end instead. */}
       <div className="flex min-h-0 flex-1">
         <MediaStage
@@ -289,13 +289,6 @@ export function Reels({
           }}
         />
       </div>
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start p-3 sm:p-5">
-        <p className="pointer-events-auto rounded-full bg-canvas/80 px-3 py-1 text-lg font-semibold tracking-tight">
-          luma<span className="text-accent">.</span>
-          <Clapperboard className="ml-1 inline size-3 align-super text-accent" aria-hidden="true" />
-          <span className="sr-only"> reels</span>
-        </p>
-      </div>
       {/* The shared action row sits just above the seek strip; see MediaActions. */}
       <div hidden={isFullscreen}>
         <MediaActions
@@ -303,7 +296,7 @@ export function Reels({
           onPreference={value => preference.mutate({ id: item.id, value })}
           menuOpen={menuOpen}
           onMenuOpenChange={setMenuOpen}
-          menuLabel="Reels menu"
+          menuLabel="Flick menu"
           className="bottom-16"
         >
           <IconButton label="Filters" className={actionButton} onClick={onFilters}>

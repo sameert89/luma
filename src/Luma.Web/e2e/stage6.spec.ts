@@ -1,3 +1,4 @@
+import { switchExperience } from './helpers'
 import { test, expect } from '@playwright/test'
 import { viewerAction } from './helpers'
 import { DatabaseSync } from 'node:sqlite'
@@ -127,16 +128,13 @@ test('reels preserve query, bound media, auto-scroll, stop inactive playback and
 }) => {
   await page.goto('/?q=stage6&order=desc')
   await expect(page.getByTestId('media-cell')).toHaveCount(3)
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await switchExperience(page, 'Flick')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   await expect(page).toHaveURL(/mediaType=motion/)
   await expect(page).toHaveURL(/q=stage6/)
   await expect(reels.getByText('luma')).toBeVisible()
-  await reels.getByRole('button', { name: 'Reels menu' }).click()
+  await reels.getByRole('button', { name: 'Flick menu' }).click()
   await reels.getByRole('button', { name: 'Auto-scroll' }).click()
   await expect(reels.getByRole('button', { name: 'Auto-scroll' })).toHaveAttribute('aria-pressed', 'true')
   const old = await reels.locator('video').elementHandle()
@@ -227,11 +225,8 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await expect(viewer.locator('video')).toHaveAttribute('src', '/api/media/1490/original')
   await viewer.getByRole('button', { name: 'Close viewer', exact: true }).click()
   await expect(viewer).toBeHidden()
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await switchExperience(page, 'Flick')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1495/original')
   const reelBounds = await reels.locator('video').boundingBox()
   const reelX = reelBounds!.x + reelBounds!.width / 2

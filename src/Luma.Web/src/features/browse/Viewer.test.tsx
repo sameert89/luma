@@ -158,7 +158,7 @@ it('runs a slideshow at the chosen pace, preloads the next slide and stops at th
     expect(screen.getByRole('button', { name: 'Slideshow' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Slide duration, 3 seconds' })).toBeVisible()
     await waitFor(() => expect(preloads.some(image => image.getAttribute('src') === '/preview-2')).toBe(true))
-    expect(screen.queryByRole('button', { name: 'Watch on Reels' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Watch on Flick' })).not.toBeInTheDocument()
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2500)
     })
@@ -196,7 +196,7 @@ it('runs a slideshow at the chosen pace, preloads the next slide and stops at th
   }
 })
 
-it('offers Watch on Reels for videos and GIFs', async () => {
+it('offers Watch on Flick for videos and GIFs', async () => {
   window.history.replaceState(null, '', '/')
   const gif = {
     id: 9,
@@ -250,7 +250,7 @@ it('offers Watch on Reels for videos and GIFs', async () => {
       />
     </QueryClientProvider>,
   )
-  await userEvent.click(screen.getByRole('button', { name: 'Watch on Reels' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Watch on Flick' }))
   expect(onWatchReels).toHaveBeenCalledWith(expect.objectContaining({ id: 9 }))
 })
 

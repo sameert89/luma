@@ -1,3 +1,4 @@
+import { switchExperience } from './helpers'
 import { test, expect } from '@playwright/test'
 import { galleryAction, viewerAction } from './helpers'
 
@@ -42,16 +43,13 @@ test('folders can be hidden from every view and shown again from settings', asyn
 
 test('reels keep rating and the menu within thumb reach and loop by default', async ({ page }) => {
   await page.goto('/')
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
+  await switchExperience(page, 'Flick')
   await expect(page).toHaveURL(/mediaType=motion/)
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveJSProperty('loop', true)
   const like = reels.getByRole('button', { name: 'Like', exact: true })
   const dislike = reels.getByRole('button', { name: 'Dislike', exact: true })
-  const menu = reels.getByRole('button', { name: 'Reels menu' })
+  const menu = reels.getByRole('button', { name: 'Flick menu' })
   await expect(like).toBeVisible()
   await expect(dislike).toBeVisible()
   const viewport = page.viewportSize()!
@@ -96,7 +94,7 @@ test('video controls stack on upright phones and stay on one row elsewhere', asy
   ]
   expect(Math.abs(likeBox!.y - menuBox!.y)).toBeLessThan(2)
   expect(menuBox!.y).toBeLessThan(playBox!.y)
-  await expect(await viewerAction(page, 'Watch on Reels')).toBeVisible()
+  await expect(await viewerAction(page, 'Watch on Flick')).toBeVisible()
   await expect(viewer.getByRole('button', { name: 'Next item', exact: true }).locator('svg')).toHaveClass(
     /lucide-chevron-right/,
   )
