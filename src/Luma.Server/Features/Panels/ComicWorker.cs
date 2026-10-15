@@ -13,12 +13,25 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
     {
         if (options.Libraries.Count == 0) return;
         await using (var db = await database.OpenAsync(stoppingToken))
-            await db.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET State='queued' WHERE State='running'", cancellationToken: stoppingToken));
+        {
+            if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM ComicJobs WHERE State='running')", cancellationToken: stoppingToken)))
+            {
+                await database.YieldToForegroundAsync(stoppingToken);
+                await db.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET State='queued' WHERE State='running'", cancellationToken: stoppingToken));
+            }
+        }
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await using var db = await database.OpenAsync(stoppingToken);
+                // Idle discovery is a read, not a recurring SQLite writer competing with likes/tags.
+                if (!await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM ComicJobs WHERE State='queued')", cancellationToken: stoppingToken)))
+                {
+                    await Task.Delay(1000, stoppingToken);
+                    continue;
+                }
+                await database.YieldToForegroundAsync(stoppingToken);
                 var job = await db.QuerySingleOrDefaultAsync<ComicJob>(new CommandDefinition($"""
                     UPDATE ComicJobs SET State='running' WHERE Id=(SELECT j.Id FROM ComicJobs j JOIN Libraries l ON l.Id=j.LibraryId
                       WHERE j.State='queued' AND l.Enabled=1 AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=j.LibraryId AND State IN ({FileOperations.ActiveStates}))
@@ -72,6 +85,7 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
         var sources = await ComicSources.InspectIsolatedAsync(source, directory, ct);
         var modified = File.GetLastWriteTimeUtc(source).Ticks;
         var size = directory ? 0 : new FileInfo(source).Length;
+        await database.YieldToForegroundAsync(ct);
         await using var db = await database.OpenAsync(ct);
         using (var tx = db.BeginTransaction())
         {
@@ -84,8 +98,11 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
                   Availability='present',LastJobId=excluded.LastJobId RETURNING Id;
                 """, new { job.LibraryId, job.Id, relative, key = root.Key(relative), format = directory ? "folder" : Path.GetExtension(relative).ToLowerInvariant() is ".cbz" or ".zip" ? "zip" : "rar", title = Path.GetFileNameWithoutExtension(relative.Length == 0 ? root.Name : relative), count = sources.Count, size, modified, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
             await db.ExecuteAsync(new CommandDefinition("DELETE FROM ComicPages WHERE ComicId=@id", new { id }, tx, cancellationToken: ct));
-            for (var index = 0; index < sources.Count; index++)
-                await db.ExecuteAsync(new CommandDefinition("INSERT INTO ComicPages VALUES(@id,@index,@Name,@SizeBytes)", new { id, index, sources[index].Name, sources[index].SizeBytes }, tx, cancellationToken: ct));
+            await db.ExecuteAsync(new CommandDefinition("""
+                INSERT INTO ComicPages(ComicId,PageIndex,EntryName,SizeBytes)
+                  SELECT @id,CAST(key AS INTEGER),json_extract(value,'$.Name'),json_extract(value,'$.SizeBytes')
+                  FROM json_each(@pages)
+                """, new { id, pages = System.Text.Json.JsonSerializer.Serialize(sources) }, tx, cancellationToken: ct));
             await db.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET Processed=Processed+1 WHERE Id=@Id", job, tx, cancellationToken: ct));
             tx.Commit();
             // Cover work uses the shared bounded decoder pool and task, after indexing commits.
