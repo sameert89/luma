@@ -640,6 +640,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panels/comics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicLibrary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComic"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/pages/{page}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicCover"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateReadingProgress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetReadingStatistics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search/suggestions": {
         parameters: {
             query?: never;
@@ -768,6 +864,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panels/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DiscoverComics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateComicMetadata"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files/uploads": {
         parameters: {
             query?: never;
@@ -876,6 +1004,59 @@ export interface components {
             items: components["schemas"]["TagSummary"][];
             nextCursor: string | null;
             previousCursor: string | null;
+        };
+        ComicJobAccepted: {
+            /** Format: int64 */
+            id: number;
+        };
+        ComicList: {
+            items: components["schemas"]["ComicSummary"][];
+            /** Format: int64 */
+            nextCursor: number | null;
+        };
+        ComicMetadataUpdate: {
+            title: string;
+            /** @default  */
+            series: string;
+            /** @default  */
+            author: string;
+            /** @default  */
+            description: string;
+            /** @default false */
+            favourite: boolean;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            coverPage: number;
+        };
+        ComicRegistration: {
+            /** Format: int64 */
+            libraryId: number;
+            relativePath?: string | null;
+        };
+        ComicSummary: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            libraryId: number;
+            title: string;
+            series: string;
+            author: string;
+            description: string;
+            format: string;
+            /** Format: int32 */
+            pageCount: number;
+            /** Format: int32 */
+            pageIndex: number;
+            state: string;
+            /** Format: double */
+            readingSeconds: number;
+            direction: string;
+            settings: string;
+            lastReadAt: string | null;
+            favourite: boolean;
+            coverUrl: string | null;
         };
         CoverImage: {
             url: string;
@@ -1187,6 +1368,29 @@ export interface components {
         };
         PreferenceRequest: {
             preference: string;
+        };
+        ReadingStatistics: {
+            /** Format: int64 */
+            started: number;
+            /** Format: int64 */
+            completed: number;
+            /** Format: double */
+            readingSeconds: number;
+            /** Format: int64 */
+            pagesRead: number;
+        };
+        ReadingUpdate: {
+            sessionId: string;
+            /** Format: int64 */
+            sequence: number;
+            /** Format: int32 */
+            pageIndex: number;
+            /** Format: double */
+            activeSeconds: number;
+            /** @default ltr */
+            direction: string;
+            /** @default {} */
+            settings: string;
         };
         ScanAccepted: {
             /** Format: int64 */
@@ -2694,6 +2898,141 @@ export interface operations {
             };
         };
     };
+    GetComicLibrary: {
+        parameters: {
+            query?: {
+                q?: string;
+                state?: string;
+                series?: string;
+                favourite?: boolean;
+                cursor?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicList"];
+                };
+            };
+        };
+    };
+    GetComic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicSummary"];
+                };
+            };
+        };
+    };
+    GetComicPage: {
+        parameters: {
+            query?: {
+                original?: boolean;
+            };
+            header?: never;
+            path: {
+                id: number;
+                page: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetComicCover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateReadingProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingUpdate"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetReadingStatistics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingStatistics"];
+                };
+            };
+        };
+    };
     GetSearchSuggestions: {
         parameters: {
             query?: {
@@ -2868,6 +3207,54 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FileOperation"][];
                 };
+            };
+        };
+    };
+    DiscoverComics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicRegistration"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicJobAccepted"];
+                };
+            };
+        };
+    };
+    UpdateComicMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicMetadataUpdate"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -1,4 +1,5 @@
 using Luma.Server.Data;
+using Luma.Server.Features.Panels;
 using Luma.Server.Features.Files;
 using Luma.Server.Features.Status;
 using Luma.Server.Http;
@@ -8,6 +9,11 @@ using Luma.Server.Features.Media;
 using Luma.Server.Features.Tags;
 using Luma.Server.Features.Libraries;
 
+if (args.FirstOrDefault() is "--comic-inspect" or "--comic-page")
+{
+    await Luma.Server.Features.Panels.ComicSources.RunWorkerAsync(args, CancellationToken.None);
+    return;
+}
 if (args.FirstOrDefault() == "--image-worker")
 {
     await ImageProcessCommand.RunWorkerAsync(CancellationToken.None);
@@ -28,6 +34,10 @@ builder.Services.AddSingleton<MutationAccess>();
 builder.Services.AddSingleton<FileOperations>();
 builder.Services.AddSingleton<Luma.Server.Features.Uploads.UploadSessions>();
 builder.Services.AddSingleton<FileOperationWorker>();
+builder.Services.AddSingleton<ComicLibrary>();
+builder.Services.AddSingleton<ComicPageContent>();
+builder.Services.AddSingleton<ComicProgress>();
+builder.Services.AddSingleton<ComicWorker>();
 builder.Services.AddSingleton<MigrationRunner>();
 builder.Services.AddSingleton<CursorSigner>();
 builder.Services.AddSingleton<MediaBrowser>();
@@ -53,6 +63,7 @@ builder.Services.AddSingleton<AutomaticLibraryRefresh>();
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
     builder.Services.AddHostedService(services => services.GetRequiredService<FileOperationWorker>());
+    builder.Services.AddHostedService(services => services.GetRequiredService<ComicWorker>());
     builder.Services.AddHostedService(services => services.GetRequiredService<ScanWorker>());
     builder.Services.AddHostedService(services => services.GetRequiredService<AutomaticLibraryRefresh>());
     builder.Services.AddHostedService<ProcessingWorker>();
@@ -84,6 +95,7 @@ api.MapMedia();
 api.MapPlayback();
 api.MapTasks();
 api.MapFileOperations();
+api.MapPanels();
 Luma.Server.Features.Uploads.UploadEndpoints.MapUploads(app);
 api.MapSearchSuggestions();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();

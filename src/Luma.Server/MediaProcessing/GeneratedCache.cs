@@ -180,7 +180,7 @@ public sealed class GeneratedCache(Database database, IndexingOptions options)
             {
                 await using var db = await database.OpenAsync(ct);
                 var relatives = batch.Select(x => Path.GetRelativePath(options.CachePath, x)).ToArray();
-                var known = (await db.QueryAsync<string>(new CommandDefinition("SELECT RelativePath FROM CacheEntries WHERE RelativePath IN @relatives", new { relatives }, cancellationToken: ct))).ToHashSet();
+                var known = (await db.QueryAsync<string>(new CommandDefinition("SELECT RelativePath FROM CacheEntries WHERE RelativePath IN @relatives UNION SELECT RelativePath FROM ComicCache WHERE RelativePath IN @relatives", new { relatives }, cancellationToken: ct))).ToHashSet();
                 foreach (var path in batch)
                     if (!known.Contains(Path.GetRelativePath(options.CachePath, path)) && File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddMinutes(-10)) File.Delete(path);
             }

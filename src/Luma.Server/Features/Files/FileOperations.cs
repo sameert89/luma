@@ -43,6 +43,7 @@ public sealed class FileOperations(Database database, IndexingOptions options)
             SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@Id AND State IN ({ActiveStates}))
               OR EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running'))
               OR EXISTS(SELECT 1 FROM UploadSessions WHERE LibraryId=@Id AND State IN ('waitingForClient','paused','finalizing'))
+              OR EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=@Id AND State IN ('queued','running'))
             """, root, tx, cancellationToken: ct)))
             throw new ApiRequestException(409, "library_busy", "Finish indexing or the active file operation before changing this library.");
         if (request.Kind is "restore" or "purge")
@@ -89,6 +90,8 @@ public sealed class FileOperations(Database database, IndexingOptions options)
             // SQL prefix matching avoids loading a large subtree into application memory.
             await db.ExecuteAsync(new CommandDefinition("""
                 INSERT INTO OperationMedia SELECT @Id,Id,RelativePath,Availability FROM Media
+                  WHERE LibraryId=@LibraryId AND (PathKey=@key OR substr(PathKey,1,length(@key)+1)=@key||'/');
+                INSERT INTO OperationComics SELECT @Id,Id,RelativePath,Availability FROM Comics
                   WHERE LibraryId=@LibraryId AND (PathKey=@key OR substr(PathKey,1,length(@key)+1)=@key||'/');
                 INSERT INTO OperationFolders SELECT @Id,Id,RelativePath FROM Folders
                   WHERE LibraryId=@LibraryId AND (PathKey=@key OR substr(PathKey,1,length(@key)+1)=@key||'/');

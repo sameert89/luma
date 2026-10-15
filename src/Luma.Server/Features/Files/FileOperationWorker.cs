@@ -168,6 +168,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         if (row.Kind is "recycle" or "delete" or "purge")
         {
             await db.ExecuteAsync(new CommandDefinition("""
+                UPDATE Comics SET Availability='missing' WHERE Id IN (SELECT ComicId FROM OperationComics WHERE OperationId=@snapshot);
                 UPDATE Media SET Availability='missing' WHERE Id IN (SELECT MediaId FROM OperationMedia WHERE OperationId=@snapshot);
                 UPDATE Folders SET Recycled=1 WHERE Id IN (SELECT FolderId FROM OperationFolders WHERE OperationId=@snapshot);
                 UPDATE ProcessingJobs SET State='waiting',Claim=NULL,LeaseUntil=NULL WHERE MediaId IN
@@ -181,6 +182,10 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             var parentId = await EnsureFolderAsync(db, tx, root, parentPath, ct);
             // Snapshot paths remain immutable so reconciliation is idempotent.
             await db.ExecuteAsync(new CommandDefinition("""
+                UPDATE Comics SET RelativePath=@target||substr((SELECT OriginalPath FROM OperationComics WHERE OperationId=@snapshot AND ComicId=Comics.Id),length(@Source)+1),
+                  PathKey=@targetKey||substr(PathKey,length(@sourceKey)+1),
+                  Availability=(SELECT OriginalAvailability FROM OperationComics WHERE OperationId=@snapshot AND ComicId=Comics.Id)
+                WHERE Id IN (SELECT ComicId FROM OperationComics WHERE OperationId=@snapshot);
                 UPDATE Media SET RelativePath=@target||substr((SELECT OriginalPath FROM OperationMedia WHERE OperationId=@snapshot AND MediaId=Media.Id),length(@Source)+1),
                   PathKey=@targetKey||substr(PathKey,length(@sourceKey)+1),
                   Availability=(SELECT OriginalAvailability FROM OperationMedia WHERE OperationId=@snapshot AND MediaId=Media.Id)
