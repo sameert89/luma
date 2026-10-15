@@ -2961,6 +2961,76 @@
         }
       }
     },
+    "/api/files/operations/{id}/recovery": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileRecoveryEvidence",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileRecoveryEvidence"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations/{id}/recover": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ResolveFileOperation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperationAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/operations/{id}/cancel": {
       "post": {
         "tags": [
@@ -3753,6 +3823,13 @@
             "type": "string",
             "nullable": true
           },
+          "recoveryState": {
+            "type": "string",
+            "nullable": true
+          },
+          "recoveryRequested": {
+            "type": "boolean"
+          },
           "restored": {
             "type": "boolean"
           }
@@ -3792,6 +3869,72 @@
             "nullable": true
           },
           "recycleId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FileRecoveryEvidence": {
+        "required": [
+          "operation",
+          "stagingPath",
+          "sourceExists",
+          "sourceMatches",
+          "stagingExists",
+          "destinationExists",
+          "destinationMatches",
+          "actions"
+        ],
+        "type": "object",
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/FileOperation"
+          },
+          "stagingPath": {
+            "type": "string"
+          },
+          "sourceExists": {
+            "type": "boolean"
+          },
+          "sourceMatches": {
+            "type": "boolean"
+          },
+          "stagingExists": {
+            "type": "boolean"
+          },
+          "destinationExists": {
+            "type": "boolean"
+          },
+          "destinationMatches": {
+            "type": "boolean"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FileRecoveryRequest": {
+        "required": [
+          "action",
+          "confirmed",
+          "expectedFailureCode"
+        ],
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "expectedFailureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "destination": {
             "type": "string",
             "nullable": true
           }

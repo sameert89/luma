@@ -20,6 +20,8 @@ public sealed class FileOperation
     public string CreatedAt { get; set; } = "";
     public string? FinishedAt { get; set; }
     public string? FailureCode { get; set; }
+    public string? RecoveryState { get; set; }
+    public bool RecoveryRequested { get; set; }
     public bool Restored { get; set; }
 }
 

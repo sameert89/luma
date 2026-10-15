@@ -832,6 +832,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/operations/{id}/recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileRecoveryEvidence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations/{id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ResolveFileOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files/operations/{id}/cancel": {
         parameters: {
             query?: never;
@@ -1114,6 +1146,8 @@ export interface components {
             createdAt?: string;
             finishedAt?: string | null;
             failureCode?: string | null;
+            recoveryState?: string | null;
+            recoveryRequested?: boolean;
             restored?: boolean;
         };
         FileOperationAccepted: {
@@ -1126,6 +1160,22 @@ export interface components {
             source: string;
             destination?: string | null;
             recycleId?: string | null;
+        };
+        FileRecoveryEvidence: {
+            operation: components["schemas"]["FileOperation"];
+            stagingPath: string;
+            sourceExists: boolean;
+            sourceMatches: boolean;
+            stagingExists: boolean;
+            destinationExists: boolean;
+            destinationMatches: boolean;
+            actions: string[];
+        };
+        FileRecoveryRequest: {
+            action: string;
+            confirmed: boolean;
+            expectedFailureCode: string | null;
+            destination?: string | null;
         };
         FolderPage: {
             current: components["schemas"]["FolderSummary"];
@@ -3164,6 +3214,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FileOperation"];
+                };
+            };
+        };
+    };
+    GetFileRecoveryEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileRecoveryEvidence"];
+                };
+            };
+        };
+    };
+    ResolveFileOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileRecoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperationAccepted"];
                 };
             };
         };

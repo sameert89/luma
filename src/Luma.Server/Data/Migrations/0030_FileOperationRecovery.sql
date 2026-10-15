@@ -1,0 +1,2 @@
+ALTER TABLE FileOperations ADD COLUMN RecoveryState TEXT;
+ALTER TABLE FileOperations ADD COLUMN RecoveryRequested INTEGER NOT NULL DEFAULT 0;

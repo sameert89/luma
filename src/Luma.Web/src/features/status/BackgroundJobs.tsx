@@ -41,16 +41,20 @@ export function BackgroundJobsButton({ libraryId }: { libraryId?: number }) {
     !!tasks.data?.some(task =>
       ['queued', 'running', 'reserved', 'deleting', 'published', 'finalizing'].includes(task.state),
     )
+  const attention = tasks.data?.some(task => task.state === 'needsAttention')
   useScanRefresh(libraryId)
   const icon = (
-    <RefreshCw className={`size-6 ${busy ? 'text-accent motion-safe:animate-spin' : ''}`} aria-hidden="true" />
+    <RefreshCw
+      className={`size-6 ${attention ? 'text-danger' : busy ? 'text-accent' : ''} ${busy ? 'motion-safe:animate-spin' : ''}`}
+      aria-hidden="true"
+    />
   )
   return (
     <>
       <IconButton
         size="large"
         className="bg-canvas shadow-lg"
-        label={busy ? 'Background jobs, running' : 'Background jobs'}
+        label={attention ? 'Background jobs, needs attention' : busy ? 'Background jobs, running' : 'Background jobs'}
         onClick={() => setOpen(true)}
       >
         {icon}

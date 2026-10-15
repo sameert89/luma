@@ -32,6 +32,7 @@ builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<MutationAccess>();
 builder.Services.AddSingleton<FileOperations>();
+builder.Services.AddSingleton<FileRecovery>();
 builder.Services.AddSingleton<Luma.Server.Features.Uploads.UploadSessions>();
 builder.Services.AddSingleton<FileOperationWorker>();
 builder.Services.AddSingleton<ComicLibrary>();

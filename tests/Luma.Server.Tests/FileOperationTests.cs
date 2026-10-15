@@ -164,5 +164,117 @@ public sealed class FileOperationTests
         Assert.Equal("unrelated replacement", await File.ReadAllTextAsync(path));
     }
 
+    private static async Task ResumeQueuedAsync(PipelineFixture f, FileOperations operations, FileOperationWorker worker, string id)
+    {
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE FileOperations SET State='running' WHERE Id=@id AND State='queued'", new { id });
+        await worker.ExecuteOperationAsync(await operations.GetAsync(id, default), false, default);
+    }
+
+    [Fact]
+    public async Task Confirmed_publication_recovery_keeps_the_original_id_and_a_replacement_source()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        worker.Checkpoint = point => { if (point == "published-filesystem") throw new SimulatedCrash(); };
+        await Assert.ThrowsAsync<SimulatedCrash>(() => RunAsync(operations, worker, f, new(1, "move", "photo.jpg", "moved.jpg")));
+        worker.Checkpoint = null;
+        await worker.RecoverAsync(default);
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "unrelated replacement");
+        await using var db = await f.Database.OpenAsync(default);
+        var row = await db.QuerySingleAsync<FileOperation>("SELECT * FROM FileOperations");
+        var mediaId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media");
+        Assert.Equal("reserved", row.RecoveryState);
+        var recovery = new FileRecovery(operations);
+        var evidence = await recovery.InspectAsync(row.Id, default);
+        Assert.Contains("confirmPublished", evidence.Actions);
+        Assert.DoesNotContain("retry", evidence.Actions);
+        await Assert.ThrowsAsync<ApiRequestException>(() => recovery.ResolveAsync(row.Id, new("confirmPublished", false, row.FailureCode), default));
+        var target = Path.Combine(f.Root.Path, "moved.jpg");
+        var modified = File.GetLastWriteTimeUtc(target);
+        await File.WriteAllTextAsync(target, "unrelated destination with a different size");
+        await Assert.ThrowsAsync<ApiRequestException>(() => recovery.ResolveAsync(row.Id, new("confirmPublished", true, row.FailureCode), default));
+        Assert.Equal("needsAttention", (await operations.GetAsync(row.Id, default)).State);
+        await File.WriteAllTextAsync(target, "original");
+        File.SetLastWriteTimeUtc(target, modified);
+        await recovery.ResolveAsync(row.Id, new("confirmPublished", true, row.FailureCode), default);
+        // A restart after a queued recovery is claimed must preserve the chosen phase.
+        await db.ExecuteAsync("UPDATE FileOperations SET State='running' WHERE Id=@Id", row);
+        await worker.RecoverAsync(default);
+        Assert.Equal("completed", (await operations.GetAsync(row.Id, default)).State);
+        Assert.Equal(mediaId, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media"));
+        Assert.Equal("moved.jpg", await db.ExecuteScalarAsync<string>("SELECT RelativePath FROM Media"));
+        Assert.Equal("unrelated replacement", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
+    }
+
+    [Fact]
+    public async Task Publication_collision_can_be_retried_at_a_confirmed_alternative_without_overwrite()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        worker.Checkpoint = point => { if (point == "reserved-journal") throw new SimulatedCrash(); };
+        await Assert.ThrowsAsync<SimulatedCrash>(() => RunAsync(operations, worker, f, new(1, "move", "photo.jpg", "moved.jpg")));
+        worker.Checkpoint = null;
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "moved.jpg"), "collision");
+        await worker.RecoverAsync(default);
+        await using var db = await f.Database.OpenAsync(default);
+        var row = await db.QuerySingleAsync<FileOperation>("SELECT * FROM FileOperations");
+        var recovery = new FileRecovery(operations);
+        await Assert.ThrowsAsync<ApiRequestException>(() => recovery.ResolveAsync(row.Id, new("retry", true, row.FailureCode), default));
+        await recovery.ResolveAsync(row.Id, new("retry", true, row.FailureCode, "alternative.jpg"), default);
+        await ResumeQueuedAsync(f, operations, worker, row.Id);
+        Assert.Equal("completed", (await operations.GetAsync(row.Id, default)).State);
+        Assert.Equal("collision", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "moved.jpg")));
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "alternative.jpg")));
+        Assert.Equal("alternative.jpg", await db.ExecuteScalarAsync<string>("SELECT RelativePath FROM Media"));
+    }
+
+    [Fact]
+    public async Task Changed_public_source_can_be_cancelled_but_never_restarted_or_deleted()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var source = Path.Combine(f.Root.Path, "photo.jpg");
+        await File.WriteAllTextAsync(source, "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var queued = await operations.QueueAsync(new(1, "delete", "photo.jpg"), default);
+        await File.WriteAllTextAsync(source, "replacement with different size");
+        await ResumeQueuedAsync(f, operations, worker, queued.Id);
+        var recovery = new FileRecovery(operations);
+        var evidence = await recovery.InspectAsync(queued.Id, default);
+        Assert.Equal(new[] { "cancel" }, evidence.Actions);
+        await Assert.ThrowsAsync<ApiRequestException>(() => recovery.ResolveAsync(queued.Id, new("restart", true, evidence.Operation.FailureCode), default));
+        await recovery.ResolveAsync(queued.Id, new("cancel", true, evidence.Operation.FailureCode), default);
+        Assert.Equal("cancelled", (await operations.GetAsync(queued.Id, default)).State);
+        Assert.Equal("replacement with different size", await File.ReadAllTextAsync(source));
+        await operations.QueueAsync(new(1, "mkdir", "new"), default);
+    }
+
+    [Fact]
+    public async Task Interrupted_before_reservation_requires_renewed_operator_intent()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var source = Path.Combine(f.Root.Path, "photo.jpg");
+        await File.WriteAllTextAsync(source, "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var queued = await operations.QueueAsync(new(1, "recycle", "photo.jpg"), default);
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE FileOperations SET State='running' WHERE Id=@Id", queued);
+        await worker.RecoverAsync(default);
+        var recovery = new FileRecovery(operations);
+        var evidence = await recovery.InspectAsync(queued.Id, default);
+        Assert.Contains("restart", evidence.Actions);
+        Assert.DoesNotContain("retry", evidence.Actions);
+        await recovery.ResolveAsync(queued.Id, new("restart", true, evidence.Operation.FailureCode), default);
+        await ResumeQueuedAsync(f, operations, worker, queued.Id);
+        Assert.Equal("completed", (await operations.GetAsync(queued.Id, default)).State);
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", queued.Id, "content")));
+    }
+
     private sealed class SimulatedCrash : Exception;
 }

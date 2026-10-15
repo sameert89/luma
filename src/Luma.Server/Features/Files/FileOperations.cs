@@ -79,6 +79,7 @@ public sealed class FileOperations(Database database, IndexingOptions options)
             if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
                 SELECT EXISTS(SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND (PathKey=@key OR substr(PathKey,1,length(@key)+1)=@key||'/'))
                   OR EXISTS(SELECT 1 FROM Folders WHERE LibraryId=@LibraryId AND (PathKey=@key OR substr(PathKey,1,length(@key)+1)=@key||'/'))
+                  OR EXISTS(SELECT 1 FROM Comics WHERE LibraryId=@LibraryId AND (PathKey=@key OR substr(PathKey,1,length(@key)+1)=@key||'/'))
                 """, new { operation.LibraryId, key = root.Key(operation.Destination) }, tx, cancellationToken: ct)) &&
                 root.Key(operation.Destination) != root.Key(operation.Source))
                 throw new ApiRequestException(409, "indexed_destination_exists", "The destination has retained library metadata. Choose a different name.");

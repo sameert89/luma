@@ -62,6 +62,12 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
     {
         try
         {
+            if (row.RecoveryRequested)
+            {
+                row.State = row.RecoveryState ?? "running";
+                recovering = true;
+                await StateAsync(row, row.State, ct);
+            }
             var root = operations.WritableRoot(row.LibraryId);
             // Losing access is not deletion, and cannot trigger cleanup.
             _ = MutationPaths.Resolve(root, "", allowRoot: true);
@@ -148,15 +154,16 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             logger.LogWarning(error, "File operation {Operation} requires attention", row.Id);
             await using var db = await operations.OpenJournalAsync(CancellationToken.None);
             var code = error is ApiRequestException problem ? problem.Code : "filesystem_or_database_unavailable";
-            await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='needsAttention',FailureCode=@code WHERE Id=@Id", new { row.Id, code }));
+            await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='needsAttention',RecoveryState=@State,RecoveryRequested=0,FailureCode=@code WHERE Id=@Id", new { row.Id, row.State, code }));
         }
     }
 
     private async Task StateAsync(FileOperation row, string state, CancellationToken ct)
     {
         await using var db = await operations.OpenJournalAsync(ct);
-        await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State=@state WHERE Id=@Id", new { row.Id, state }, cancellationToken: ct));
+        await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State=@state,RecoveryRequested=0 WHERE Id=@Id", new { row.Id, state }, cancellationToken: ct));
         row.State = state;
+        row.RecoveryRequested = false;
     }
 
     private async Task ReconcileAsync(FileOperation row, LibraryOptions root, CancellationToken ct)

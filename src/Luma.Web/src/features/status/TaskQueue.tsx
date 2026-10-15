@@ -2,6 +2,7 @@ import { useQuery, useIsMutating, useMutation, useQueryClient, type QueryClient 
 import { useState } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
 import { errorMessage, request, type IndexingStatus } from '../browse/api'
+import { FileRecoveryDialog } from '../files/FileRecoveryDialog'
 import type { components } from '../../lib/api/generated'
 
 type Task = components['schemas']['BackgroundTask']
@@ -40,6 +41,7 @@ const stateTones: Record<string, string> = {
   running: 'text-accent',
   completed: 'text-positive',
   failed: 'text-danger',
+  needsAttention: 'text-danger',
   interrupted: 'text-danger',
 }
 
@@ -153,6 +155,7 @@ function TaskRow({ task }: { task: Task }) {
   const busy = action.isPending
   // Stopping indexing changes what gets indexed later, so it says so before it happens.
   const [confirming, setConfirming] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
   return (
     <article
       aria-label={`${name}, ${stateLabels[task.state] ?? task.state}`}
@@ -172,6 +175,18 @@ function TaskRow({ task }: { task: Task }) {
         </p>
       </div>
       <p className="mt-1 text-sm text-muted">{progress(task)}</p>
+      {reviewing && (
+        <FileRecoveryDialog
+          id={task.id.slice(5)}
+          onClose={() => setReviewing(false)}
+          onResolved={() => void refresh(client)}
+        />
+      )}
+      {task.id.startsWith('file-') && task.state === 'needsAttention' && (
+        <QuietButton className="mt-2" onClick={() => setReviewing(true)}>
+          Review recovery
+        </QuietButton>
+      )}
       <div className="mt-2 flex flex-wrap gap-2">
         {isActive(task) ? (
           confirming ? (

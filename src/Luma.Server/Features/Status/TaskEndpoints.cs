@@ -141,7 +141,7 @@ public static class TaskEndpoints
                 SELECT 'file-'||Id,Kind,State,CreatedAt,CASE WHEN State='completed' THEN 1 ELSE 0 END,
                   CASE WHEN State='needsAttention' THEN 1 ELSE 0 END,CASE WHEN State='queued' THEN 1 ELSE 0 END,
                   Source||CASE WHEN Destination IS NULL THEN '' ELSE ' → '||Destination END
-                FROM (SELECT * FROM FileOperations WHERE QueueDismissed=0 ORDER BY CreatedAt DESC LIMIT 50)
+                FROM (SELECT * FROM FileOperations WHERE QueueDismissed=0 ORDER BY CASE WHEN State IN ('completed','cancelled') THEN 1 ELSE 0 END,CreatedAt DESC LIMIT 50)
                 UNION ALL
                 SELECT 'upload-'||u.Id,'upload',COALESCE(CASE WHEN o.State='needsAttention' THEN o.State END,u.State),u.CreatedAt,u.CommittedOffset,0,u.SizeBytes-u.CommittedOffset,u.Target
                 FROM (SELECT * FROM UploadSessions WHERE QueueDismissed=0 ORDER BY CreatedAt DESC LIMIT 50) u

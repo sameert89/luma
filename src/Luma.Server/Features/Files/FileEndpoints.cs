@@ -32,6 +32,10 @@ public static class FileEndpoints
             TypedResults.Accepted(uri: (string?)null, value: await operations.QueueAsync(request, ct))).WithName("CreateFileOperation");
         files.MapGet("/operations/{id}", async (string id, FileOperations operations, CancellationToken ct) =>
             TypedResults.Ok(await operations.GetAsync(id, ct))).WithName("GetFileOperation");
+        files.MapGet("/operations/{id}/recovery", async (string id, FileRecovery recovery, CancellationToken ct) =>
+            TypedResults.Ok(await recovery.InspectAsync(id, ct))).WithName("GetFileRecoveryEvidence");
+        files.MapPost("/operations/{id}/recover", async (string id, FileRecoveryRequest request, FileRecovery recovery, CancellationToken ct) =>
+            TypedResults.Accepted(uri: (string?)null, value: await recovery.ResolveAsync(id, request, ct))).WithName("ResolveFileOperation");
         files.MapPost("/operations/{id}/cancel", async (string id, FileOperations operations, CancellationToken ct) =>
         {
             await operations.CancelAsync(id, ct);
