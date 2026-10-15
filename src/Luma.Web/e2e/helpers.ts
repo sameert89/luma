@@ -17,3 +17,8 @@ export async function galleryAction(page: Page, name: string) {
   else await page.getByRole('button', { name: 'Gallery actions', exact: true }).click()
   return page.getByRole('dialog').getByRole('button', { name, exact: true })
 }
+
+export async function switchExperience(page: Page, name: 'Gallery' | 'Flick' | 'Panels') {
+  await page.getByRole('button', { name: /^Switch application,/ }).click()
+  await page.getByRole('dialog', { name: 'Luma applications' }).getByRole('button', { name, exact: true }).click()
+}

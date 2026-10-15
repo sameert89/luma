@@ -2553,6 +2553,233 @@
         }
       }
     },
+    "/api/files/capabilities": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileCapabilities",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileCapabilities"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/comics": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicLibrary",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "series",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "favourite",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComicList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/comics/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComic",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComicSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/comics/{id}/pages/{page}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicPage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "original",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/panels/comics/{id}/cover": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicCover",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/panels/comics/{id}/progress": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "UpdateReadingProgress",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/panels/statistics": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetReadingStatistics",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingStatistics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/search/suggestions": {
       "get": {
         "tags": [
@@ -2586,6 +2813,510 @@
                   "items": {
                     "$ref": "#/components/schemas/SearchSuggestion"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/access": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CheckMutationAccess",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/files/location": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileLocation",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "mediaId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileLocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/items": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CreateFileItemOperation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperationAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CreateFileOperation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperationAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileOperation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations/{id}/recovery": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileRecoveryEvidence",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileRecoveryEvidence"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations/{id}/recover": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ResolveFileOperation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperationAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/operations/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CancelFileOperation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/files/trash": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetRecycledFiles",
+        "parameters": [
+          {
+            "name": "libraryId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileOperation"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/discover": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "DiscoverComics",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComicRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComicJobAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/comics/{id}/metadata": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "UpdateComicMetadata",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComicMetadataUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/files/uploads": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "CreateUploadSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/uploads/{id}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetUploadSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "AppendUploadChunk",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/uploads/{id}/finalize": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "FinalizeUploadSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/uploads/{id}/{action}": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "ChangeUploadSessionState",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSession"
                 }
               }
             }
@@ -2756,6 +3487,164 @@
           }
         }
       },
+      "ComicJobAccepted": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ComicList": {
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComicSummary"
+            }
+          },
+          "nextCursor": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "ComicMetadataUpdate": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "series": {
+            "type": "string",
+            "default": ""
+          },
+          "author": {
+            "type": "string",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "default": ""
+          },
+          "favourite": {
+            "type": "boolean",
+            "default": false
+          },
+          "coverPage": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          }
+        }
+      },
+      "ComicRegistration": {
+        "required": [
+          "libraryId"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "relativePath": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ComicSummary": {
+        "required": [
+          "id",
+          "libraryId",
+          "title",
+          "series",
+          "author",
+          "description",
+          "format",
+          "pageCount",
+          "pageIndex",
+          "state",
+          "readingSeconds",
+          "direction",
+          "settings",
+          "lastReadAt",
+          "favourite",
+          "coverUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "series": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "pageCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "state": {
+            "type": "string"
+          },
+          "readingSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "settings": {
+            "type": "string"
+          },
+          "lastReadAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "favourite": {
+            "type": "boolean"
+          },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "CoverImage": {
         "required": [
           "url",
@@ -2798,6 +3687,256 @@
         "properties": {
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "FileCapabilities": {
+        "required": [
+          "accessConfigured",
+          "libraries"
+        ],
+        "type": "object",
+        "properties": {
+          "accessConfigured": {
+            "type": "boolean"
+          },
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileCapability"
+            }
+          }
+        }
+      },
+      "FileCapability": {
+        "required": [
+          "libraryId",
+          "writable"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "writable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FileItemRequest": {
+        "required": [
+          "libraryId",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "mediaId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "folderId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FileLocation": {
+        "required": [
+          "libraryId",
+          "relativePath"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "relativePath": {
+            "type": "string"
+          }
+        }
+      },
+      "FileOperation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true
+          },
+          "recycleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "uploadId": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDirectory": {
+            "type": "boolean"
+          },
+          "sourceSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sourceModifiedTicks": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "recoveryState": {
+            "type": "string",
+            "nullable": true
+          },
+          "recoveryRequested": {
+            "type": "boolean"
+          },
+          "restored": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FileOperationAccepted": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "FileOperationRequest": {
+        "required": [
+          "libraryId",
+          "kind",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true
+          },
+          "recycleId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FileRecoveryEvidence": {
+        "required": [
+          "operation",
+          "stagingPath",
+          "sourceExists",
+          "sourceMatches",
+          "stagingExists",
+          "destinationExists",
+          "destinationMatches",
+          "actions"
+        ],
+        "type": "object",
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/FileOperation"
+          },
+          "stagingPath": {
+            "type": "string"
+          },
+          "sourceExists": {
+            "type": "boolean"
+          },
+          "sourceMatches": {
+            "type": "boolean"
+          },
+          "stagingExists": {
+            "type": "boolean"
+          },
+          "destinationExists": {
+            "type": "boolean"
+          },
+          "destinationMatches": {
+            "type": "boolean"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FileRecoveryRequest": {
+        "required": [
+          "action",
+          "confirmed",
+          "expectedFailureCode"
+        ],
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "expectedFailureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -3576,6 +4715,67 @@
           }
         }
       },
+      "ReadingStatistics": {
+        "required": [
+          "started",
+          "completed",
+          "readingSeconds",
+          "pagesRead"
+        ],
+        "type": "object",
+        "properties": {
+          "started": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "completed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "readingSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "pagesRead": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ReadingUpdate": {
+        "required": [
+          "sessionId",
+          "sequence",
+          "pageIndex",
+          "activeSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "activeSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "type": "string",
+            "default": "ltr"
+          },
+          "settings": {
+            "type": "string",
+            "default": "{}"
+          }
+        }
+      },
       "ScanAccepted": {
         "required": [
           "id"
@@ -3799,6 +4999,67 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "UploadRequest": {
+        "required": [
+          "libraryId",
+          "target",
+          "sizeBytes"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "UploadSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "committedOffset": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "nullable": true
           }
         }
       },

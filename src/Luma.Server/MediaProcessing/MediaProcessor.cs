@@ -179,7 +179,7 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
         _ => throw new ProcessingException("invalid_media")
     };
 
-    public static async Task<string> RunAsync(string executable, IEnumerable<string> arguments, CancellationToken ct)
+    public static async Task<string> RunAsync(string executable, IEnumerable<string> arguments, CancellationToken ct, IReadOnlyDictionary<string, string>? environmentOverrides = null)
     {
         using var process = new Process
         {
@@ -187,6 +187,8 @@ public sealed class MediaProcessor(IndexingOptions options) : IDisposable
             { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true }
         };
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        if (environmentOverrides is not null)
+            foreach (var entry in environmentOverrides) process.StartInfo.Environment[entry.Key] = entry.Value;
         try { process.Start(); }
         catch (System.ComponentModel.Win32Exception) { throw new ProcessingException("tool_unavailable", true); }
         Deprioritize(process);

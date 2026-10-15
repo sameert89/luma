@@ -1,3 +1,4 @@
+import { switchExperience } from './helpers'
 import { test, expect, type Page } from '@playwright/test'
 import { DatabaseSync } from 'node:sqlite'
 import { execFileSync } from 'node:child_process'
@@ -126,11 +127,8 @@ test('prepares an unindexed folder starting from what is on screen', async ({ pa
 
 test('reels reveal seeking from its strip and fade it again', async ({ page }) => {
   await page.goto('/?q=feedback&order=desc')
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await switchExperience(page, 'Flick')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   const strip = reels.getByTestId('reels-seek')
   const seek = reels.getByRole('slider', { name: 'Seek video', exact: true })
@@ -155,11 +153,8 @@ test('reels reveal seeking from its strip and fade it again', async ({ page }) =
 
 test('double tapping a reel likes it without toggling playback', async ({ page }) => {
   await page.goto('/?mediaType=video&preference=neutral')
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await switchExperience(page, 'Flick')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   const like = reels.getByRole('button', { name: 'Like', exact: true })
   await expect(like).toHaveAttribute('aria-pressed', 'false')
@@ -173,6 +168,7 @@ test('double tapping a reel likes it without toggling playback', async ({ page }
   await page.mouse.up()
   await expect(like).toHaveAttribute('aria-pressed', 'true')
   // The like is persisted, not only reflected in the reels control.
+  await switchExperience(page, 'Gallery')
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
     .getByRole('button', { name: 'Collections', exact: true })
@@ -181,12 +177,12 @@ test('double tapping a reel likes it without toggling playback', async ({ page }
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 })
 
-test('reels carry the active filters when switching modes', async ({ page }) => {
+test('Flick restores its own filters when switching applications', async ({ page }) => {
   const navigation = page.getByRole('navigation', { name: 'Primary navigation' })
   await page.goto('/?libraryId=1&folderId=1')
-  await navigation.getByRole('button', { name: 'Reels', exact: true }).click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
-  await reels.getByRole('button', { name: 'Reels menu' }).click()
+  await switchExperience(page, 'Flick')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
+  await reels.getByRole('button', { name: 'Flick menu' }).click()
   await reels.getByRole('button', { name: 'Filters', exact: true }).click()
   const sheet = page.getByRole('dialog', { name: 'Filters and sorting' })
   await sheet.getByLabel('Media type').selectOption('image')
@@ -195,14 +191,15 @@ test('reels carry the active filters when switching modes', async ({ page }) => 
   await expect(page).toHaveURL(/mediaType=image/)
   await expect(page).toHaveURL(/order=asc/)
 
+  await switchExperience(page, 'Gallery')
   await navigation.getByRole('button', { name: 'Search', exact: true }).click()
   await page.getByRole('combobox', { name: 'Search media' }).fill('photo')
   await page.getByRole('combobox', { name: 'Search media' }).press('Enter')
   await expect(page).toHaveURL(/q=photo/)
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 
-  await navigation.getByRole('button', { name: 'Reels', exact: true }).click()
+  await switchExperience(page, 'Flick')
   await expect(page).toHaveURL(/mediaType=image/)
   await expect(page).toHaveURL(/order=asc/)
-  await expect(page).toHaveURL(/q=photo/)
+  await expect(page).not.toHaveURL(/q=photo/)
 })

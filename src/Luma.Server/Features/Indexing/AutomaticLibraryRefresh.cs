@@ -114,6 +114,7 @@ public sealed class AutomaticLibraryRefresh(
 
     private void Observe(LibraryOptions library, string fullPath, WatcherChangeTypes changeType)
     {
+        if (Luma.Server.Features.Files.MutationPaths.IsInternal(Path.GetRelativePath(library.Path, fullPath))) return;
         if (!settings.TryGetValue(library.Id, out var mode) || mode.Mode != "watcher") return;
         try
         {

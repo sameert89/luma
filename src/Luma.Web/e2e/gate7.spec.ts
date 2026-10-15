@@ -1,3 +1,4 @@
+import { switchExperience } from './helpers'
 import { test, expect } from '@playwright/test'
 import { viewerAction } from './helpers'
 
@@ -13,12 +14,9 @@ test('requested themes persist across cached gallery search viewer and photo ree
     await expect(viewer.getByRole('img')).toBeVisible()
     await expect.poll(() => viewer.getByRole('img').evaluate(image => image.naturalWidth)).toBeGreaterThan(0)
     await viewer.getByRole('button', { name: 'Close viewer', exact: true }).click()
-    await page
-      .getByRole('navigation', { name: 'Primary navigation' })
-      .getByRole('button', { name: 'Reels', exact: true })
-      .click()
-    const reels = page.getByRole('region', { name: 'Reels', exact: true })
-    await reels.getByRole('button', { name: 'Reels menu' }).click()
+    await switchExperience(page, 'Flick')
+    const reels = page.getByRole('region', { name: 'Flick', exact: true })
+    await reels.getByRole('button', { name: 'Flick menu' }).click()
     await reels.getByRole('button', { name: 'Filters', exact: true }).click()
     await page.getByRole('combobox', { name: 'Media type', exact: true }).selectOption('image')
     await page.getByRole('button', { name: 'Apply filters' }).click()
@@ -77,12 +75,9 @@ test('scopes a search and exposes all advanced sort and filter choices on mobile
 
 test('reels honour photos and mixed-media selections and navigate the active query', async ({ page }) => {
   await page.goto('/?q=photo')
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
-  await reels.getByRole('button', { name: 'Reels menu' }).click()
+  await switchExperience(page, 'Flick')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
+  await reels.getByRole('button', { name: 'Flick menu' }).click()
   await reels.getByRole('button', { name: 'Filters', exact: true }).click()
   await page.getByRole('combobox', { name: 'Media type', exact: true }).selectOption('image')
   await page.getByRole('combobox', { name: 'Sort by' }).selectOption('shuffle')
@@ -92,7 +87,7 @@ test('reels honour photos and mixed-media selections and navigate the active que
   await expect(page).toHaveURL(/mediaType=image/)
   const original = await reels.getByRole('img').getAttribute('alt')
   // Applying filters remounts Reels (a fresh query), so the menu collapses again.
-  await reels.getByRole('button', { name: 'Reels menu' }).click()
+  await reels.getByRole('button', { name: 'Flick menu' }).click()
   await reels.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(reels.getByRole('img')).not.toHaveAttribute('alt', original!)
   await reels.getByRole('button', { name: 'Filters', exact: true }).click()

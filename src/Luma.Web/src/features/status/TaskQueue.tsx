@@ -2,18 +2,34 @@ import { useQuery, useIsMutating, useMutation, useQueryClient, type QueryClient 
 import { useState } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
 import { errorMessage, request, type IndexingStatus } from '../browse/api'
+import { FileRecoveryDialog } from '../files/FileRecoveryDialog'
 import type { components } from '../../lib/api/generated'
 
 type Task = components['schemas']['BackgroundTask']
 
 const kindLabels: Record<string, string> = {
   indexing: 'Indexing',
+  upload: 'Upload',
+  comics: 'Comic discovery',
+  mkdir: 'New folder',
+  move: 'Move / rename',
+  recycle: 'Recycle',
+  restore: 'Restore',
+  delete: 'Permanent deletion',
+  purge: 'Recycle bin deletion',
   import: 'Tag import',
   xmp: 'XMP export',
   dislikes: 'Disliked paths export',
 }
 const stateLabels: Record<string, string> = {
   queued: 'Queued',
+  waitingForClient: 'Waiting for upload data',
+  paused: 'Paused',
+  reserved: 'Reserved',
+  published: 'Published',
+  deleting: 'Deleting',
+  finalizing: 'Finalizing',
+  needsAttention: 'Needs attention',
   running: 'Running',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -25,15 +41,27 @@ const stateTones: Record<string, string> = {
   running: 'text-accent',
   completed: 'text-positive',
   failed: 'text-danger',
+  needsAttention: 'text-danger',
   interrupted: 'text-danger',
 }
 
-const isActive = (task: Task) => task.state === 'queued' || task.state === 'running'
+const isActive = (task: Task) =>
+  ['queued', 'running', 'waitingForClient', 'paused', 'reserved', 'deleting', 'published', 'finalizing'].includes(
+    task.state,
+  )
 // Work that stopped before finishing can be run again (as a new task); finished work is only cleared.
 const canQueueAgain = (task: Task) => ['cancelled', 'failed', 'interrupted'].includes(task.state)
 const label = (task: Task) => kindLabels[task.kind] ?? task.kind
 
 function progress(task: Task) {
+  if (task.kind === 'upload')
+    return `${task.processed.toLocaleString()} bytes uploaded · ${task.pending.toLocaleString()} bytes remaining`
+  if (['mkdir', 'move', 'recycle', 'restore', 'delete', 'purge'].includes(task.kind))
+    return task.state === 'completed'
+      ? 'Operation completed'
+      : task.state === 'needsAttention'
+        ? 'Inspect operation evidence before continuing. This library is protected from further mutations.'
+        : 'Operation in progress'
   const failed = task.failed ? ` · ${task.failed.toLocaleString()} failed` : ''
   if (task.kind === 'indexing')
     return `${task.processed.toLocaleString()} found${task.pending ? ` · ${task.pending.toLocaleString()} previews to prepare` : ''}${failed}`
@@ -127,6 +155,7 @@ function TaskRow({ task }: { task: Task }) {
   const busy = action.isPending
   // Stopping indexing changes what gets indexed later, so it says so before it happens.
   const [confirming, setConfirming] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
   return (
     <article
       aria-label={`${name}, ${stateLabels[task.state] ?? task.state}`}
@@ -146,6 +175,18 @@ function TaskRow({ task }: { task: Task }) {
         </p>
       </div>
       <p className="mt-1 text-sm text-muted">{progress(task)}</p>
+      {reviewing && (
+        <FileRecoveryDialog
+          id={task.id.slice(5)}
+          onClose={() => setReviewing(false)}
+          onResolved={() => void refresh(client)}
+        />
+      )}
+      {task.id.startsWith('file-') && task.state === 'needsAttention' && (
+        <QuietButton className="mt-2" onClick={() => setReviewing(true)}>
+          Review recovery
+        </QuietButton>
+      )}
       <div className="mt-2 flex flex-wrap gap-2">
         {isActive(task) ? (
           confirming ? (
@@ -166,7 +207,11 @@ function TaskRow({ task }: { task: Task }) {
           ) : (
             <QuietButton
               aria-label={`Cancel ${name}`}
-              disabled={busy}
+              disabled={
+                busy ||
+                (task.id.startsWith('file-') && task.state !== 'queued') ||
+                (task.id.startsWith('upload-') && task.state === 'finalizing')
+              }
               onClick={() => (task.kind === 'indexing' ? setConfirming(true) : action.mutate('cancel'))}
             >
               {busy ? 'Cancelling…' : 'Cancel'}
@@ -179,7 +224,11 @@ function TaskRow({ task }: { task: Task }) {
                 Queue again
               </QuietButton>
             )}
-            <QuietButton aria-label={`Clear ${name}`} disabled={busy} onClick={() => action.mutate('clear')}>
+            <QuietButton
+              aria-label={`Clear ${name}`}
+              disabled={busy || task.state === 'needsAttention'}
+              onClick={() => action.mutate('clear')}
+            >
               Clear
             </QuietButton>
           </>

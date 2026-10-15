@@ -21,7 +21,7 @@ public static class HiddenFolders
 {
     // Every folder at or beneath a folder the person hid. Non-correlated, so SQLite
     // evaluates it once per statement; the partial index keeps it free when nothing is hidden.
-    public const string Descendants = "SELECT a.DescendantId FROM Folders h INDEXED BY IX_Folders_Hidden JOIN FolderAncestry a ON a.AncestorId=h.Id WHERE h.Hidden=1";
+    public const string Descendants = "SELECT a.DescendantId FROM Folders h INDEXED BY IX_Folders_Hidden JOIN FolderAncestry a ON a.AncestorId=h.Id WHERE h.Hidden=1 UNION SELECT a.DescendantId FROM Folders r INDEXED BY IX_Folders_Recycled JOIN FolderAncestry a ON a.AncestorId=r.Id WHERE r.Recycled=1";
 }
 public sealed class LibraryBrowser(Database database, CursorSigner cursors, ILogger<LibraryBrowser>? logger = null)
 {
@@ -103,7 +103,7 @@ public sealed class LibraryBrowser(Database database, CursorSigner cursors, ILog
                  CROSS JOIN CacheEntries c ON c.MediaId=m.Id AND c.SourceRevision=m.SourceRevision
                  WHERE c.Variant='thumbnail' AND c.State='ready' AND c.EncoderVersion=@encoder
                  ORDER BY m.ModifiedTicks DESC,m.Id DESC LIMIT {CoverCandidates}))) CoverJson
-                FROM Folders f WHERE ParentId=@id AND Hidden=0 {seek} ORDER BY {ordering} LIMIT @limit
+                FROM Folders f WHERE ParentId=@id AND Hidden=0 AND Recycled=0 {seek} ORDER BY {ordering} LIMIT @limit
                 """, new { id = current.Id, after = position?.Id, key = position?.Tuple?[0], ticks = position?.Ticks, limit = (limit ?? 100) + 1, encoder = IndexingOptions.EncoderVersion }, cancellationToken: ct))).ToList();
             listingMs = watch.ElapsedMilliseconds - openedMs - currentMs;
             var more = rows.Count > (limit ?? 100); if (more) rows.RemoveAt(rows.Count - 1); if (backwards) rows.Reverse();

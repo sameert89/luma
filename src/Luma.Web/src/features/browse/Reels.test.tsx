@@ -77,7 +77,7 @@ it('restores the current reel, mute and auto-scroll after leaving and returning,
     )
   try {
     const first = mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
     await userEvent.click(screen.getByRole('button', { name: 'Unmute' }))
     await userEvent.click(screen.getByRole('button', { name: 'Auto-scroll' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled())
@@ -87,7 +87,7 @@ it('restores the current reel, mute and auto-scroll after leaving and returning,
     const feedsBefore = fetch.mock.calls.filter(([url]) => url.startsWith('/api/media?')).length
     const returned = mount()
     expect(await screen.findByLabelText('2.mp4')).toHaveProperty('muted', false)
-    await userEvent.click(screen.getByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Flick menu' }))
     expect(screen.getByRole('button', { name: 'Mute' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Auto-scroll' })).toHaveAttribute('aria-pressed', 'true')
     expect(fetch.mock.calls.filter(([url]) => url.startsWith('/api/media?'))).toHaveLength(feedsBefore)
@@ -148,7 +148,7 @@ it('retains only current query data and one nearby preview during sequential bro
         />
       </QueryClientProvider>,
     )
-    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
     const next = await screen.findByRole('button', { name: /^Next$/ })
     await waitFor(() =>
       expect(
@@ -197,17 +197,17 @@ it('consolidates view options and closes tags with the cross, outside click and 
         <Reels filters={{}} onFilters={vi.fn()} onOpenViewer={vi.fn()} />
       </QueryClientProvider>,
     )
-    const menu = await screen.findByRole('button', { name: 'Reels menu' })
+    const menu = await screen.findByRole('button', { name: 'Flick menu' })
     expect(menu).toHaveAttribute('aria-expanded', 'false')
     expect(menu.querySelector('svg')).toHaveClass('lucide-ellipsis-vertical')
     expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'View options' }).closest('[inert]')).not.toBeNull()
     fireEvent(screen.getByLabelText('1.mp4'), new Event('webkitbeginfullscreen'))
-    expect(screen.queryByRole('button', { name: 'Reels menu' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Flick menu' })).not.toBeInTheDocument()
     fireEvent(screen.getByLabelText('1.mp4'), new Event('webkitendfullscreen'))
-    expect(screen.getByRole('button', { name: 'Reels menu' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Flick menu' })).toBeVisible()
     await userEvent.click(menu)
-    const closeMenu = screen.getByRole('button', { name: 'Close reels menu' })
+    const closeMenu = screen.getByRole('button', { name: 'Close flick menu' })
     expect(closeMenu).toHaveAttribute('aria-expanded', 'true')
     expect(closeMenu.querySelector('svg')).toHaveClass('lucide-x')
     const viewOptions = screen.getByRole('button', { name: 'View options' })
@@ -241,7 +241,7 @@ it('consolidates view options and closes tags with the cross, outside click and 
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tags' })).not.toBeInTheDocument())
     await userEvent.click(closeMenu)
-    expect(screen.getByRole('button', { name: 'Reels menu' }).querySelector('svg')).toHaveClass(
+    expect(screen.getByRole('button', { name: 'Flick menu' }).querySelector('svg')).toHaveClass(
       'lucide-ellipsis-vertical',
     )
     expect(screen.getByRole('button', { name: 'View options' }).closest('[inert]')).not.toBeNull()
@@ -287,7 +287,7 @@ it('keeps like and dislike on the stage beside a bottom menu, loops by default a
     // Rating is always one tap away; the menu toggle sits beside it rather than at the top.
     const like = screen.getByRole('button', { name: 'Like' })
     const dislike = screen.getByRole('button', { name: 'Dislike' })
-    const menu = screen.getByRole('button', { name: 'Reels menu' })
+    const menu = screen.getByRole('button', { name: 'Flick menu' })
     expect(like.closest('[inert]')).toBeNull()
     expect(dislike.parentElement).toBe(menu.parentElement)
     expect(like.parentElement).toBe(menu.parentElement)

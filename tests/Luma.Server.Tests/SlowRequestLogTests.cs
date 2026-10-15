@@ -1,12 +1,15 @@
 using System.Collections.Concurrent;
 using Luma.Server.Http;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Luma.Server.Tests;
 
+[Collection("HTTP timing")]
 public sealed class SlowRequestLogTests
 {
     [Theory]
@@ -47,42 +50,33 @@ public sealed class SlowRequestLogTests
     [Fact]
     public async Task A_request_reports_the_company_it_arrived_to()
     {
-        await using var f = await PipelineFixture.CreateAsync();
         var messages = new ConcurrentQueue<string>();
-        await using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder
-            .UseEnvironment("Testing")
-            .UseSetting("Luma:DatabasePath", f.Database.Path).UseSetting("Luma:Indexing:CachePath", f.Options.CachePath)
-            .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Test")
-            .UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path)
-            .UseSetting("Luma:SlowRequestMs", "1")
-            .ConfigureServices(services => services.AddSingleton<ILoggerProvider>(new CaptureProvider(messages))));
-
-        using var client = host.CreateClient();
+        using var services = new ServiceCollection().AddLogging(logging => logging.AddProvider(new CaptureProvider(messages))).BuildServiceProvider();
+        var pipeline = new ApplicationBuilder(services);
+        pipeline.UseSlowRequestLog(1);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        pipeline.Run(async _ => { await release.Task; await Task.Delay(2); });
+        var request = pipeline.Build();
+        static DefaultHttpContext Context()
+        {
+            var context = new DefaultHttpContext();
+            context.Request.Method = "GET";
+            context.Request.Path = "/api/status";
+            return context;
+        }
         int[] Counts() => messages.Where(message => message.Contains("for this path"))
             .Select(message => int.Parse(message.Split("on arrival ")[1].Split(' ')[0])).ToArray();
 
-        // Whether requests fired together actually overlap is up to the scheduler, and under a
-        // loaded machine a burst can be served one at a time. Repeating the burst makes the test
-        // depend on overlap happening at all rather than on it happening the first time.
-        var counts = Array.Empty<int>();
-        for (var attempt = 0; attempt < 10 && (counts.Length == 0 || counts.Max() == 1); attempt++)
-        {
-            await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => client.GetAsync("/api/status")));
-            counts = Counts();
-        }
-        Assert.NotEmpty(counts);
-        Assert.True(counts.Max() > 1, $"in-flight counts were {string.Join(",", counts)}");
-        // The tally is returned rather than leaked: a request made once the burst has drained
-        // finds itself alone again. The test server hands the client its response before the
-        // pipeline has finished unwinding, so this settles rather than reading straight away.
-        var alone = 0;
-        for (var attempt = 0; attempt < 50 && alone != 1; attempt++)
-        {
-            await Task.Delay(20);
-            Assert.True((await client.GetAsync("/api/status")).IsSuccessStatusCode);
-            alone = Counts().Last();
-        }
-        Assert.Equal(1, alone);
+        // Hold the handlers after the middleware counted arrival. Overlap is deliberate,
+        // independent of whether eight very fast database requests happen to overlap.
+        var overlapping = Enumerable.Range(0, 8).Select(_ => request(Context())).ToArray();
+        await Task.Delay(5);
+        release.SetResult();
+        await Task.WhenAll(overlapping);
+        Assert.Equal(Enumerable.Range(1, 8), Counts().Order());
+        // The same counters must unwind completely before the next request arrives.
+        await request(Context());
+        Assert.Equal(1, Counts().Last());
     }
 
     [Fact]

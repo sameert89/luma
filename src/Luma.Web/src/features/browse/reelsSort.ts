@@ -7,7 +7,7 @@ import { shuffleSeed } from './shuffleSeed'
  *
  * `library` keeps what Reels has always done: carry on in whatever order the library was sorted.
  * Anything else replaces the sort when Reels is opened from the navigation, so a feed can open
- * shuffled while the library stays newest first. Watch on Reels is unaffected: it continues from
+ * shuffled while the library stays newest first. Watch on Flick is unaffected: it continues from
  * the item being viewed, which only makes sense in the order it was reached.
  */
 export type ReelsSortChoice = 'library' | 'modified' | 'captured' | 'name' | 'type' | 'size' | 'shuffle'

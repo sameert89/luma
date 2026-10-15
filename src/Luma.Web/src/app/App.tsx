@@ -1,3 +1,8 @@
+import { useAppearance, AppearanceBackdrop, AppearanceSettings, AppIntroduction } from './appearance/Appearance'
+import { AppSwitcher, type Experience } from './navigation/AppSwitcher'
+import { readExperience, saveExperience, sectionPath } from './navigation/experienceState'
+import { FileAccess } from '../features/files/FileAccess'
+import { FileToolbar } from '../features/files/FileToolbar'
 import { SettingsSection } from '../components/ui/SettingsSection'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -5,7 +10,6 @@ import {
   Check,
   ChevronRight,
   CircleHelp,
-  Clapperboard,
   CopyCheck,
   FolderOpen,
   GitFork,
@@ -17,7 +21,7 @@ import {
   Tag,
   X,
 } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
 import { IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
@@ -37,9 +41,8 @@ import { GalleryActions } from '../features/browse/GalleryActions'
 import { ActiveFilters } from '../features/browse/ActiveFilters'
 import { RandomUrls } from '../features/browse/RandomUrls'
 import { Gallery } from '../features/browse/Gallery'
-import { Reels } from '../features/browse/Reels'
 import { ReelsSortSettings } from '../features/browse/ReelsSortSettings'
-import { reelsSort, reelsSortFields, sameSort, type SortFields } from '../features/browse/reelsSort'
+import { reelsSort, reelsSortFields } from '../features/browse/reelsSort'
 import { Viewer } from '../features/browse/Viewer'
 import { HiddenFolders } from '../features/browse/HiddenFolders'
 import { LibrarySettings, LibrarySetup } from '../features/browse/LibrarySetup'
@@ -58,8 +61,11 @@ import {
 } from '../features/browse/api'
 import packageJson from '../../package.json'
 
-type Section = 'library' | 'reels' | 'search' | 'collections' | 'settings' | 'help'
-const sections: Section[] = ['library', 'reels', 'search', 'collections', 'settings', 'help']
+const Panels = lazy(() => import('../features/panels/Panels').then(module => ({ default: module.Panels })))
+const Reels = lazy(() => import('../features/browse/Reels').then(module => ({ default: module.Reels })))
+
+type Section = 'library' | 'reels' | 'search' | 'collections' | 'settings' | 'help' | 'panels'
+const sections: Section[] = ['library', 'reels', 'search', 'collections', 'settings', 'help', 'panels']
 // Help is opened from another destination and returns to it; `from` keeps that across a refresh.
 type HelpOrigin = Exclude<Section, 'help'>
 const helpOrigins: HelpOrigin[] = ['library', 'reels', 'search', 'collections', 'settings']
@@ -83,6 +89,7 @@ const reelsMediaType = 'motion'
 const ungroupTags = (value: Filters): Filters => (value.groupBy === 'tag' ? { ...value, groupBy: 'none' } : value)
 
 function readFilters(): Filters {
+  if (window.location.pathname.startsWith('/panels')) return {}
   const params = new URLSearchParams(window.location.search)
   const numeric = new Set([
     'libraryId',
@@ -115,7 +122,24 @@ function readFilters(): Filters {
 function readSection(): Section {
   const params = new URLSearchParams(window.location.search)
   const view = params.get('view')
-  return sections.find(section => section === view) ?? (params.get('q') ? 'search' : 'library')
+  const route = window.location.pathname
+  const direct: Section =
+    route === '/flick'
+      ? 'reels'
+      : route.startsWith('/panels')
+        ? 'panels'
+        : route === '/settings'
+          ? 'settings'
+          : route === '/help'
+            ? 'help'
+            : route === '/gallery/collections'
+              ? 'collections'
+              : route === '/gallery/search'
+                ? 'search'
+                : params.get('q')
+                  ? 'search'
+                  : 'library'
+  return sections.find(section => section === view) ?? direct
 }
 
 function readHelpOrigin(): HelpOrigin {
@@ -124,7 +148,7 @@ function readHelpOrigin(): HelpOrigin {
 }
 
 function readPersistedView(): PersistedView | null {
-  if (window.location.search) return null
+  if (window.location.search || window.location.pathname !== '/') return null
   try {
     const value = JSON.parse(localStorage.getItem(persistedViewKey) ?? 'null') as PersistedView | null
     if (!value || !value.filters || !value.section || !sections.includes(value.section)) return null
@@ -135,12 +159,40 @@ function readPersistedView(): PersistedView | null {
 }
 
 export function App() {
+  const appearance = useAppearance()
   // An installed PWA can be relaunched at its start URL after Android closes it. History state and
   // the previous query string are then gone, so keep the last real destination independently.
   // An explicit URL always wins, preserving shared links and browser history semantics.
   const [persistedView] = useState(readPersistedView)
-  const [filters, setFilters] = useState<Filters>(() => persistedView?.filters ?? readFilters())
+  const [filters, setFilters] = useState<Filters>(() => {
+    const value = persistedView?.filters ?? readFilters()
+    return (persistedView?.section ?? readSection()) === 'reels' ? { mediaType: reelsMediaType, ...value } : value
+  })
   const [section, setSection] = useState<Section>(() => persistedView?.section ?? readSection())
+  const [experience, setExperience] = useState<Experience>(() =>
+    section === 'reels' ? 'flick' : section === 'panels' ? 'panels' : 'gallery',
+  )
+  useEffect(() => {
+    if (section === 'reels') setExperience('flick')
+    else if (section === 'panels') setExperience('panels')
+    else if (['library', 'search', 'collections'].includes(section)) setExperience('gallery')
+  }, [section])
+  const gallerySnapshot = useRef(
+    readExperience('gallery', {
+      filters: section === 'reels' || section === 'panels' ? {} : filters,
+      section: 'library',
+    }),
+  )
+  const flickSnapshot = useRef(readExperience('flick', { filters: { mediaType: reelsMediaType }, section: 'reels' }))
+  useEffect(() => {
+    if (section === 'reels') {
+      flickSnapshot.current = { filters, section }
+      saveExperience('flick', flickSnapshot.current)
+    } else if (['library', 'search', 'collections'].includes(section)) {
+      gallerySnapshot.current = { filters, section }
+      saveExperience('gallery', gallerySnapshot.current)
+    }
+  }, [section, filters])
   const [helpOrigin, setHelpOrigin] = useState<HelpOrigin>(() => persistedView?.helpOrigin ?? readHelpOrigin())
   const [search, setSearch] = useState(filters.q ?? '')
   const [searchFocusRequested, setSearchFocusRequested] = useState(false)
@@ -279,6 +331,10 @@ export function App() {
     )
   }
   useEffect(() => {
+    if (section === 'panels') {
+      localStorage.setItem(persistedViewKey, JSON.stringify({ section: 'panels', filters: {} }))
+      return
+    }
     const params = new URLSearchParams(queryString(filters))
     const mediaId =
       active?.id ?? (section === 'reels' ? reelId : null) ?? (restoreId && !restoredOnce.current ? restoreId : null)
@@ -300,7 +356,7 @@ export function App() {
       ...(mediaId ? { mediaId } : {}),
     }
     if (!mediaId) delete state.mediaId
-    window.history.replaceState(state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
+    window.history.replaceState(state, '', `${sectionPath(section)}${params.size ? `?${params}` : ''}`)
     localStorage.setItem(
       persistedViewKey,
       JSON.stringify({ filters, section, helpOrigin, ...(mediaId ? { mediaId } : {}) }),
@@ -388,6 +444,9 @@ export function App() {
     setFolderCursor(undefined)
     setFilterOpen(false)
     setSection(target)
+    if (target === 'reels') setExperience('flick')
+    else if (target === 'panels') setExperience('panels')
+    else if (['library', 'search', 'collections'].includes(target)) setExperience('gallery')
   }
   function visitLibrary(item: Library) {
     if (!item.rootFolderId) {
@@ -396,37 +455,24 @@ export function App() {
     }
     apply({ libraryId: item.id, folderId: item.rootFolderId })
   }
-  // Filters carry between Library and Reels on purpose, but a default order chosen for Reels in
-  // Settings is about Reels: a feed that opens shuffled should not leave the library shuffled. On
-  // the way out, the order the library had is put back -- unless it was changed inside Reels, in
-  // which case that choice was the person's own and carries like any other filter.
-  const reelsSortSwap = useRef<{ from: SortFields; opened: SortFields } | null>(null)
-  function leavingReels(value: Filters): Filters {
-    const swap = reelsSortSwap.current
-    reelsSortSwap.current = null
-    // Not keyed on the section: Reels, then Settings or Help, then Library is still leaving Reels.
-    if (!swap) return value
-    const now = { sort: value.sort, order: value.order, seed: value.seed }
-    return sameSort(now, swap.opened) ? { ...value, ...swap.from } : value
+  function switchExperience(value: Experience) {
+    if (value === 'flick') navigateSection('reels')
+    else if (value === 'panels') apply({}, 'panels')
+    else apply(gallerySnapshot.current.filters, gallerySnapshot.current.section as Section)
+    setExperience(value)
   }
   function navigateSection(target: Section) {
     setSearchFocusRequested(target === 'search')
     if (target === 'search' && section !== 'search') searchOrigin.current = 'search'
     if (target === 'collections') apply({}, target)
     else if (target === 'reels') {
-      const from = { sort: filters.sort, order: filters.order, seed: filters.seed }
-      const opened = reelsSortFields(reelsSort(), filters)
-      reelsSortSwap.current = sameSort(from, opened) ? null : { from, opened }
+      const saved = flickSnapshot.current.filters
       apply(
-        ungroupTags({
-          ...filters,
-          ...opened,
-          recursive: filters.folderId ? true : filters.recursive,
-          mediaType: filters.mediaType ?? reelsMediaType,
-        }),
+        ungroupTags({ ...saved, ...reelsSortFields(reelsSort(), saved), mediaType: saved.mediaType ?? reelsMediaType }),
         target,
       )
-    } else if (target === 'library' || target === 'search') apply(leavingReels(filters), target)
+    } else if (target === 'library' || target === 'search')
+      apply(experience === 'flick' || experience === 'panels' ? gallerySnapshot.current.filters : filters, target)
     else {
       window.history.pushState({ filters, section: target }, '', window.location.href)
       setSection(target)
@@ -635,7 +681,6 @@ export function App() {
   const idleSearch = section === 'search' && !filters.q && !hasViewOptions
   const navItems: NavigationItem[] = [
     { id: 'library', label: 'Library', icon: Images },
-    { id: 'reels', label: 'Reels', icon: Clapperboard },
     { id: 'search', label: 'Search', icon: Search },
     { id: 'collections', label: 'Collections', icon: Bookmark },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -644,15 +689,14 @@ export function App() {
   const showAllMedia = section === 'search' || (!home && !filters.libraryId)
   const galleryTitle =
     section === 'reels'
-      ? 'Reels'
+      ? 'Flick'
       : section === 'collections'
         ? 'Collections'
         : filters.q
           ? `Results for “${filters.q}”`
           : (folders.data?.current.name ?? library?.name ?? (showAllMedia ? 'All media' : 'Library'))
   const showGallery = section !== 'collections' && (section === 'reels' || (!home && !idleSearch))
-  const showBackgroundJobs =
-    section === 'library' && (home ? !!libraries.data?.some(item => item.rootFolderId) : showGallery)
+  const showBackgroundJobs = true
   // auto-fit/minmax has no equivalent in the fixed column-count scale. Cards still
   // need an explicit maximum so a sparse album row remains easy to scan on desktop.
   const folderCards =
@@ -721,7 +765,8 @@ export function App() {
     ) : undefined
   return (
     <div
-      className="flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas text-ink"
+      className="luma-shell flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas text-ink"
+      data-background={appearance.value.background !== 'none'}
       onScrollCapture={event => {
         const target = event.target
         // Gallery suppresses virtualizer-driven scroll events while it restores itself;
@@ -734,6 +779,8 @@ export function App() {
           recordScroll(target.scrollTop)
       }}
     >
+      <AppearanceBackdrop appearance={appearance} />
+      <AppIntroduction experience={experience} appearance={appearance.value} />
       <a
         href="#collection"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-accent focus:p-3 focus:text-on-accent"
@@ -745,8 +792,9 @@ export function App() {
           Could not restore the open item: {errorMessage(restored.error)}
         </p>
       )}
-      {section !== 'reels' && (
+      {section !== 'reels' && section !== 'panels' && (
         <SearchHeader
+          logo={<AppSwitcher active={experience} onSelect={switchExperience} />}
           value={search}
           onChange={setSearch}
           onHome={() => apply({})}
@@ -758,7 +806,20 @@ export function App() {
           scope={`${section}:${queryString(filters)}`}
         />
       )}
-      {filterRowVisible && section !== 'settings' && section !== 'help' && (
+      {section === 'reels' && (
+        <header className="relative z-30 flex shrink-0 items-center gap-3 border-b border-line bg-canvas px-4 py-2">
+          <AppSwitcher active="flick" onSelect={switchExperience} />
+          <div className="ml-auto flex gap-2">
+            <IconButton label="Flick search and filters" onClick={() => setFilterOpen(true)}>
+              <Search className="size-5" />
+            </IconButton>
+            <IconButton label="Settings" onClick={() => navigateSection('settings')}>
+              <Settings className="size-5" />
+            </IconButton>
+          </div>
+        </header>
+      )}
+      {filterRowVisible && section !== 'settings' && section !== 'help' && section !== 'panels' && (
         <ActiveFilters
           libraryName={library?.name}
           folderName={folders.data?.current.name}
@@ -767,7 +828,10 @@ export function App() {
         />
       )}
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-56 shrink-0 flex-col border-r border-line p-3 md:flex">
+        <aside
+          hidden={section === 'reels' || section === 'panels'}
+          className={`${section === 'reels' || section === 'panels' ? 'hidden' : 'hidden md:flex'} w-56 shrink-0 flex-col border-r border-line p-3`}
+        >
           <nav aria-label="Primary navigation" className="space-y-2">
             {navItems.map(item => {
               const Icon = item.icon
@@ -808,10 +872,24 @@ export function App() {
           className="motion-page flex min-h-0 min-w-0 flex-1 flex-col"
           tabIndex={-1}
         >
-          {section === 'settings' ? (
+          {section === 'panels' ? (
+            <Suspense
+              fallback={
+                <p role="status" className="p-4">
+                  Loading Panels…
+                </p>
+              }
+            >
+              <Panels
+                logo={<AppSwitcher active="panels" onSelect={switchExperience} />}
+                onSettings={() => navigateSection('settings')}
+              />
+            </Suspense>
+          ) : section === 'settings' ? (
             <div className="overflow-auto" data-scroll-restore>
               <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
               <ThemePicker value={theme} onChange={setTheme} />
+              <AppearanceSettings appearance={appearance} />
               <AlbumCoverSettings />
               <ReelsSortSettings />
               <SettingsSection
@@ -827,6 +905,7 @@ export function App() {
                 <MetadataExchange dislikes heading={false} />
               </SettingsSection>
               <LibrarySettings />
+              <FileAccess />
               <HiddenFolders />
               <SettingsSection title="Help" description="See what each button, gesture and keyboard shortcut does.">
                 <QuietLink
@@ -921,6 +1000,11 @@ export function App() {
                       )}
                     </div>
                   </div>
+                  {section === 'library' && filters.libraryId && filters.folderId && (
+                    <div className="flex flex-wrap gap-2">
+                      <FileToolbar libraryId={filters.libraryId} folderId={filters.folderId} selected={selected} />
+                    </div>
+                  )}
                   {section === 'library' && folders.data && (
                     <>
                       {folders.data.ancestors.length > 0 && (
@@ -1040,20 +1124,28 @@ export function App() {
               ) : (
                 <>
                   {section === 'reels' ? (
-                    <Reels
-                      key={`${queryString(filters)}:${refresh}:${reelsStart ?? ''}`}
-                      filters={filters}
-                      startId={reelsStart}
-                      viewerOpen={!!active}
-                      filtersVisible={reelsFiltersVisible}
-                      onToggleFilters={toggleReelsFilters}
-                      onItemChange={setReelId}
-                      onFilters={() => setFilterOpen(true)}
-                      onOpenViewer={item => {
-                        triggerId.current = item.id
-                        setActive(item)
-                      }}
-                    />
+                    <Suspense
+                      fallback={
+                        <p role="status" className="p-4">
+                          Loading Flick…
+                        </p>
+                      }
+                    >
+                      <Reels
+                        key={`${queryString(filters)}:${refresh}:${reelsStart ?? ''}`}
+                        filters={filters}
+                        startId={reelsStart}
+                        viewerOpen={!!active}
+                        filtersVisible={reelsFiltersVisible}
+                        onToggleFilters={toggleReelsFilters}
+                        onItemChange={setReelId}
+                        onFilters={() => setFilterOpen(true)}
+                        onOpenViewer={item => {
+                          triggerId.current = item.id
+                          setActive(item)
+                        }}
+                      />
+                    </Suspense>
                   ) : (
                     <Gallery
                       key={`${section}:${queryString(galleryFilters)}:${refresh}`}
@@ -1091,9 +1183,13 @@ export function App() {
           )}
         </main>
       </div>
-      <BottomNavigation items={navItems} active={section} onChange={id => navigateSection(id as Section)} />
+      {section !== 'reels' && section !== 'panels' && (
+        <BottomNavigation items={navItems} active={section} onChange={id => navigateSection(id as Section)} />
+      )}
       {showBackgroundJobs && !active && (
-        <div className="fixed bottom-20 right-4 z-30 sm:right-6 md:bottom-6">
+        <div
+          className={`fixed ${section === 'reels' || section === 'panels' ? 'bottom-6' : 'bottom-20'} right-4 z-30 sm:right-6 md:bottom-6`}
+        >
           <BackgroundJobsButton libraryId={home ? undefined : filters.libraryId} />
         </div>
       )}

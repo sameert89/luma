@@ -26,11 +26,13 @@ public static class SlowRequestLog
 {
     public const int DefaultThresholdMs = 500;
 
-    public static IApplicationBuilder UseSlowRequestLog(this WebApplication app)
+    public static IApplicationBuilder UseSlowRequestLog(this WebApplication app) =>
+        ((IApplicationBuilder)app).UseSlowRequestLog(app.Configuration.GetValue("Luma:SlowRequestMs", DefaultThresholdMs));
+
+    internal static IApplicationBuilder UseSlowRequestLog(this IApplicationBuilder app, int threshold)
     {
-        var threshold = app.Configuration.GetValue("Luma:SlowRequestMs", DefaultThresholdMs);
         if (threshold <= 0) return app;
-        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Luma.SlowRequest");
+        var logger = app.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("Luma.SlowRequest");
         // Counted per application rather than per process, so what the log reports is this server's
         // own load and two hosts in one process cannot inflate each other's numbers.
         var inFlight = 0;
