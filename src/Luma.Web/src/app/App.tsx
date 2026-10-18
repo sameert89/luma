@@ -886,7 +886,7 @@ export function App() {
               />
             </Suspense>
           ) : section === 'settings' ? (
-            <div className="overflow-auto" data-scroll-restore>
+            <div className="overflow-auto scroll-py-2" data-scroll-restore>
               <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
               <ThemePicker value={theme} onChange={setTheme} />
               <AppearanceSettings appearance={appearance} />

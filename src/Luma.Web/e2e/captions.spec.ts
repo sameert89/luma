@@ -1,12 +1,27 @@
 import { test, expect } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { mkdir, readdir, writeFile, access } from 'node:fs/promises'
+import { mkdir, readdir, writeFile, access, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { openFixtureDatabase } from './helpers'
 
 const fixture = path.resolve('../../.local/browser-fixture-v2')
+let captionFolder: string | undefined
+test.afterEach(async ({ page }) => {
+  await page.close()
+  if (!captionFolder) return
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
+  try {
+    db.prepare('DELETE FROM Media WHERE FolderId IN (SELECT Id FROM Folders WHERE RelativePath=?)').run(captionFolder)
+    db.prepare('DELETE FROM Folders WHERE RelativePath=?').run(captionFolder)
+  } finally {
+    db.close()
+    await rm(path.join(fixture, 'media', captionFolder), { recursive: true, force: true })
+    captionFolder = undefined
+  }
+})
 test('CC is opt-in, displays matching SRT and keeps generated files in cache', async ({ page, request }, testInfo) => {
   const relative = `Captions-${testInfo.project.name}-${Date.now()}`
+  captionFolder = relative
   const folder = path.join(fixture, 'media', relative)
   await mkdir(folder, { recursive: true })
   execFileSync('ffmpeg', [

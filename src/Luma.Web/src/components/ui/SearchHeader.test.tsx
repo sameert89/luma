@@ -154,3 +154,29 @@ it('does not press what the suggestion list was covering', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }))
   expect(clearAllFilters).toHaveBeenCalledTimes(1)
 })
+
+it('keeps phone search open when its navigation request also changes scope', () => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+  )
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  const shell = (requested: boolean) => (
+    <QueryClientProvider client={client}>
+      <SearchHeader
+        value=""
+        onChange={vi.fn()}
+        onSearch={vi.fn()}
+        onClear={vi.fn()}
+        onHome={vi.fn()}
+        onFilters={vi.fn()}
+        searchRequested={requested}
+        scope={requested ? 'search:' : 'library:'}
+      />
+    </QueryClientProvider>
+  )
+  const { rerender } = render(shell(false))
+  rerender(shell(true))
+  expect(screen.getByRole('search')).toHaveAttribute('data-open', 'true')
+  expect(screen.getByRole('textbox', { name: 'Search media' })).toBeInTheDocument()
+})

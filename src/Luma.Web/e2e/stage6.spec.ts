@@ -102,7 +102,11 @@ test('native video plays, seeks, changes speed and offers external access on fai
     v.currentTime = 2
   })
   await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(2)
-  await page.getByRole('button', { name: 'Playback speed' }).click()
+  if (test.info().project.name === 'mobile') {
+    await (await viewerAction(page, 'View options')).click()
+    await page.getByRole('dialog', { name: 'View options' }).getByLabel('Playback speed').selectOption('1.5')
+    await page.keyboard.press('Escape')
+  } else await page.getByRole('button', { name: 'Playback speed' }).click()
   expect(await video.evaluate(v => v.playbackRate)).toBe(1.5)
   await page.getByRole('button', { name: 'Close viewer', exact: true }).click()
   await expect(video).toHaveCount(0)
@@ -115,12 +119,10 @@ test('native video plays, seeks, changes speed and offers external access on fai
   await expect(page.getByRole('link', { name: 'Open original' })).toHaveCount(0)
 })
 
-test('reels preserve query, bound media, auto-scroll, stop inactive playback and return to gallery', async ({
-  page,
-}) => {
+test('scoped reels bound media, auto-scroll, stop inactive playback and restore Gallery filters', async ({ page }) => {
   await page.goto('/?q=stage6&order=desc')
   await expect(page.getByTestId('media-cell')).toHaveCount(3)
-  await switchExperience(page, 'Flick')
+  await page.goto('/flick?q=stage6&order=desc&mediaType=motion')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   await expect(page).toHaveURL(/mediaType=motion/)
@@ -144,13 +146,10 @@ test('reels preserve query, bound media, auto-scroll, stop inactive playback and
   expect(await reels.locator('img,video').count()).toBeLessThanOrEqual(1)
   expect(await reels.locator('link[rel=preload]').count()).toBeLessThanOrEqual(1)
   await page.screenshot({ path: `test-results/stage6-reels-${test.info().project.name}.png` })
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Library', exact: true })
-    .click()
-  await expect(page.getByTestId('media-cell')).toHaveCount(2)
+  await switchExperience(page, 'Gallery')
+  await expect(page.getByTestId('media-cell')).toHaveCount(3)
   await expect(page).toHaveURL(/q=stage6/)
-  await expect(page).toHaveURL(/mediaType=motion/)
+  await expect(page).not.toHaveURL(/mediaType=motion/)
 })
 
 test('Back closes nested details then viewer then returns to libraries', async ({ page }) => {
@@ -217,7 +216,7 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await expect(viewer.locator('video')).toHaveAttribute('src', '/api/media/1490/original')
   await viewer.getByRole('button', { name: 'Close viewer', exact: true }).click()
   await expect(viewer).toBeHidden()
-  await switchExperience(page, 'Flick')
+  await page.goto('/flick?q=stage6&mediaType=motion&order=desc')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1495/original')
   const reelBounds = await reels.locator('video').boundingBox()

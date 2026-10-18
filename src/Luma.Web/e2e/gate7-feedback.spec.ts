@@ -117,8 +117,7 @@ test('prepares an unindexed folder starting from what is on screen', async ({ pa
 })
 
 test('reels reveal seeking from its strip and fade it again', async ({ page }) => {
-  await page.goto('/?q=feedback&order=desc')
-  await switchExperience(page, 'Flick')
+  await page.goto('/flick?q=feedback&order=desc')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   const strip = reels.getByTestId('reels-seek')
@@ -143,8 +142,7 @@ test('reels reveal seeking from its strip and fade it again', async ({ page }) =
 })
 
 test('double tapping a reel likes it without toggling playback', async ({ page }) => {
-  await page.goto('/?mediaType=video&preference=neutral')
-  await switchExperience(page, 'Flick')
+  await page.goto('/flick?mediaType=video&preference=neutral')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   const like = reels.getByRole('button', { name: 'Like', exact: true })

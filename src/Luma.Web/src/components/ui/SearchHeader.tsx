@@ -76,11 +76,11 @@ export function SearchHeader({
   useEffect(() => {
     if (scope === browsed.current) return
     browsed.current = scope
-    if (!value.trim() && document.activeElement !== input.current) {
+    if (!searchRequested && !value.trim() && document.activeElement !== input.current) {
       setOpen(false)
       setListOpen(false)
     }
-  }, [scope, value])
+  }, [scope, value, searchRequested])
   function toggle() {
     setOpen(!open)
     if (!open) requestAnimationFrame(() => input.current?.focus())
