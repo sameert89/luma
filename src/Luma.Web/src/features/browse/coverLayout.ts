@@ -1,3 +1,4 @@
+import { readSetting } from '../../app/uiDefaults'
 import { useSyncExternalStore } from 'react'
 import type { components } from '../../lib/api/generated'
 
@@ -17,7 +18,7 @@ const storageKey = 'luma-album-covers'
 const listeners = new Set<() => void>()
 let current: CoverRenderingMode = (() => {
   try {
-    return localStorage.getItem(storageKey) === 'cropped' ? 'cropped' : 'smart'
+    return readSetting(storageKey) === 'cropped' ? 'cropped' : 'smart'
   } catch {
     return 'smart'
   }

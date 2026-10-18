@@ -95,6 +95,7 @@ export function AppearanceBackdrop({ appearance }: { appearance: AppearanceContr
 }
 export function AppearanceSettings({ appearance }: { appearance: AppearanceControl }) {
   const { value, update, busy, error } = appearance
+  const backgroundInput = useRef<HTMLInputElement>(null)
   return (
     <SettingsSection
       title="Background & motion"
@@ -117,19 +118,23 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
             </option>
           </Select>
         </Field>
-        <Field label="Upload background image">
-          <Input
+        <div className="flex min-w-0 flex-col gap-2 text-sm font-medium text-muted">
+          <span>Custom background image</span>
+          <QuietButton className="min-h-11 w-full" disabled={busy} onClick={() => backgroundInput.current?.click()}>
+            Upload background image
+          </QuietButton>
+          <input
+            ref={backgroundInput}
             type="file"
-            className="py-2 file:mr-3 file:h-7 file:align-middle file:border-0 file:bg-transparent file:text-ink"
+            hidden
             accept="image/jpeg,image/png,image/webp"
-            disabled={busy}
             onChange={event => {
               const file = event.target.files?.[0]
               event.target.value = ''
               if (file) void appearance.image(file)
             }}
           />
-        </Field>
+        </div>
         {['solid', 'gradient'].includes(value.background) && (
           <Field label="Background color">
             <Input type="color" value={value.color} onChange={event => update({ color: event.target.value })} />

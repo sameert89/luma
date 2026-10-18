@@ -1,3 +1,4 @@
+import { readSetting } from '../../app/uiDefaults'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronLeft,
@@ -39,7 +40,7 @@ const slideSecondsKey = 'luma-slideshow-seconds'
 const slideChoices = [3, 5, 10, 20]
 function storedSlideSeconds() {
   try {
-    const value = Number(localStorage.getItem(slideSecondsKey))
+    const value = Number(readSetting(slideSecondsKey))
     return slideChoices.includes(value) ? value : 5
   } catch {
     return 5
@@ -49,7 +50,7 @@ function storedSlideSeconds() {
 const autoplayKey = 'luma-video-autoplay'
 function storedAutoplay() {
   try {
-    return localStorage.getItem(autoplayKey) === '1'
+    return readSetting(autoplayKey) === '1'
   } catch {
     return false
   }

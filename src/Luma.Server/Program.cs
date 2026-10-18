@@ -1,3 +1,4 @@
+using Luma.Server.Features.Settings;
 using Luma.Server.Data;
 using Luma.Server.Features.Panels;
 using Luma.Server.Features.Files;
@@ -30,6 +31,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton<Database>();
+builder.Services.AddSingleton<UiConfiguration>();
 builder.Services.AddSingleton<MutationAccess>();
 builder.Services.AddSingleton<FileWriteAvailability>();
 builder.Services.AddSingleton<FileOperations>();
@@ -37,6 +39,7 @@ builder.Services.AddSingleton<FileRecovery>();
 builder.Services.AddSingleton<Luma.Server.Features.Uploads.UploadSessions>();
 builder.Services.AddSingleton<FileOperationWorker>();
 builder.Services.AddSingleton<ComicLibrary>();
+builder.Services.AddSingleton<PanelSources>();
 builder.Services.AddSingleton<ComicPageContent>();
 builder.Services.AddSingleton<ComicProgress>();
 builder.Services.AddSingleton<ComicWorker>();
@@ -94,6 +97,7 @@ app.UseStatusCodePages(async context =>
 // Interactive writes take priority over background work and retry briefly on contention.
 var api = app.MapGroup("").AddEndpointFilter<ForegroundWriteFilter>();
 api.MapStatus();
+api.MapUiConfiguration();
 api.MapIndexing();
 api.MapMedia();
 api.MapPlayback();
@@ -145,6 +149,8 @@ if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
     }
     await app.Services.GetRequiredService<CursorSigner>().InitializeAsync(app.Lifetime.ApplicationStopping);
     await app.Services.GetRequiredService<IndexingSetup>().InitializeAsync(app.Lifetime.ApplicationStopping);
+    await app.Services.GetRequiredService<UiConfiguration>().InitializeAsync(app.Lifetime.ApplicationStopping);
+    await app.Services.GetRequiredService<PanelSources>().InitializeAsync(app.Lifetime.ApplicationStopping);
 }
 await app.RunAsync();
 

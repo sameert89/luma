@@ -1,3 +1,4 @@
+import { readSetting } from '../uiDefaults'
 export type Appearance = {
   background: 'none' | 'aurora' | 'sunset' | 'paper' | 'solid' | 'gradient' | 'custom'
   color: string
@@ -48,7 +49,7 @@ export function sanitizeAppearance(value: Partial<Appearance> | null): Appearanc
 }
 export function readAppearance(): Appearance {
   try {
-    return sanitizeAppearance(JSON.parse(localStorage.getItem('luma-appearance-v2') ?? 'null'))
+    return sanitizeAppearance(JSON.parse(readSetting('luma-appearance-v2') ?? 'null'))
   } catch {
     return { ...defaults }
   }

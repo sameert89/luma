@@ -16,6 +16,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ui-configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetUiConfiguration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateApplications"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/libraries/{id}/refresh-settings": {
         parameters: {
             query?: never;
@@ -656,6 +688,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panels/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicSources"];
+        put: operations["UpdateComicSources"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panels/comics": {
         parameters: {
             query?: never;
@@ -1069,6 +1117,12 @@ export interface components {
             instance?: string | null;
             code: string;
             traceId: string;
+        };
+        ApplicationFlags: {
+            /** @default true */
+            flickEnabled: boolean;
+            /** @default true */
+            panelsEnabled: boolean;
         };
         BackgroundTask: {
             id: string;
@@ -1506,6 +1560,21 @@ export interface components {
              */
             skipped: number;
         };
+        PanelSourceConfiguration: {
+            configured: boolean;
+            locations: components["schemas"]["PanelSourceLocation"][];
+        };
+        PanelSourceLocation: {
+            /** Format: int64 */
+            libraryId: number;
+            /** @default  */
+            relativePath: string;
+            /** @default false */
+            imageFolders: boolean;
+        };
+        PanelSourceUpdate: {
+            locations: components["schemas"]["PanelSourceLocation"][];
+        };
         PreferenceRequest: {
             preference: string;
         };
@@ -1606,6 +1675,12 @@ export interface components {
             id: number;
             name: string;
         };
+        UiConfigurationResponse: {
+            applications: components["schemas"]["ApplicationFlags"];
+            defaults: {
+                [key: string]: string;
+            };
+        };
         UploadRequest: {
             /** Format: int64 */
             libraryId: number;
@@ -1683,6 +1758,48 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ApiProblem"];
                 };
+            };
+        };
+    };
+    GetUiConfiguration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UiConfigurationResponse"];
+                };
+            };
+        };
+    };
+    UpdateApplications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationFlags"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3056,6 +3173,48 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FileStorageReport"];
                 };
+            };
+        };
+    };
+    GetComicSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelSourceConfiguration"];
+                };
+            };
+        };
+    };
+    UpdateComicSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PanelSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

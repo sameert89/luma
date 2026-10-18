@@ -1,9 +1,11 @@
+import type { components } from '../../lib/api/generated'
+import { ComicLocations } from './ComicLocations'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { BookOpen, Settings, Star } from 'lucide-react'
-import { Checkbox, Input, Select, Field, IconButton, QuietButton } from '../../components/ui/Controls'
+import { BookOpen, Search, SlidersHorizontal, Settings, Star } from 'lucide-react'
+import { Checkbox, Input, Select, IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
-import { errorMessage, request, type Library } from '../browse/api'
+import { errorMessage, request } from '../browse/api'
 import type { Comic, ComicList, ReadingStatistics } from './api'
 import { ComicReader } from './ComicReader'
 import { ComicDetails } from './ComicDetails'
@@ -21,6 +23,13 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
   const favouritesId = useId()
   const [params, setParams] = useState(initialParams)
   const [cursor, setCursor] = useState<number>()
+  const [searchOpen, setSearchOpen] = useState(!!params.get('q')),
+    [filtersOpen, setFiltersOpen] = useState(!!(params.get('state') || params.get('series') || params.get('favourite')))
+  const sources = useQuery({
+    queryKey: ['comic-sources'],
+    queryFn: ({ signal }) => request<components['schemas']['PanelSourceConfiguration']>('/api/panels/sources', signal),
+  })
+  const configured = sources.data?.configured === true && (sources.data.locations?.length ?? 0) > 0
   const [manage, setManage] = useState(false)
   const [details, setDetails] = useState<number | null>(null)
   const client = useQueryClient()
@@ -32,7 +41,7 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
         `/api/panels/comics?${new URLSearchParams({ ...(params.get('q') ? { q: params.get('q')! } : {}), ...(params.get('state') ? { state: params.get('state')! } : {}), ...(params.get('series') ? { series: params.get('series')! } : {}), ...(params.get('favourite') === 'true' ? { favourite: 'true' } : {}), ...(cursor ? { cursor: String(cursor) } : {}) })}`,
         signal,
       ),
-    enabled: !comicId,
+    enabled: !comicId && configured,
   })
   const reading = useQuery({
     queryKey: ['comic', comicId],
@@ -42,7 +51,7 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
   const stats = useQuery({
     queryKey: ['reading-statistics'],
     queryFn: ({ signal }) => request<ReadingStatistics>('/api/panels/statistics', signal),
-    enabled: !comicId,
+    enabled: !comicId && configured,
   })
   useEffect(() => {
     const query = params.toString()
@@ -86,7 +95,13 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-line p-3">
         {logo}
-        <div className="ml-auto">
+        <div className="ml-auto flex gap-2">
+          <IconButton label="Search comics" onClick={() => setSearchOpen(value => !value)}>
+            <Search className="size-5" />
+          </IconButton>
+          <IconButton label="Comic filters" onClick={() => setFiltersOpen(value => !value)}>
+            <SlidersHorizontal className="size-5" />
+          </IconButton>
           <IconButton label="Settings" onClick={onSettings}>
             <Settings className="size-5" />
           </IconButton>
@@ -94,55 +109,67 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
       </header>
       <div className="flex flex-wrap items-center gap-3 p-4">
         <h1 className="flex-1 text-xl font-semibold">Comic library</h1>
-        <QuietButton onClick={() => setManage(true)}>Add / discover comics</QuietButton>
+        <QuietButton onClick={() => setManage(true)}>Comic locations</QuietButton>
       </div>
-      <div className="flex flex-wrap gap-3 px-4 pb-3">
-        <Input
-          aria-label="Search comics"
-          className="flex-1"
-          placeholder="Search title or author"
-          value={params.get('q') ?? ''}
-          onChange={event => change('q', event.target.value)}
-        />
-        <Select
-          aria-label="Reading status"
-          className="w-auto"
-          value={params.get('state') ?? ''}
-          onChange={event => change('state', event.target.value)}
-        >
-          <option value="">All comics</option>
-          <option value="reading">Continue reading</option>
-          <option value="unread">Unread</option>
-          <option value="completed">Completed</option>
-        </Select>
-        <Input
-          aria-label="Series filter"
-          className="w-auto"
-          placeholder="Series"
-          value={params.get('series') ?? ''}
-          onChange={event => change('series', event.target.value)}
-        />
-        <label htmlFor={favouritesId} className="flex items-center gap-2 text-sm">
-          <Checkbox
-            id={favouritesId}
-            checked={params.get('favourite') === 'true'}
-            onChange={event => change('favourite', event.target.checked ? 'true' : '')}
+      {(!configured || manage) && !sources.isPending && !manage && (
+        <section aria-label="Set up comic library" className="min-h-0 overflow-auto">
+          <h2 className="px-5 text-lg font-semibold">Choose where your comics live</h2>
+          <ComicLocations onSaved={() => void sources.refetch()} />
+        </section>
+      )}
+      {searchOpen && (
+        <div className="px-4 pb-3">
+          <Input
+            aria-label="Search comics"
+            placeholder="Search comic titles and authors"
+            value={params.get('q') ?? ''}
+            onChange={event => change('q', event.target.value)}
           />
-          Favourites only
-        </label>
-      </div>
+        </div>
+      )}
+      {filtersOpen && (
+        <div className="flex flex-wrap gap-3 px-4 pb-3">
+          <Select
+            aria-label="Reading status"
+            className="w-auto"
+            value={params.get('state') ?? ''}
+            onChange={event => change('state', event.target.value)}
+          >
+            <option value="">All comics</option>
+            <option value="reading">Continue reading</option>
+            <option value="unread">Unread</option>
+            <option value="completed">Completed</option>
+          </Select>
+          <Input
+            aria-label="Series filter"
+            className="w-auto"
+            placeholder="Series"
+            value={params.get('series') ?? ''}
+            onChange={event => change('series', event.target.value)}
+          />
+          <label htmlFor={favouritesId} className="flex items-center gap-2 text-sm">
+            <Checkbox
+              id={favouritesId}
+              checked={params.get('favourite') === 'true'}
+              onChange={event => change('favourite', event.target.checked ? 'true' : '')}
+            />
+            Favourites only
+          </label>
+        </div>
+      )}
       {stats.data && (
         <p className="px-4 pb-3 text-sm text-muted">
           {stats.data.started} started · {stats.data.completed} completed · {Math.floor(stats.data.readingSeconds / 60)}{' '}
           minutes reading
         </p>
       )}
+      {comicId > 0 && reading.isError && <QuietButton onClick={exit}>Back to bookshelf</QuietButton>}
       {(library.error || reading.error) && (
         <p role="alert" className="px-4 text-danger">
           {errorMessage(library.error || reading.error)}
         </p>
       )}
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className={`min-h-0 flex-1 overflow-auto p-4 ${!configured ? 'hidden' : ''}`}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {library.data?.items.map(comic => (
             <article key={comic.id} className="rounded-xl border border-line bg-surface p-3 text-left">
@@ -202,73 +229,12 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
       <Modal
         open={manage}
         onOpenChange={setManage}
-        title="Add comics"
-        description="Discover archives or explicitly classify an image folder. Photos are never classified automatically."
+        title="Comic locations"
+        description="Save recursive comic sources within your libraries. Image folders are included only with your explicit choice."
         sheet
       >
-        {manage && <ComicDiscovery />}
+        {manage && <ComicLocations onSaved={() => setManage(false)} />}
       </Modal>
-    </div>
-  )
-}
-function ComicDiscovery() {
-  const libraries = useQuery({
-    queryKey: ['libraries'],
-    queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal),
-  })
-  const [library, setLibrary] = useState(''),
-    [path, setPath] = useState(''),
-    [mode, setMode] = useState('archives'),
-    [message, setMessage] = useState(''),
-    [busy, setBusy] = useState(false)
-  const client = useQueryClient()
-  async function start() {
-    setBusy(true)
-    setMessage('')
-    try {
-      await request('/api/panels/discover', undefined, 'POST', {
-        libraryId: Number(library),
-        ...(mode === 'folder' ? { relativePath: path } : {}),
-      })
-      setMessage('Discovery queued. Follow it in Background jobs.')
-      void client.invalidateQueries({ queryKey: ['tasks'] })
-    } catch (error) {
-      setMessage(`${errorMessage(error)} Unlock file management in Settings to administer comic discovery.`)
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <div className="space-y-3 p-5">
-      <Field label="Library">
-        <Select value={library} onChange={event => setLibrary(event.target.value)}>
-          <option value="">Choose library</option>
-          {libraries.data?.map(item => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Discovery">
-        <Select value={mode} onChange={event => setMode(event.target.value)}>
-          <option value="archives">Find CBZ/CBR/ZIP/RAR archives</option>
-          <option value="folder">Classify one image folder</option>
-        </Select>
-      </Field>
-      {mode === 'folder' && (
-        <Field label="Folder path relative to library">
-          <Input value={path} onChange={event => setPath(event.target.value)} />
-        </Field>
-      )}
-      <QuietButton disabled={!library || busy} onClick={() => void start()}>
-        {busy ? 'Queuing…' : 'Start discovery'}
-      </QuietButton>
-      {message && (
-        <p role="status" className="text-sm">
-          {message}
-        </p>
-      )}
     </div>
   )
 }

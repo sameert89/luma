@@ -1,3 +1,4 @@
+import type { components } from '../../lib/api/generated'
 import { BookOpen, ChevronDown, Clapperboard, Images } from 'lucide-react'
 import { useState } from 'react'
 import { Modal } from '../../components/ui/Modal'
@@ -8,7 +9,15 @@ const experiences = [
   { id: 'flick' as const, name: 'Flick', icon: Clapperboard, description: 'Immersive motion feed' },
   { id: 'panels' as const, name: 'Panels', icon: BookOpen, description: 'Comics and manga' },
 ]
-export function AppSwitcher({ active, onSelect }: { active: Experience; onSelect: (value: Experience) => void }) {
+export function AppSwitcher({
+  active,
+  onSelect,
+  applications,
+}: {
+  active: Experience
+  onSelect: (value: Experience) => void
+  applications?: components['schemas']['ApplicationFlags']
+}) {
   const [open, setOpen] = useState(false)
   const name = experiences.find(item => item.id === active)!.name
   return (
@@ -33,27 +42,33 @@ export function AppSwitcher({ active, onSelect }: { active: Experience; onSelect
         sheet
       >
         <div className="space-y-2 p-5">
-          {experiences.map(item => {
-            const Icon = item.icon
-            return (
-              <QuietButton
-                key={item.id}
-                aria-label={item.name}
-                aria-current={active === item.id ? 'page' : undefined}
-                className={`w-full justify-start rounded-xl ${active === item.id ? 'bg-surface text-accent' : ''}`}
-                onClick={() => {
-                  onSelect(item.id)
-                  setOpen(false)
-                }}
-              >
-                <Icon className="size-5" aria-hidden="true" />
-                <span className="text-left">
-                  <span className="block">{item.name}</span>
-                  <span className="block whitespace-normal text-xs font-normal text-muted">{item.description}</span>
-                </span>
-              </QuietButton>
+          {experiences
+            .filter(
+              item =>
+                item.id === 'gallery' ||
+                (item.id === 'flick' ? applications?.flickEnabled !== false : applications?.panelsEnabled !== false),
             )
-          })}
+            .map(item => {
+              const Icon = item.icon
+              return (
+                <QuietButton
+                  key={item.id}
+                  aria-label={item.name}
+                  aria-current={active === item.id ? 'page' : undefined}
+                  className={`w-full justify-start rounded-xl ${active === item.id ? 'bg-surface text-accent' : ''}`}
+                  onClick={() => {
+                    onSelect(item.id)
+                    setOpen(false)
+                  }}
+                >
+                  <Icon className="size-5" aria-hidden="true" />
+                  <span className="text-left">
+                    <span className="block">{item.name}</span>
+                    <span className="block whitespace-normal text-xs font-normal text-muted">{item.description}</span>
+                  </span>
+                </QuietButton>
+              )
+            })}
         </div>
       </Modal>
     </>

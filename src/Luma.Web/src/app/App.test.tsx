@@ -12,8 +12,8 @@ function resetStorage() {
   localStorage.clear()
   localStorage.setItem('luma-version-seen', packageJson.version)
 }
-function renderApp() {
-  window.history.replaceState(null, '', '/')
+function renderApp(url = '/') {
+  window.history.replaceState(null, '', url)
   resetStorage()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   return render(
@@ -1550,6 +1550,7 @@ it('keeps Panels queries and deep links separate from Gallery', async () => {
   emptyApi()
   renderApp()
   await switchApp('Panels')
+  await userEvent.click(await screen.findByRole('button', { name: 'Search comics' }))
   await userEvent.type(await screen.findByRole('textbox', { name: 'Search comics' }), 'moon')
   await waitFor(() => expect(window.location.pathname).toBe('/panels'))
   expect(new URLSearchParams(window.location.search).get('q')).toBe('moon')
@@ -1569,4 +1570,16 @@ it('keeps Panels queries and deep links separate from Gallery', async () => {
   expect(window.location.pathname).toBe('/panels')
   expect(new URLSearchParams(window.location.search).get('comic')).toBe('42')
   expect(new URLSearchParams(window.location.search).get('q')).toBe('direct')
+})
+
+it('returns to Flick and its query after opening its Settings section', async () => {
+  emptyApi()
+  renderApp('/flick?q=clips')
+  await userEvent.click((await screen.findAllByRole('button', { name: 'Settings' }))[0])
+  expect(await screen.findByRole('heading', { name: 'Flick', level: 2 })).toBeVisible()
+  expect(new URLSearchParams(location.search).get('from')).toBe('flick')
+  await userEvent.click(screen.getByRole('button', { name: 'Back to Flick' }))
+  expect(await screen.findByRole('button', { name: 'Switch application, Flick' })).toBeVisible()
+  expect(location.pathname).toBe('/flick')
+  expect(new URLSearchParams(location.search).get('q')).toBe('clips')
 })

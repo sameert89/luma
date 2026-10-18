@@ -8,12 +8,23 @@ beforeEach(() => {
   localStorage.removeItem('luma-panels-query')
   window.history.replaceState({}, '', '/panels')
 })
-function mount(nextCursor: number | null = null) {
+function mount(nextCursor: number | null = null, configured = true) {
   const fetch = vi.fn().mockImplementation((url: string) =>
     Promise.resolve(
-      new Response(JSON.stringify(url.includes('/statistics') ? {} : { items: [], nextCursor }), {
-        headers: { 'Content-Type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify(
+          url === '/api/libraries'
+            ? [{ id: 1, name: 'Comics', rootFolderId: 1 }]
+            : url.includes('/sources')
+              ? { configured, locations: configured ? [{ libraryId: 1, relativePath: '', imageFolders: false }] : [] }
+              : url.includes('/statistics')
+                ? {}
+                : { items: [], nextCursor },
+        ),
+        {
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
     ),
   )
   vi.stubGlobal('fetch', fetch)
@@ -30,6 +41,7 @@ it('honours a series-only deep link over a saved query', async () => {
   window.history.replaceState({}, '', '/panels?series=Moon')
   const fetch = mount()
   expect(screen.getByRole('textbox', { name: 'Series filter' })).toHaveValue('Moon')
+  await userEvent.click(screen.getByRole('button', { name: 'Search comics' }))
   expect(screen.getByRole('textbox', { name: 'Search comics' })).toHaveValue('')
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?series=Moon', expect.anything()))
 })
@@ -47,7 +59,25 @@ it('starts from the first page when the favourites filter changes', async () => 
   const fetch = mount(60)
   await userEvent.click(await screen.findByRole('button', { name: 'More comics' }))
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?cursor=60', expect.anything()))
+  await userEvent.click(screen.getByRole('button', { name: 'Comic filters' }))
   await userEvent.click(screen.getByRole('checkbox', { name: 'Favourites only' }))
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?favourite=true', expect.anything()))
   expect(screen.queryByRole('button', { name: 'Newest comics' })).not.toBeInTheDocument()
+})
+
+it('first visit saves recursive comic locations without file-management unlock', async () => {
+  const fetch = mount(null, false)
+  expect(await screen.findByRole('heading', { name: 'Choose where your comics live' })).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Add location' }))
+  await userEvent.type(screen.getByLabelText('Folder relative to library'), 'Manga')
+  await userEvent.click(screen.getByRole('button', { name: 'Save locations and scan' }))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/panels/sources',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ locations: [{ libraryId: 1, relativePath: 'Manga', imageFolders: false }] }),
+      }),
+    ),
+  )
 })

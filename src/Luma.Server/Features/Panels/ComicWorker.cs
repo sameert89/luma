@@ -7,7 +7,7 @@ using Luma.Server.MediaProcessing;
 namespace Luma.Server.Features.Panels;
 
 public sealed class ComicWorker(Database database, IndexingOptions options, ComicLibrary library, ComicPageContent pages,
-    ILogger<ComicWorker> logger) : BackgroundService
+    ILogger<ComicWorker> logger, Luma.Server.Features.Settings.UiConfiguration? settings = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -24,6 +24,7 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
         {
             try
             {
+                if (settings?.Applications.PanelsEnabled == false) { await Task.Delay(1000, stoppingToken); continue; }
                 await using var db = await database.OpenAsync(stoppingToken);
                 // Idle discovery is a read, not a recurring SQLite writer competing with likes/tags.
                 if (!await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM ComicJobs WHERE State='queued')", cancellationToken: stoppingToken)))
@@ -50,13 +51,18 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
         try
         {
             if (root is null) throw new IOException();
-            if (job.Source is not null)
+            if (job.Source is not null && !job.Recursive)
                 await IndexAsync(job, root, job.Source, ct);
             else
-                foreach (var entry in SourceTraversal.Enumerate(root.Path))
+            {
+                var discoveryRoot = SourcePaths.Resolve(root, job.Source ?? "");
+                if (job.ImageFolders && SourceTraversal.Enumerate(discoveryRoot, recursive: false).Any(x => x is FileInfo && ComicSources.IsImage(x.Name)))
+                    await IndexAsync(job, root, job.Source ?? "", ct);
+                foreach (var entry in SourceTraversal.Enumerate(discoveryRoot))
                 {
                     ct.ThrowIfCancellationRequested();
-                    if (entry is not FileInfo || !ComicSources.IsArchive(entry.Name)) continue;
+                    if (entry is FileInfo ? !ComicSources.IsArchive(entry.Name) : !job.ImageFolders) continue;
+                    if (entry is DirectoryInfo folder && !SourceTraversal.Enumerate(folder.FullName, recursive: false).Any(x => x is FileInfo && ComicSources.IsImage(x.Name))) continue;
                     await using (var stateDb = await database.OpenAsync(ct))
                         if (await stateDb.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM ComicJobs WHERE Id=@Id", job, cancellationToken: ct)) != "running") return;
                     try { await IndexAsync(job, root, Path.GetRelativePath(root.Path, entry.FullName).Replace(Path.DirectorySeparatorChar, '/'), ct); }
@@ -67,6 +73,7 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
                         await failedDb.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET Failed=Failed+1,FailureCode='comic_source_rejected' WHERE Id=@Id", job, cancellationToken: ct));
                     }
                 }
+            }
             await using var db = await database.OpenAsync(ct);
             await db.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET State='completed' WHERE Id=@Id AND State='running'", job, cancellationToken: ct));
         }

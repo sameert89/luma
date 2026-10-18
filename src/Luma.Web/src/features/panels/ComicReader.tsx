@@ -1,3 +1,4 @@
+import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minus, Plus } from 'lucide-react'
@@ -7,20 +8,21 @@ import type { Comic } from './api'
 
 function readerPreferences(settings: string) {
   try {
-    const value = JSON.parse(settings)
+    const value = JSON.parse(settings === '{}' ? (readSetting('luma-panels-reader-defaults') ?? settings) : settings)
     return {
+      direction: value.direction === 'rtl' ? 'rtl' : 'ltr',
       mode: value.mode === 'continuous' ? 'continuous' : 'single',
       fit: ['width', 'height', 'original'].includes(value.fit) ? value.fit : 'screen',
     }
   } catch {
-    return { mode: 'single', fit: 'screen' }
+    return { mode: 'single', fit: 'screen', direction: 'ltr' }
   }
 }
 
 export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => void }) {
   const [page, setPage] = useState(comic.pageIndex)
-  const [direction, setDirection] = useState(comic.direction)
   const [preferences] = useState(() => readerPreferences(comic.settings))
+  const [direction, setDirection] = useState(comic.settings === '{}' ? preferences.direction : comic.direction)
   const [mode, setMode] = useState(preferences.mode)
   const [fit, setFit] = useState(preferences.fit)
   const [zoom, setZoom] = useState(1)

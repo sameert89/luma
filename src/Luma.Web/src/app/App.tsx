@@ -1,3 +1,6 @@
+import type { components } from '../lib/api/generated'
+import { ApplicationSettings } from './ApplicationSettings'
+import { readSetting } from './uiDefaults'
 import { StorageWarning } from '../features/files/StorageWarning'
 import { useAppearance, AppearanceBackdrop, AppearanceSettings, AppIntroduction } from './appearance/Appearance'
 import { AppSwitcher, type Experience } from './navigation/AppSwitcher'
@@ -18,6 +21,7 @@ import {
   ListChecks,
   LoaderCircle,
   Search,
+  SlidersHorizontal,
   Settings,
   Tag,
   X,
@@ -25,7 +29,7 @@ import {
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
-import { IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
+import { Input, IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
 import { Modal } from '../components/ui/Modal'
 import { SearchHeader, type SearchSuggestion } from '../components/ui/SearchHeader'
 import { Toast, useToast } from '../components/ui/Toast'
@@ -73,13 +77,14 @@ const helpOrigins: HelpOrigin[] = ['library', 'reels', 'search', 'collections', 
 type HistorySnapshot = {
   filters?: Filters
   section?: Section
+  settingsOrigin?: Experience
   helpOrigin?: HelpOrigin
   scrollTop?: number
   mediaId?: number
   returnToViewer?: boolean
   lumaModal?: string
 }
-type PersistedView = Pick<HistorySnapshot, 'filters' | 'section' | 'helpOrigin' | 'mediaId'>
+type PersistedView = Pick<HistorySnapshot, 'filters' | 'section' | 'helpOrigin' | 'mediaId' | 'settingsOrigin'>
 const persistedViewKey = 'luma-last-view-v1'
 
 // Reels play everything that moves: videos and animated GIFs.
@@ -151,7 +156,7 @@ function readHelpOrigin(): HelpOrigin {
 function readPersistedView(): PersistedView | null {
   if (window.location.search || window.location.pathname !== '/') return null
   try {
-    const value = JSON.parse(localStorage.getItem(persistedViewKey) ?? 'null') as PersistedView | null
+    const value = JSON.parse(readSetting(persistedViewKey) ?? 'null') as PersistedView | null
     if (!value || !value.filters || !value.section || !sections.includes(value.section)) return null
     return value
   } catch {
@@ -170,8 +175,30 @@ export function App() {
     return (persistedView?.section ?? readSection()) === 'reels' ? { mediaType: reelsMediaType, ...value } : value
   })
   const [section, setSection] = useState<Section>(() => persistedView?.section ?? readSection())
+  const [settingsOrigin, setSettingsOrigin] = useState<Experience>(
+    () =>
+      persistedView?.settingsOrigin ??
+      (new URLSearchParams(location.search).get('from') === 'flick'
+        ? 'flick'
+        : new URLSearchParams(location.search).get('from') === 'panels'
+          ? 'panels'
+          : 'gallery'),
+  )
+  const [flickSearchOpen, setFlickSearchOpen] = useState(false)
+  const configuration = useQuery({
+    queryKey: ['ui-configuration'],
+    queryFn: ({ signal }) => request<components['schemas']['UiConfigurationResponse']>('/api/ui-configuration', signal),
+    staleTime: Infinity,
+  })
+  const applications = configuration.data?.applications
   const [experience, setExperience] = useState<Experience>(() =>
-    section === 'reels' ? 'flick' : section === 'panels' ? 'panels' : 'gallery',
+    section === 'reels'
+      ? 'flick'
+      : section === 'panels'
+        ? 'panels'
+        : section === 'settings'
+          ? settingsOrigin
+          : 'gallery',
   )
   useEffect(() => {
     if (section === 'reels') setExperience('flick')
@@ -199,10 +226,8 @@ export function App() {
   const [searchFocusRequested, setSearchFocusRequested] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   // Reels keeps its own filter-row visibility; Library, Search and Collections share one.
-  const [filtersVisible, setFiltersVisible] = useState(() => localStorage.getItem('luma-show-filters') !== '0')
-  const [reelsFiltersVisible, setReelsFiltersVisible] = useState(
-    () => localStorage.getItem('luma-reels-show-filters') !== '0',
-  )
+  const [filtersVisible, setFiltersVisible] = useState(() => readSetting('luma-show-filters') !== '0')
+  const [reelsFiltersVisible, setReelsFiltersVisible] = useState(() => readSetting('luma-reels-show-filters') !== '0')
   function toggleFilters() {
     setFiltersVisible(value => {
       localStorage.setItem('luma-show-filters', value ? '0' : '1')
@@ -259,7 +284,7 @@ export function App() {
   const [folderCursor, setFolderCursor] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const [theme, setTheme] = useState<Theme>(
-    () => themes.find(theme => theme.id === localStorage.getItem('luma-theme'))?.id ?? 'obsidian',
+    () => themes.find(theme => theme.id === readSetting('luma-theme'))?.id ?? 'obsidian',
   )
   const scroll = useRef<HTMLDivElement>(null)
   const scrollPositions = useRef(new Map<string, number>())
@@ -343,7 +368,10 @@ export function App() {
     if (section === 'reels') params.set('view', 'reels')
     if (section === 'search') params.set('view', 'search')
     if (section === 'collections') params.set('view', 'collections')
-    if (section === 'settings') params.set('view', 'settings')
+    if (section === 'settings') {
+      params.set('view', 'settings')
+      if (settingsOrigin !== 'gallery') params.set('from', settingsOrigin)
+    }
     if (section === 'help') {
       params.set('view', 'help')
       params.set('from', helpOrigin)
@@ -353,6 +381,7 @@ export function App() {
       ...current,
       filters,
       section,
+      settingsOrigin,
       ...(current?.helpOrigin ? { helpOrigin } : {}),
       ...(mediaId ? { mediaId } : {}),
     }
@@ -360,9 +389,9 @@ export function App() {
     window.history.replaceState(state, '', `${sectionPath(section)}${params.size ? `?${params}` : ''}`)
     localStorage.setItem(
       persistedViewKey,
-      JSON.stringify({ filters, section, helpOrigin, ...(mediaId ? { mediaId } : {}) }),
+      JSON.stringify({ filters, section, helpOrigin, settingsOrigin, ...(mediaId ? { mediaId } : {}) }),
     )
-  }, [filters, active?.id, section, restoreId, reelId, helpOrigin])
+  }, [filters, active?.id, section, restoreId, reelId, helpOrigin, settingsOrigin])
   useEffect(() => {
     if (!window.history.state)
       window.history.replaceState(
@@ -462,7 +491,21 @@ export function App() {
     else apply(gallerySnapshot.current.filters, gallerySnapshot.current.section as Section)
     setExperience(value)
   }
+  useEffect(() => {
+    if (section === 'settings')
+      requestAnimationFrame(() =>
+        document
+          .getElementById(`settings-${settingsOrigin === 'gallery' ? 'general' : settingsOrigin}`)
+          ?.scrollIntoView?.(),
+      )
+    if (
+      (section === 'reels' && applications?.flickEnabled === false) ||
+      (section === 'panels' && applications?.panelsEnabled === false)
+    )
+      apply(gallerySnapshot.current.filters, 'library')
+  }, [section, settingsOrigin, applications?.flickEnabled, applications?.panelsEnabled])
   function navigateSection(target: Section) {
+    if (target === 'settings' && section !== 'settings') setSettingsOrigin(experience)
     setSearchFocusRequested(target === 'search')
     if (target === 'search' && section !== 'search') searchOrigin.current = 'search'
     if (target === 'collections') apply({}, target)
@@ -796,7 +839,7 @@ export function App() {
       )}
       {section !== 'reels' && section !== 'panels' && (
         <SearchHeader
-          logo={<AppSwitcher active={experience} onSelect={switchExperience} />}
+          logo={<AppSwitcher active={experience} onSelect={switchExperience} applications={applications} />}
           value={search}
           onChange={setSearch}
           onHome={() => apply({})}
@@ -808,12 +851,39 @@ export function App() {
           scope={`${section}:${queryString(filters)}`}
         />
       )}
+      <Modal
+        open={flickSearchOpen}
+        onOpenChange={setFlickSearchOpen}
+        title="Search Flick"
+        description="Search video and animated media in Flick."
+        sheet
+      >
+        <form
+          className="space-y-3 p-5"
+          onSubmit={event => {
+            event.preventDefault()
+            setFlickSearchOpen(false)
+            apply({ ...filters, q: search.trim() || undefined }, 'reels')
+          }}
+        >
+          <Input
+            aria-label="Search Flick media"
+            placeholder="Names, folders and tags"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+          />
+          <QuietButton type="submit">Search</QuietButton>
+        </form>
+      </Modal>
       {section === 'reels' && (
         <header className="relative z-30 flex shrink-0 items-center gap-3 border-b border-line bg-canvas px-4 py-2">
-          <AppSwitcher active="flick" onSelect={switchExperience} />
+          <AppSwitcher active="flick" onSelect={switchExperience} applications={applications} />
           <div className="ml-auto flex gap-2">
-            <IconButton label="Flick search and filters" onClick={() => setFilterOpen(true)}>
+            <IconButton label="Search Flick" onClick={() => setFlickSearchOpen(true)}>
               <Search className="size-5" />
+            </IconButton>
+            <IconButton label="Flick filters" onClick={() => setFilterOpen(true)}>
+              <SlidersHorizontal className="size-5" />
             </IconButton>
             <IconButton label="Settings" onClick={() => navigateSection('settings')}>
               <Settings className="size-5" />
@@ -883,58 +953,98 @@ export function App() {
               }
             >
               <Panels
-                logo={<AppSwitcher active="panels" onSelect={switchExperience} />}
+                logo={<AppSwitcher active="panels" onSelect={switchExperience} applications={applications} />}
                 onSettings={() => navigateSection('settings')}
               />
             </Suspense>
           ) : section === 'settings' ? (
             <div className="overflow-auto scroll-py-2" data-scroll-restore>
-              <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
-              <ThemePicker value={theme} onChange={setTheme} />
-              <AppearanceSettings appearance={appearance} />
-              <AlbumCoverSettings />
-              <ReelsSortSettings />
-              <SettingsSection
-                title="Random media URL"
-                description="Generate a reusable random-media link using your current browsing filters."
+              <nav
+                aria-label="Settings sections"
+                className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-canvas p-3"
               >
-                <RandomUrls filters={filters} />
-              </SettingsSection>
-              <SettingsSection
-                title="Metadata exchange"
-                description="Download metadata and disliked paths from your library."
-              >
-                <MetadataExchange dislikes heading={false} />
-              </SettingsSection>
-              <LibrarySettings />
-              <FileAccess />
-              <HiddenFolders />
-              <SettingsSection title="Help" description="See what each button, gesture and keyboard shortcut does.">
-                <QuietLink
-                  data-help-entry
-                  href={`?${helpParams}`}
-                  className="w-fit"
-                  onClick={event => {
-                    event.preventDefault()
-                    openHelp()
-                  }}
-                >
-                  <CircleHelp className="size-4" aria-hidden="true" />
-                  Open the Help guide
-                </QuietLink>
-              </SettingsSection>
-              <SettingsSection title="About" description="Version and project information for this Luma installation.">
-                <div className="flex flex-col items-start gap-2 text-sm">
-                  <p>
-                    <span className="font-medium">Luma</span> <span className="text-muted">v{packageJson.version}</span>
-                  </p>
-                  <p className="text-muted">Created by Sameer Trivedi.</p>
-                  <QuietLink href="https://github.com/sameert89/luma" target="_blank" rel="noreferrer">
-                    <GitFork className="size-4" aria-hidden="true" />
-                    GitHub
+                <QuietButton onClick={() => switchExperience(settingsOrigin)}>
+                  Back to {settingsOrigin === 'flick' ? 'Flick' : settingsOrigin === 'panels' ? 'Panels' : 'Gallery'}
+                </QuietButton>
+                {['general', 'gallery', 'flick', 'panels'].map(group => (
+                  <QuietLink key={group} href={`#settings-${group}`}>
+                    {group[0].toUpperCase() + group.slice(1)}
                   </QuietLink>
-                </div>
-              </SettingsSection>
+                ))}
+              </nav>
+              <section id="settings-general" className="scroll-mt-20">
+                <h2 className="px-5 pt-5 text-xl font-semibold">General</h2>
+                <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
+                <ThemePicker value={theme} onChange={setTheme} />
+                <AppearanceSettings appearance={appearance} />
+                <LibrarySettings />
+                <FileAccess />
+                <ApplicationSettings />
+                <SettingsSection title="Help" description="See what each button, gesture and keyboard shortcut does.">
+                  <QuietLink
+                    data-help-entry
+                    href={`?${helpParams}`}
+                    className="w-fit"
+                    onClick={event => {
+                      event.preventDefault()
+                      openHelp()
+                    }}
+                  >
+                    <CircleHelp className="size-4" aria-hidden="true" />
+                    Open the Help guide
+                  </QuietLink>
+                </SettingsSection>
+                <SettingsSection
+                  title="About"
+                  description="Version and project information for this Luma installation."
+                >
+                  <div className="flex flex-col items-start gap-2 text-sm">
+                    <p>
+                      <span className="font-medium">Luma</span>{' '}
+                      <span className="text-muted">v{packageJson.version}</span>
+                    </p>
+                    <p className="text-muted">Created by Sameer Trivedi.</p>
+                    <QuietLink href="https://github.com/sameert89/luma" target="_blank" rel="noreferrer">
+                      <GitFork className="size-4" aria-hidden="true" />
+                      GitHub
+                    </QuietLink>
+                  </div>
+                </SettingsSection>
+              </section>
+              <section id="settings-gallery" className="scroll-mt-20">
+                <h2 className="px-5 pt-5 text-xl font-semibold">Gallery</h2>
+                <AlbumCoverSettings />
+                <SettingsSection
+                  title="Random media URL"
+                  description="Generate a reusable random-media link using your Gallery filters."
+                >
+                  <RandomUrls filters={gallerySnapshot.current.filters} />
+                </SettingsSection>
+                <SettingsSection
+                  title="Metadata exchange"
+                  description="Download metadata and disliked paths from your library."
+                >
+                  <MetadataExchange dislikes heading={false} />
+                </SettingsSection>
+                <HiddenFolders />
+              </section>
+              <section id="settings-flick" className="scroll-mt-20">
+                <h2 className="px-5 pt-5 text-xl font-semibold">Flick</h2>
+                <ReelsSortSettings />
+                <p className="px-5 pb-5 text-sm text-muted">
+                  Playback, mute and auto-scroll controls are in the Flick menu. Flick uses your theme canvas and keeps
+                  its own search and filters.
+                </p>
+              </section>
+              <section id="settings-panels" className="scroll-mt-20">
+                <h2 className="px-5 pt-5 text-xl font-semibold">Panels</h2>
+                <SettingsSection
+                  title="Comic locations and reader"
+                  description="Choose comic locations within your configured libraries. Saved reading mode and fit override deployment defaults."
+                >
+                  <QuietButton onClick={() => switchExperience('panels')}>Manage comic locations in Panels</QuietButton>
+                </SettingsSection>
+              </section>
             </div>
           ) : section === 'help' ? (
             <Help onBack={closeHelp} />

@@ -1,3 +1,4 @@
+import { readSetting } from '../../app/uiDefaults'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -42,7 +43,7 @@ const reelsStateKey = 'luma-reels-state'
 
 function savedReelsState(query: string) {
   try {
-    const saved = JSON.parse(localStorage.getItem(reelsStateKey) ?? '{}')
+    const saved = JSON.parse(readSetting(reelsStateKey) ?? '{}')
     return {
       muted: typeof saved?.muted === 'boolean' ? saved.muted : true,
       autoScroll: saved?.autoScroll === true,
@@ -229,7 +230,7 @@ export function Reels({
     return (
       <section
         aria-labelledby="reels-state-title"
-        className="flex min-h-0 flex-1 items-center justify-center bg-black px-6 text-center text-white"
+        className="flex min-h-0 flex-1 items-center justify-center bg-canvas px-6 text-center text-ink"
       >
         <div role={loading ? 'status' : undefined} className="flex max-w-sm flex-col items-center gap-4">
           {loading ? (
@@ -259,7 +260,7 @@ export function Reels({
   }
   const liked = item.preference === 'liked'
   return (
-    <section ref={root} aria-label="Flick" className="relative flex min-h-0 flex-1 flex-col bg-black">
+    <section ref={root} aria-label="Flick" className="relative flex min-h-0 flex-1 flex-col bg-canvas">
       {/* Reels loop until the person moves on; auto-scroll advances at the end instead. */}
       <div className="flex min-h-0 flex-1">
         <MediaStage

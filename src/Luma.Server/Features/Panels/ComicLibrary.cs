@@ -38,6 +38,8 @@ public sealed class ComicJob
 {
     public long Id { get; set; }
     public long LibraryId { get; set; }
+    public bool Recursive { get; set; }
+    public bool ImageFolders { get; set; }
     public string? Source { get; set; }
     public string State { get; set; } = "queued";
     public long Processed { get; set; }
@@ -52,6 +54,9 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
           COALESCE(p.ReadingSeconds,0) ReadingSeconds,COALESCE(p.Direction,'ltr') Direction,COALESCE(p.Settings,'{}') Settings,p.LastReadAt
         FROM Comics c JOIN Libraries l ON l.Id=c.LibraryId LEFT JOIN ReadingProgress p ON p.ComicId=c.Id
         WHERE c.Availability='present' AND l.Enabled=1
+          AND (NOT EXISTS(SELECT 1 FROM ApplicationState WHERE Key='panelSourcesConfigured')
+            OR EXISTS(SELECT 1 FROM PanelSources s WHERE s.LibraryId=c.LibraryId
+              AND (s.PathKey='' OR c.PathKey=s.PathKey OR (c.PathKey>=s.PathKey||'/' AND c.PathKey<s.PathKey||'0'))))
         """;
     public async Task<ComicList> ListAsync(string? q, string? state, string? series, bool? favourite, long? cursor, CancellationToken ct)
     {

@@ -35,6 +35,49 @@
         }
       }
     },
+    "/api/ui-configuration": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetUiConfiguration",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiConfigurationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/applications": {
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "UpdateApplications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationFlags"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/libraries/{id}/refresh-settings": {
       "get": {
         "tags": [
@@ -2593,6 +2636,47 @@
         }
       }
     },
+    "/api/panels/sources": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicSources",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelSourceConfiguration"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "UpdateComicSources",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PanelSourceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/panels/comics": {
       "get": {
         "tags": [
@@ -3474,6 +3558,19 @@
           },
           "traceId": {
             "type": "string"
+          }
+        }
+      },
+      "ApplicationFlags": {
+        "type": "object",
+        "properties": {
+          "flickEnabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "panelsEnabled": {
+            "type": "boolean",
+            "default": true
           }
         }
       },
@@ -4920,6 +5017,58 @@
           }
         }
       },
+      "PanelSourceConfiguration": {
+        "required": [
+          "configured",
+          "locations"
+        ],
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PanelSourceLocation"
+            }
+          }
+        }
+      },
+      "PanelSourceLocation": {
+        "required": [
+          "libraryId"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "relativePath": {
+            "type": "string",
+            "default": ""
+          },
+          "imageFolders": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "PanelSourceUpdate": {
+        "required": [
+          "locations"
+        ],
+        "type": "object",
+        "properties": {
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PanelSourceLocation"
+            }
+          }
+        }
+      },
       "PreferenceRequest": {
         "required": [
           "preference"
@@ -5215,6 +5364,24 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "UiConfigurationResponse": {
+        "required": [
+          "applications",
+          "defaults"
+        ],
+        "type": "object",
+        "properties": {
+          "applications": {
+            "$ref": "#/components/schemas/ApplicationFlags"
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },

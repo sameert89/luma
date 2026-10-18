@@ -9,6 +9,7 @@ public static class PanelEndpoints
 {
     public static void MapPanels(this IEndpointRouteBuilder app)
     {
+        app.MapGet("/api/panels/sources", async (PanelSources sources, CancellationToken ct) => TypedResults.Ok(await sources.GetAsync(ct))).WithName("GetComicSources");
         app.MapGet("/api/panels/comics", async (string? q, string? state, string? series, bool? favourite, long? cursor, ComicLibrary library, CancellationToken ct) =>
             TypedResults.Ok(await library.ListAsync(q, state, series, favourite, cursor, ct))).WithName("GetComicLibrary");
         app.MapGet("/api/panels/comics/{id:long}", async (long id, ComicLibrary library, CancellationToken ct) =>
@@ -21,7 +22,9 @@ public static class PanelEndpoints
         { await progress.UpdateAsync(id, update, ct); return TypedResults.NoContent(); }).WithName("UpdateReadingProgress");
         app.MapGet("/api/panels/statistics", async (ComicProgress progress, CancellationToken ct) =>
             TypedResults.Ok(await progress.StatisticsAsync(ct))).WithName("GetReadingStatistics");
+        app.MapPut("/api/panels/sources", async (PanelSourceUpdate update, HttpContext context, PanelSources sources, CancellationToken ct) => { MutationAccess.CheckOrigin(context.Request); await sources.SaveAsync(update.Locations, ct); return TypedResults.NoContent(); }).WithName("UpdateComicSources");
         var manage = app.MapGroup("/api/panels").AddEndpointFilter<MutationAccessFilter>();
+
         manage.MapPost("/discover", async (ComicRegistration registration, ComicLibrary library, CancellationToken ct) =>
             TypedResults.Accepted(uri: (string?)null, value: await library.QueueAsync(registration, ct))).WithName("DiscoverComics");
         manage.MapPut("/comics/{id:long}/metadata", async (long id, ComicMetadataUpdate update, Database database, ComicLibrary library, CancellationToken ct) =>

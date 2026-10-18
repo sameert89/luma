@@ -1,3 +1,4 @@
+import { readSetting } from '../../app/uiDefaults'
 import { useSyncExternalStore } from 'react'
 import type { Filters } from './api'
 import { shuffleSeed } from './shuffleSeed'
@@ -20,7 +21,7 @@ const listeners = new Set<() => void>()
 
 function read(): ReelsSort {
   try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) ?? 'null') as Partial<ReelsSort> | null
+    const stored = JSON.parse(readSetting(storageKey) ?? 'null') as Partial<ReelsSort> | null
     if (!stored || !choices.includes(stored.sort as ReelsSortChoice)) return fallback
     return { sort: stored.sort as ReelsSortChoice, order: stored.order === 'asc' ? 'asc' : 'desc' }
   } catch {

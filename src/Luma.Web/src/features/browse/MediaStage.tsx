@@ -1,3 +1,4 @@
+import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
   ChevronsLeft,
@@ -126,7 +127,7 @@ export function MediaStage({
   const [rotation, setRotation] = useState(0)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [fill, setFill] = useState(() => {
-    const stored = localStorage.getItem(reels ? fillKeys.reels : fillKeys.viewer)
+    const stored = readSetting(reels ? fillKeys.reels : fillKeys.viewer)
     return stored === null ? reels : stored === '1'
   })
   const [originalId, setOriginalId] = useState<number | null>(null)
