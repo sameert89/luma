@@ -113,6 +113,83 @@ always go to the server. Video keeps playing with the screen off or in another a
 the platform allows it, and exposes lock-screen/headset controls through Media Session;
 picture-in-picture is offered where the browser supports it.
 
+## Optional file management and uploads
+
+The default media mount remains read-only. File management requires both an
+administrator token and an explicitly writable library backed by a writable mount.
+To opt in for library 1, generate a token with `openssl rand -hex 32` and store it
+as `LUMA_FILE_ACCESS_TOKEN` in the deployment's private `.env` file. Do not commit
+that file. The token must contain at least 32 UTF-8 bytes.
+
+Create `compose.files.yaml` alongside `docker-compose.yaml`:
+
+```yaml
+services:
+  luma:
+    environment:
+      Luma__Files__AccessToken: "${LUMA_FILE_ACCESS_TOKEN:?Set a private administrator token}"
+      Luma__Indexing__Libraries__0__Writable: "true"
+      Luma__Uploads__Concurrency: "2"
+      Luma__Uploads__MaxFileBytes: "107374182400"
+      Luma__Uploads__StagingQuotaBytes: "214748364800"
+    volumes:
+      - "${LUMA_MEDIA_PATH:?Set LUMA_MEDIA_PATH}:/media:rw"
+```
+
+Check and start with the same file pair on every invocation:
+
+```sh
+docker compose -f docker-compose.yaml -f compose.files.yaml config
+docker compose -f docker-compose.yaml -f compose.files.yaml up -d
+```
+
+The example limits each file to 100 GiB and active upload reservations to 200 GiB.
+The defaults are 1 TiB for each; configure these for available media-volume space.
+There are at most 128 active upload sessions and 1–4 concurrent chunk transfers.
+Reservation accounting does not reserve physical disk space. Recycled content and
+other writes consume the same volume, so monitor actual free space too.
+
+Open Settings → File management and unlock this tab with the token. Refreshing
+requires unlocking again; the browser does not persist the token. Use trusted
+HTTPS for remote access. The token grants file management across the configured
+writable libraries and protected comic administration; it is not a general login
+system for read-only browsing or all existing APIs. Keep the service on trusted
+networks or behind an appropriate access gateway.
+
+For a reverse proxy, preserve the browser-facing `Host` and scheme; mutation
+requests reject a mismatching `Origin` or cross-site fetch. Forward `Authorization`
+and allow `PATCH` plus request bodies of at least 8 MiB for upload chunks (for
+nginx, `client_max_body_size 9m;` permits the maximum chunk). Set an upload timeout
+suited to slow clients, and avoid automatic retries of write requests. The upload
+protocol uses `/api/files/uploads`, not tus: clients query the committed offset
+after an interrupted response before retrying. The browser asks for file
+reselection after a refresh and resumes only a matching file. Folder picking
+preserves relative paths. Finalization publishes through the file journal, then
+queues indexing; uploaded content may take time to appear.
+
+Gallery's Manage files and Recycle bin controls expose same-library moves,
+directory creation, recycling, explicit permanent deletion, restore and purge.
+Destinations are never overwritten. Cross-library moves are not supported.
+Recycle retention and automatic cleanup are not implemented yet: use explicit
+purge and monitor space. A recycle bin is not a backup.
+
+### Interrupted file operations and backup consistency
+
+Background jobs shows unresolved file operations as needing attention. Open their
+recovery dialog to review source, staging and destination evidence before choosing
+a supported action. Retries continue from durable checkpoints; alternate restore
+destinations must be unused. A missing mount, changed source or collision can keep
+the library reserved. Restore the original mount or inspect the files before
+retrying. Do not remove journal rows or internal directories to clear a reservation.
+
+The media volume contains `.luma-trash`, `.luma-operations` and `.luma-uploads`.
+They hold recoverable content, operation staging and upload bytes, respectively;
+they are not generated cache. Back them up along with originals and SQLite from
+the same stopped-service checkpoint. Pause uploads and let operations finish when
+possible, then stop Luma before copying either volume. Restoring SQLite without
+matching media-volume state can leave operations needing explicit recovery.
+Never restore just a pre-deletion database over media that has since been purged.
+
 ## Upgrade and consistent cold backup
 
 Make a backup before upgrading. Stop Luma before copying SQLite; a live copy of
@@ -202,7 +279,8 @@ Metadata exports use a separate 1 GiB quota and expire after 24 hours. Failed qu
 jobs are visible; download needed exports before expiry, then retry after retention
 cleanup frees space. Imports merge application tags and never write originals.
 XMP archives include external merge instructions; disliked-path exports include
-missing records and are for user review. Luma does not delete media.
+missing records and are for user review. Metadata imports and exports do not
+delete originals; explicitly enabled file management can recycle or delete them.
 
 Target acceptance must exercise restart, an upgrade from the previous schema,
 backup/restore, cache loss and unavailable sources on the Pi with the real mounts.
