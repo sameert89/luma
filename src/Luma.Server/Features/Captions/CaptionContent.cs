@@ -214,7 +214,9 @@ public sealed class CaptionContent(Database database, IndexingOptions options)
     }
     private static string Demuxer(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {
-        ".mkv" or ".webm" => "matroska", ".mp4" or ".mov" or ".m4v" => "mov", ".avi" => "avi",
+        ".mkv" or ".webm" => "matroska",
+        ".mp4" or ".mov" or ".m4v" => "mov",
+        ".avi" => "avi",
         _ => throw new NotSupportedException("Unsupported caption container.")
     };
     private sealed record SourceRow(long Id, long LibraryId, string RelativePath, long SourceRevision);
