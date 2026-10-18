@@ -129,3 +129,5 @@ A 100,000-row baseline SQL smoke fixture ran, but the executor disconnected befo
 ### Browser regression follow-up
 
 CI for `50e3a1b` passed backend formatting/build/tests on Linux and Windows, generated-contract checks, and frontend formatting/lint/build/all 166 unit tests on both platforms. Windows finished successfully. Linux reached the browser suite: 6 passed, 2 skipped and 62 failed, with many failures blocked by the first-visit release-notes dialog. Ordinary browser scenarios now start with only the current release marked seen; a separate fresh-storage scenario checks first-visit dismissal and reload. CI retains browser failure traces for seven days. Local frontend build and all 166 unit tests pass; full browser execution remains pending.
+
+Panels now exposes the existing indexed favourites filter. Series-only and favourites-only deep links take precedence over a previous saved query, and changing filters resets cursor pagination. Three frontend regression tests cover URL precedence, persistence and pagination reset. Frontend build and all 169 unit tests pass locally.

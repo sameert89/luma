@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import { BookOpen, Settings } from 'lucide-react'
-import { Input, Select, Field, IconButton, QuietButton } from '../../components/ui/Controls'
+import { Checkbox, Input, Select, Field, IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { errorMessage, request, type Library } from '../browse/api'
 import type { Comic, ComicList, ReadingStatistics } from './api'
@@ -9,7 +9,7 @@ import { ComicReader } from './ComicReader'
 
 function initialParams() {
   const current = new URLSearchParams(window.location.search)
-  if (current.has('comic') || current.has('state') || current.has('q')) return current
+  if (['comic', 'state', 'q', 'series', 'favourite'].some(key => current.has(key))) return current
   try {
     return new URLSearchParams(localStorage.getItem('luma-panels-query') ?? '')
   } catch {
@@ -17,16 +17,17 @@ function initialParams() {
   }
 }
 export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () => void }) {
+  const favouritesId = useId()
   const [params, setParams] = useState(initialParams)
   const [cursor, setCursor] = useState<number>()
   const [manage, setManage] = useState(false)
   const client = useQueryClient()
   const comicId = Number(params.get('comic'))
   const library = useQuery({
-    queryKey: ['comics', params.get('q'), params.get('state'), params.get('series'), cursor],
+    queryKey: ['comics', params.get('q'), params.get('state'), params.get('series'), params.get('favourite'), cursor],
     queryFn: ({ signal }) =>
       request<ComicList>(
-        `/api/panels/comics?${new URLSearchParams({ ...(params.get('q') ? { q: params.get('q')! } : {}), ...(params.get('state') ? { state: params.get('state')! } : {}), ...(params.get('series') ? { series: params.get('series')! } : {}), ...(cursor ? { cursor: String(cursor) } : {}) })}`,
+        `/api/panels/comics?${new URLSearchParams({ ...(params.get('q') ? { q: params.get('q')! } : {}), ...(params.get('state') ? { state: params.get('state')! } : {}), ...(params.get('series') ? { series: params.get('series')! } : {}), ...(params.get('favourite') === 'true' ? { favourite: 'true' } : {}), ...(cursor ? { cursor: String(cursor) } : {}) })}`,
         signal,
       ),
     enabled: !comicId,
@@ -119,6 +120,14 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
           value={params.get('series') ?? ''}
           onChange={event => change('series', event.target.value)}
         />
+        <label htmlFor={favouritesId} className="flex items-center gap-2 text-sm">
+          <Checkbox
+            id={favouritesId}
+            checked={params.get('favourite') === 'true'}
+            onChange={event => change('favourite', event.target.checked ? 'true' : '')}
+          />
+          Favourites only
+        </label>
       </div>
       {stats.data && (
         <p className="px-4 pb-3 text-sm text-muted">
