@@ -38,7 +38,7 @@ public static class FileStorageCheck
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or ApiRequestException)
             {
-                warning = "Luma cannot write to this library. Check that the Docker media mount was changed from :ro to :rw, filesystem permissions and free space. Uploads, moves and deletion will not work here; browsing and playback remain available.";
+                warning = "Luma cannot write to this library. Check that the Docker media mount was changed from :ro to :rw, filesystem permissions and free space. Uploads, folder creation, moves, recycling, restore and deletion are disabled here; browsing and playback remain available.";
             }
             finally
             {

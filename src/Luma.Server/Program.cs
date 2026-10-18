@@ -31,6 +31,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<MutationAccess>();
+builder.Services.AddSingleton<FileWriteAvailability>();
 builder.Services.AddSingleton<FileOperations>();
 builder.Services.AddSingleton<FileRecovery>();
 builder.Services.AddSingleton<Luma.Server.Features.Uploads.UploadSessions>();

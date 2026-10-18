@@ -8,12 +8,16 @@ public static class FileEndpoints
 {
     public static void MapFileOperations(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/files/capabilities", (IndexingOptions options, MutationAccess access) =>
-            TypedResults.Ok(new FileCapabilities(access.Enabled, options.Libraries.Select(x => new FileCapability(x.Id, x.Writable)).ToArray())))
+        app.MapGet("/api/files/capabilities", (IndexingOptions options, MutationAccess access, FileWriteAvailability availability) =>
+            TypedResults.Ok(new FileCapabilities(access.Enabled, options.Libraries.Select(x => new FileCapability(x.Id, x.Writable && availability.CanWrite(x.Id))).ToArray())))
             .WithName("GetFileCapabilities");
         var files = app.MapGroup("/api/files").AddEndpointFilter<MutationAccessFilter>();
-        files.MapPost("/storage-check", async (IndexingOptions options, CancellationToken ct) =>
-            TypedResults.Ok(await FileStorageCheck.CheckAsync(options, ct))).WithName("CheckFileStorage");
+        files.MapPost("/storage-check", async (IndexingOptions options, FileWriteAvailability availability, CancellationToken ct) =>
+        {
+            var statuses = await FileStorageCheck.CheckAsync(options, ct);
+            availability.Update(statuses);
+            return TypedResults.Ok(statuses);
+        }).WithName("CheckFileStorage");
         files.MapGet("/access", () => TypedResults.NoContent()).WithName("CheckMutationAccess");
         files.MapGet("/location", async (long? folderId, long? mediaId, Database database, CancellationToken ct) =>
         {

@@ -68,7 +68,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 recovering = true;
                 await StateAsync(row, row.State, ct);
             }
-            var root = operations.WritableRoot(row.LibraryId);
+            var root = operations.WritableRoot(row.LibraryId, requireAvailable: false);
             // Losing access is not deletion, and cannot trigger cleanup.
             _ = MutationPaths.Resolve(root, "", allowRoot: true);
             var category = row.Kind == "upload" ? MutationPaths.UploadDirectory : row.Kind is "recycle" or "restore" or "purge" ? MutationPaths.TrashDirectory : MutationPaths.OperationsDirectory;

@@ -8,14 +8,15 @@ namespace Luma.Server.Features.Files;
 
 // Intent and outcome share SQLite with the existing task projection. Only one worker changes
 // originals; the source is reserved in an operation-owned path before publication or deletion.
-public sealed class FileOperations(Database database, IndexingOptions options)
+public sealed class FileOperations(Database database, IndexingOptions options, FileWriteAvailability? availability = null)
 {
     internal bool HasWritableLibraries => options.Libraries.Any(root => root.Writable);
     internal const string ActiveStates = "'queued','running','reserved','deleting','published','finalizing','needsAttention'";
-    public LibraryOptions WritableRoot(long id)
+    public LibraryOptions WritableRoot(long id, bool requireAvailable = true)
     {
         var root = options.Libraries.Find(x => x.Id == id) ?? throw ApiRequestException.Missing();
         if (!root.Writable) throw new ApiRequestException(403, "read_only_library", "This library is read-only.");
+        if (requireAvailable) availability?.RequireWritable(id);
         return root;
     }
 
@@ -132,7 +133,7 @@ public sealed class FileOperations(Database database, IndexingOptions options)
 
     public async Task<IReadOnlyList<FileOperation>> TrashAsync(long libraryId, string? before, CancellationToken ct)
     {
-        WritableRoot(libraryId);
+        WritableRoot(libraryId, requireAvailable: false);
         await using var db = await database.OpenAsync(ct);
         return (await db.QueryAsync<FileOperation>(new CommandDefinition("""
             SELECT * FROM FileOperations WHERE LibraryId=@libraryId AND Kind='recycle' AND Restored=0 AND State='completed'

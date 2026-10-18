@@ -13,7 +13,7 @@ public sealed class FileRecovery(FileOperations operations)
     public async Task<FileRecoveryEvidence> InspectAsync(string id, CancellationToken ct)
     {
         var row = await operations.GetAsync(id, ct);
-        return Inspect(row, operations.WritableRoot(row.LibraryId));
+        return Inspect(row, operations.WritableRoot(row.LibraryId, requireAvailable: false));
     }
 
     private static FileRecoveryEvidence Inspect(FileOperation row, LibraryOptions root)
