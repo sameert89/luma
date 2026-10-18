@@ -1,11 +1,14 @@
 # Luma
 
-Luma is a lightweight, self-hosted photo and video browser built for large media libraries and modest hardware. It keeps originals read-only, stores its index and tags in SQLite, and serves generated thumbnails and previews from a disposable cache.
+Luma is a lightweight, self-hosted photo and video browser built for large media libraries and modest hardware. It keeps originals read-only by default, supports explicitly enabled file management, stores its index and tags in SQLite, and serves generated thumbnails and previews from a disposable cache.
 
 ## Features
 
 - Fast folder and gallery browsing backed by SQLite and generated cache files
-- Photo and video viewing, slideshows, and a vertical Reels mode
+- Photo and video viewing, slideshows, and the vertical Flick feed
+- Panels comic bookshelves with saved recursive sources and reading progress
+- Opt-in plain SRT captions from matching sidecars or embedded SubRip tracks
+- Optional uploads, folders, same-library moves and recycling after administrator unlock
 - Keyword, path, date, media-type, size, orientation, preference, and tag filters
 - Cursor-paginated results, virtualized galleries, stable sorting, grouping, and shuffle
 - Tags, favourites, dislikes, custom album covers, hidden folders, and bulk editing

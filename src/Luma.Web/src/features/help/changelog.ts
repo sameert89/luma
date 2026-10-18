@@ -7,14 +7,16 @@ export type Release = { version: string; date: string; headline: string; changes
 export const releases: Release[] = [
   {
     version: '2.0.0-beta.1',
-    date: '2026-10-19',
+    date: '2026-10-18',
     headline: 'Luma 2.0 preview: Gallery, Flick and Panels',
     changes: [
       'Click the Luma logo to switch between Gallery, Flick and Panels. Each application keeps its own search and filters.',
-      'Manage writable libraries with uploads, folders, moves and a recycle bin. Configure an administrator access token, then enter it in Settings → File management to unlock this tab. Read-only media keeps browsing, playback, captions and tagging available.',
+      'Manage writable libraries with uploads, folders, moves and a recycle bin. Configure an administrator access token, then enter it in Settings → General → File management to unlock this tab. Read-only media keeps browsing, playback, captions and tagging available.',
       'Startup checks warn when a writable library still has a read-only mount. Correct the :rw mount and permissions, then recheck it in Settings.',
       'Captions are opt-in: turn on CC for matching same-folder SRT or embedded SubRip. Styled subtitles are unsupported; extraction and conversion files stay in the Luma cache.',
-      'Panels provides a comic bookshelf and reader. This is a beta: back up SQLite and original/staging media before upgrading; rollback requires the matching pre-upgrade backup.',
+      'Panels saves your selected comic folders, scans them recursively and opens your bookshelf on later visits. Search by title or author and resume reading where you left off.',
+      'Settings is grouped by app and returns to the app you came from. Administrators can disable Flick or Panels globally; environment defaults reproduce preferences while in-app choices take priority.',
+      'The updated help guide includes setup examples and can be deployed independently to GitHub Pages. This is a beta: back up SQLite and original/staging media before upgrading; rollback requires the matching pre-upgrade backup.',
     ],
   },
   {
