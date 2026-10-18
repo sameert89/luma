@@ -113,7 +113,7 @@ it('closes an expanded phone search field when nothing was searched and the view
   rerender(shell('library:folderId=2'))
   expect(field).toHaveAttribute('data-open', 'true')
 
-  await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+  screen.getByRole('button', { name: 'Close search' }).focus()
   rerender(shell('search:q=beach'))
   expect(screen.getByRole('search')).toHaveAttribute('data-open', 'false')
 })
@@ -179,4 +179,32 @@ it('keeps phone search open when its navigation request also changes scope', () 
   rerender(shell(true))
   expect(screen.getByRole('search')).toHaveAttribute('data-open', 'true')
   expect(screen.getByRole('textbox', { name: 'Search media' })).toBeInTheDocument()
+})
+
+it('lets a phone search close without clearing its query so the application logo remains reachable', async () => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+  )
+  const onClear = vi.fn()
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SearchHeader
+        value="photos"
+        onChange={vi.fn()}
+        onSearch={vi.fn()}
+        onClear={onClear}
+        onHome={vi.fn()}
+        onFilters={vi.fn()}
+        searchRequested={false}
+        logo={<button>Switch application</button>}
+      />
+    </QueryClientProvider>,
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Open search' }))
+  expect(screen.getByRole('button', { name: 'Switch application' }).parentElement).toHaveClass('hidden')
+  expect(screen.queryByRole('button', { name: 'Filters' })).toBeNull()
+  await userEvent.click(screen.getByRole('button', { name: 'Close search' }))
+  expect(screen.getByRole('button', { name: 'Switch application' }).parentElement).not.toHaveClass('hidden')
+  expect(onClear).not.toHaveBeenCalled()
 })

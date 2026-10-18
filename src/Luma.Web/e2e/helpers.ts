@@ -48,6 +48,11 @@ export async function galleryAction(page: Page, name: string) {
 }
 
 export async function switchExperience(page: Page, name: 'Gallery' | 'Flick' | 'Panels') {
-  await page.getByRole('button', { name: /^Switch application,/ }).click()
+  const logo = page.getByRole('button', { name: /^Switch application,/ })
+  if (!(await logo.isVisible())) {
+    const closeSearch = page.getByRole('button', { name: 'Close search', exact: true })
+    if (await closeSearch.isVisible()) await closeSearch.click()
+  }
+  await logo.click()
   await page.getByRole('dialog', { name: 'Luma applications' }).getByRole('button', { name, exact: true }).click()
 }

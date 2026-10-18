@@ -1,4 +1,4 @@
-import { FileImage, FolderOpen, Search, SlidersHorizontal, Tag, X } from 'lucide-react'
+import { ArrowLeft, FileImage, FolderOpen, Search, SlidersHorizontal, Tag, X } from 'lucide-react'
 import { useDeferredValue, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { IconButton, Input } from './Controls'
@@ -106,6 +106,11 @@ export function SearchHeader({
         >
           luma<span className="text-accent">.</span>
         </a>
+      )}
+      {mobile && open && (
+        <IconButton label="Close search" onClick={toggle}>
+          <ArrowLeft className="size-5" />
+        </IconButton>
       )}
       <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
         <form
@@ -239,7 +244,7 @@ export function SearchHeader({
             <X className="size-5" />
           </IconButton>
         )}
-        {!(mobile && open && value) && (
+        {(!mobile || !open) && (
           <IconButton
             label={mobile ? (open ? 'Close search' : 'Open search') : 'Search'}
             aria-expanded={mobile ? open : undefined}
@@ -248,9 +253,11 @@ export function SearchHeader({
             {mobile && open ? <X className="size-5" /> : <Search className="size-5" />}
           </IconButton>
         )}
-        <IconButton label="Filters" onClick={onFilters}>
-          <SlidersHorizontal className="size-5" />
-        </IconButton>
+        {!(mobile && open) && (
+          <IconButton label="Filters" onClick={onFilters}>
+            <SlidersHorizontal className="size-5" />
+          </IconButton>
+        )}
       </div>
     </header>
   )
