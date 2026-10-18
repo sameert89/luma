@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { BookOpen, Settings } from 'lucide-react'
+import { BookOpen, Settings, Star } from 'lucide-react'
 import { Checkbox, Input, Select, Field, IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { errorMessage, request, type Library } from '../browse/api'
 import type { Comic, ComicList, ReadingStatistics } from './api'
 import { ComicReader } from './ComicReader'
+import { ComicDetails } from './ComicDetails'
 
 function initialParams() {
   const current = new URLSearchParams(window.location.search)
@@ -21,6 +22,7 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
   const [params, setParams] = useState(initialParams)
   const [cursor, setCursor] = useState<number>()
   const [manage, setManage] = useState(false)
+  const [details, setDetails] = useState<number | null>(null)
   const client = useQueryClient()
   const comicId = Number(params.get('comic'))
   const library = useQuery({
@@ -143,27 +145,37 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {library.data?.items.map(comic => (
-            <button
-              key={comic.id}
-              type="button"
-              className="rounded-xl border border-line bg-surface p-3 text-left"
-              onClick={() => change('comic', String(comic.id))}
-            >
-              <div className="aspect-book overflow-hidden rounded-lg bg-canvas">
-                {comic.coverUrl ? (
-                  <img src={comic.coverUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                ) : (
-                  <BookOpen className="mx-auto my-8 size-12 text-muted" aria-hidden="true" />
-                )}
-              </div>
-              <h2 className="mt-2 truncate font-semibold">{comic.title}</h2>
-              <p className="text-sm text-muted">
-                {comic.series || comic.format.toUpperCase()} · {comic.pageCount} pages
-              </p>
-              <p className="text-xs text-muted">
-                {comic.state} · page {comic.pageIndex + 1}
-              </p>
-            </button>
+            <article key={comic.id} className="rounded-xl border border-line bg-surface p-3 text-left">
+              <button
+                type="button"
+                className="w-full text-left"
+                aria-label={`Read ${comic.title}`}
+                onClick={() => change('comic', String(comic.id))}
+              >
+                <div className="aspect-book overflow-hidden rounded-lg bg-canvas">
+                  {comic.coverUrl ? (
+                    <img src={comic.coverUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  ) : (
+                    <BookOpen className="mx-auto my-8 size-12 text-muted" aria-hidden="true" />
+                  )}
+                </div>
+                <h2 className="mt-2 truncate font-semibold">{comic.title}</h2>
+                {comic.favourite && <Star className="size-4 text-accent" aria-label="Favourite" />}
+                <p className="text-sm text-muted">
+                  {comic.series || comic.format.toUpperCase()} · {comic.pageCount} pages
+                </p>
+                <p className="text-xs text-muted">
+                  {comic.state} · page {comic.pageIndex + 1}
+                </p>
+              </button>
+              <QuietButton
+                className="mt-2"
+                onClick={() => setDetails(comic.id)}
+                aria-label={`Edit details for ${comic.title}`}
+              >
+                Details
+              </QuietButton>
+            </article>
           ))}
         </div>
         {library.data?.items.length === 0 && (
@@ -176,6 +188,17 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
           )}
         </div>
       </div>
+      <Modal
+        open={details !== null}
+        onOpenChange={open => {
+          if (!open) setDetails(null)
+        }}
+        title="Comic details"
+        description="Edit library metadata, favourite status and cover selection."
+        sheet
+      >
+        {details !== null && <ComicDetails id={details} onSaved={() => setDetails(null)} />}
+      </Modal>
       <Modal
         open={manage}
         onOpenChange={setManage}

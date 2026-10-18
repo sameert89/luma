@@ -1089,6 +1089,8 @@ export interface components {
             lastReadAt: string | null;
             favourite: boolean;
             coverUrl: string | null;
+            /** Format: int32 */
+            coverPage: number;
         };
         CoverImage: {
             url: string;

@@ -30,7 +30,7 @@ public sealed class ComicRow
     public string? LastReadAt { get; set; }
 }
 public sealed record ComicSummary(long Id, long LibraryId, string Title, string Series, string Author, string Description,
-    string Format, int PageCount, int PageIndex, string State, double ReadingSeconds, string Direction, string Settings, string? LastReadAt, bool Favourite, string? CoverUrl);
+    string Format, int PageCount, int PageIndex, string State, double ReadingSeconds, string Direction, string Settings, string? LastReadAt, bool Favourite, string? CoverUrl, int CoverPage);
 public sealed record ComicList(IReadOnlyList<ComicSummary> Items, long? NextCursor);
 public sealed record ComicJobAccepted(long Id);
 public sealed record ComicRegistration(long LibraryId, string? RelativePath = null);
@@ -74,7 +74,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         await using var db = await database.OpenAsync(ct);
         return await db.QuerySingleOrDefaultAsync<ComicRow>(new CommandDefinition(ReadSql + " AND c.Id=@id", new { id }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
     }
-    internal static ComicSummary Summary(ComicRow row, bool cover = true) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, cover ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null);
+    internal static ComicSummary Summary(ComicRow row, bool cover = true) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, cover ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null, row.CoverPage);
     public async Task<ComicJobAccepted> QueueAsync(ComicRegistration request, CancellationToken ct)
     {
         var root = options.Libraries.Find(x => x.Id == request.LibraryId) ?? throw ApiRequestException.Missing();

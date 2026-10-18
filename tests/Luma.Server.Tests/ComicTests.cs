@@ -119,6 +119,7 @@ public sealed class ComicTests
         await using var f = await PipelineFixture.CreateAsync();
         var id = await SeedAsync(f);
         await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Comics SET CoverPage=2 WHERE Id=@id", new { id });
         await db.ExecuteAsync("INSERT INTO ComicCache VALUES(@id,1,'cover','comic-cover.webp',10,'now')", new { id });
         var moved = f.Root.Path + "-unavailable";
         Directory.Move(f.Root.Path, moved);
@@ -127,6 +128,7 @@ public sealed class ComicTests
             var result = await new ComicLibrary(f.Database, f.Options).ListAsync("Book", "unread", null, null, null, default);
             Assert.Equal(id, Assert.Single(result.Items).Id);
             Assert.NotNull(result.Items[0].CoverUrl);
+            Assert.Equal(2, result.Items[0].CoverPage);
         }
         finally { Directory.Move(moved, f.Root.Path); }
     }

@@ -3584,7 +3584,8 @@
           "settings",
           "lastReadAt",
           "favourite",
-          "coverUrl"
+          "coverUrl",
+          "coverPage"
         ],
         "type": "object",
         "properties": {
@@ -3642,6 +3643,10 @@
           "coverUrl": {
             "type": "string",
             "nullable": true
+          },
+          "coverPage": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

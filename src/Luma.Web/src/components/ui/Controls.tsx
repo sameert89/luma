@@ -59,6 +59,14 @@ export function Input({
     />
   )
 }
+export function Textarea({ className = '', ...props }: ComponentProps<'textarea'>) {
+  return (
+    <textarea
+      className={`min-h-24 w-full rounded-xl border border-line bg-canvas p-3 text-sm text-ink placeholder:text-muted focus-visible:border-accent ${className}`}
+      {...props}
+    />
+  )
+}
 export function Select({
   className = '',
   shape = 'field',

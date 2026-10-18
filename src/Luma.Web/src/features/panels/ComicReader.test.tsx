@@ -21,6 +21,7 @@ const comic: Comic = {
   lastReadAt: null,
   favourite: false,
   coverUrl: null,
+  coverPage: 0,
 }
 describe('comic reader', () => {
   it('resumes saved preferences, keeps page rendering bounded and uses RTL keyboard navigation', () => {
