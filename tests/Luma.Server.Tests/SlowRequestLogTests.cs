@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
 using Luma.Server.Http;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -13,34 +11,33 @@ namespace Luma.Server.Tests;
 public sealed class SlowRequestLogTests
 {
     [Theory]
-    // A threshold nothing can beat reports the request; the default leaves /api/status alone.
-    [InlineData("1", true)]
-    [InlineData(null, false)]
-    // Zero switches it off, so even a request over the threshold says nothing.
-    [InlineData("0", false)]
-    public async Task Only_requests_over_the_threshold_are_reported(string? threshold, bool expected)
+    [InlineData(1, 1, true)]
+    [InlineData(null, 499, false)]
+    [InlineData(null, 500, true)]
+    [InlineData(null, 501, true)]
+    [InlineData(0, 2000, false)]
+    [InlineData(-1, 2000, false)]
+    public async Task Only_requests_over_the_threshold_are_reported(int? threshold, int elapsedMs, bool expected)
     {
-        await using var f = await PipelineFixture.CreateAsync();
         var messages = new ConcurrentQueue<string>();
-        await using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment("Testing")
-                .UseSetting("Luma:DatabasePath", f.Database.Path).UseSetting("Luma:Indexing:CachePath", f.Options.CachePath)
-                .UseSetting("Luma:Indexing:Libraries:0:Id", "1").UseSetting("Luma:Indexing:Libraries:0:Name", "Test")
-                .UseSetting("Luma:Indexing:Libraries:0:Path", f.Root.Path);
-            if (threshold is not null) builder.UseSetting("Luma:SlowRequestMs", threshold);
-            builder.ConfigureServices(services => services.AddSingleton<ILoggerProvider>(new CaptureProvider(messages)));
-        });
-
-        Assert.True((await host.CreateClient().GetAsync("/api/status")).IsSuccessStatusCode);
+        using var services = new ServiceCollection().AddLogging(logging => logging.AddProvider(new CaptureProvider(messages))).BuildServiceProvider();
+        var pipeline = new ApplicationBuilder(services);
+        var clock = new ManualClock();
+        pipeline.UseSlowRequestLog(threshold ?? SlowRequestLog.DefaultThresholdMs, clock);
+        pipeline.Run(_ => { clock.Advance(elapsedMs); return Task.CompletedTask; });
+        var context = new DefaultHttpContext();
+        context.Request.Method = "GET";
+        context.Request.Path = "/api/media/42";
+        context.SetEndpoint(new Microsoft.AspNetCore.Routing.RouteEndpoint(_ => Task.CompletedTask,
+            Microsoft.AspNetCore.Routing.Patterns.RoutePatternFactory.Parse("/api/media/{id:long}"), 0, EndpointMetadataCollection.Empty, "media"));
+        await pipeline.Build()(context);
 
         var reported = messages.Where(message => message.Contains("took")).ToArray();
         Assert.Equal(expected, reported.Length > 0);
         if (!expected) return;
-        // The route pattern, not the path: nothing from the library reaches the log.
         var line = Assert.Single(reported);
-        Assert.Contains("GET /api/status", line);
-        // One request on its own found itself alone, and says so.
+        Assert.Contains("GET /api/media/{id:long}", line);
+        Assert.DoesNotContain("/api/media/42", line);
         Assert.Contains("on arrival 1 requests were in flight, 1 for this path", line);
         Assert.Contains("thread pool", line);
     }
@@ -53,9 +50,10 @@ public sealed class SlowRequestLogTests
         var messages = new ConcurrentQueue<string>();
         using var services = new ServiceCollection().AddLogging(logging => logging.AddProvider(new CaptureProvider(messages))).BuildServiceProvider();
         var pipeline = new ApplicationBuilder(services);
-        pipeline.UseSlowRequestLog(1);
+        var clock = new ManualClock();
+        pipeline.UseSlowRequestLog(1, clock);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        pipeline.Run(async _ => { await release.Task; await Task.Delay(2); });
+        pipeline.Run(async _ => { await release.Task; clock.Advance(2); });
         var request = pipeline.Build();
         static DefaultHttpContext Context()
         {
@@ -70,7 +68,6 @@ public sealed class SlowRequestLogTests
         // Hold the handlers after the middleware counted arrival. Overlap is deliberate,
         // independent of whether eight very fast database requests happen to overlap.
         var overlapping = Enumerable.Range(0, 8).Select(_ => request(Context())).ToArray();
-        await Task.Delay(5);
         release.SetResult();
         await Task.WhenAll(overlapping);
         Assert.Equal(Enumerable.Range(1, 8), Counts().Order());
@@ -83,6 +80,14 @@ public sealed class SlowRequestLogTests
     public void The_default_threshold_is_the_one_documented()
     {
         Assert.Equal(500, SlowRequestLog.DefaultThresholdMs);
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        private long timestamp;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => Interlocked.Read(ref timestamp);
+        public void Advance(int milliseconds) => Interlocked.Add(ref timestamp, TimeSpan.FromMilliseconds(milliseconds).Ticks);
     }
 
     private sealed class CaptureProvider(ConcurrentQueue<string> messages) : ILoggerProvider
