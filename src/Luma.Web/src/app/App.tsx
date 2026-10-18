@@ -184,6 +184,7 @@ export function App() {
           ? 'panels'
           : 'gallery'),
   )
+  const [settingsAnchor, setSettingsAnchor] = useState<string | null>(null)
   const [flickSearchOpen, setFlickSearchOpen] = useState(false)
   const configuration = useQuery({
     queryKey: ['ui-configuration'],
@@ -495,7 +496,7 @@ export function App() {
     if (section === 'settings')
       requestAnimationFrame(() =>
         document
-          .getElementById(`settings-${settingsOrigin === 'gallery' ? 'general' : settingsOrigin}`)
+          .getElementById(`settings-${settingsAnchor ?? (settingsOrigin === 'gallery' ? 'general' : settingsOrigin)}`)
           ?.scrollIntoView?.(),
       )
     if (
@@ -503,9 +504,12 @@ export function App() {
       (section === 'panels' && applications?.panelsEnabled === false)
     )
       apply(gallerySnapshot.current.filters, 'library')
-  }, [section, settingsOrigin, applications?.flickEnabled, applications?.panelsEnabled])
+  }, [section, settingsOrigin, settingsAnchor, applications?.flickEnabled, applications?.panelsEnabled])
   function navigateSection(target: Section) {
-    if (target === 'settings' && section !== 'settings') setSettingsOrigin(experience)
+    if (target === 'settings' && section !== 'settings') {
+      setSettingsOrigin(experience)
+      setSettingsAnchor(null)
+    }
     setSearchFocusRequested(target === 'search')
     if (target === 'search' && section !== 'search') searchOrigin.current = 'search'
     if (target === 'collections') apply({}, target)
@@ -831,7 +835,12 @@ export function App() {
       >
         Skip to collection
       </a>
-      {section !== 'reels' && section !== 'panels' && <StorageWarning onSettings={() => navigateSection('settings')} />}
+      <StorageWarning
+        onSettings={() => {
+          navigateSection('settings')
+          setSettingsAnchor('general')
+        }}
+      />
       {restored.isError && (
         <p role="alert" className="p-3 text-danger">
           Could not restore the open item: {errorMessage(restored.error)}

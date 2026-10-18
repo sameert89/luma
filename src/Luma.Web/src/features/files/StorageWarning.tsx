@@ -35,7 +35,11 @@ export function StorageWarning({ onSettings }: { onSettings: () => void }) {
         <QuietButton onClick={onSettings}>Open file management</QuietButton>
         <QuietButton
           onClick={() => {
-            sessionStorage.setItem('luma-storage-warning', report.bootId)
+            try {
+              sessionStorage.setItem('luma-storage-warning', report.bootId)
+            } catch {
+              // Dismiss still works for this session when browser storage is blocked.
+            }
             setDismissed(report.bootId)
           }}
         >
