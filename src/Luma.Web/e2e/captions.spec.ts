@@ -11,8 +11,10 @@ test.afterEach(async ({ page }) => {
   if (!captionFolder) return
   const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   try {
-    db.prepare('DELETE FROM Media WHERE FolderId IN (SELECT Id FROM Folders WHERE RelativePath=?)').run(captionFolder)
-    db.prepare('DELETE FROM Folders WHERE RelativePath=?').run(captionFolder)
+    // Keep scan/cache foreign keys intact while removing this clip from later browse queries.
+    db.prepare(
+      "UPDATE Media SET Availability='missing' WHERE FolderId IN (SELECT Id FROM Folders WHERE RelativePath=?)",
+    ).run(captionFolder)
   } finally {
     db.close()
     await rm(path.join(fixture, 'media', captionFolder), { recursive: true, force: true })
