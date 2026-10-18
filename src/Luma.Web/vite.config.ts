@@ -41,8 +41,9 @@ function themeManifests(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), themeManifests()],
-  server: { proxy: { '/api': apiTarget } },
-  preview: { proxy: { '/api': apiTarget } },
+  // Preserve the browser-facing host for the API's same-origin checks.
+  server: { proxy: { '/api': { target: apiTarget, changeOrigin: false } } },
+  preview: { proxy: { '/api': { target: apiTarget, changeOrigin: false } } },
   test: {
     include: ['src/**/*.test.{ts,tsx}'],
     environment: 'jsdom',

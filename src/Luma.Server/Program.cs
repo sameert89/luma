@@ -99,6 +99,7 @@ api.MapTasks();
 api.MapFileOperations();
 api.MapPanels();
 Luma.Server.Features.Uploads.UploadEndpoints.MapUploads(app);
+Luma.Server.Features.Captions.CaptionEndpoints.MapCaptions(app);
 api.MapSearchSuggestions();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseRouting();

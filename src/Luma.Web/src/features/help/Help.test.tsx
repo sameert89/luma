@@ -16,7 +16,7 @@ describe('Help guide', () => {
       'Libraries, folders and gallery',
       'Search, tags and Collections',
       'Photo and video viewer',
-      'Reels',
+      'Flick',
       'Background jobs',
       'Settings',
       'Gestures and keyboard shortcuts',
@@ -37,13 +37,20 @@ describe('Help guide', () => {
       'Rescan folder (or Rescan library) reads the files on disk again and always asks first',
     )
     expect(libraries).toHaveTextContent('Hiding the row does not clear anything')
-    expect(section('Reels')).toHaveTextContent('no right-side volume swipe')
+    expect(section('Flick')).toHaveTextContent('no right-side volume swipe')
     expect(section('Background jobs')).toHaveTextContent(
       'It does not delete media, scan history or metadata checkpoints',
     )
     expect(section('Photo and video viewer')).toHaveTextContent('not a per-person account sync')
     expect(section('Gestures and keyboard shortcuts')).toHaveTextContent('Videos in the normal viewer only')
     expect(section('Settings')).toHaveTextContent('It does not serve random videos')
+    expect(section('Photo and video viewer')).toHaveTextContent('Stylized subtitles are not supported')
+    expect(section('Photo and video viewer')).toHaveTextContent(
+      'no subtitle discovery, extraction or conversion until you turn CC on',
+    )
+    expect(section('Luma 2.0 applications and files')).toHaveTextContent(
+      'Each application keeps its own search and filters',
+    )
     expect(screen.queryByText(/Install Luma/)).not.toBeInTheDocument()
   })
 

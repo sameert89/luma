@@ -539,77 +539,6 @@
         }
       }
     },
-    "/api/media/{id}/captions": {
-      "post": {
-        "tags": [
-          "Luma.Server"
-        ],
-        "operationId": "DiscoverCaptions",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CaptionList"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/media/{id}/captions/{trackId}": {
-      "get": {
-        "tags": [
-          "Luma.Server"
-        ],
-        "operationId": "GetCaptionTrack",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "key",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/media/{id}/original": {
       "get": {
         "tags": [
@@ -3414,6 +3343,77 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/media/{id}/captions": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "DiscoverCaptions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptionList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/{id}/captions/{trackId}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetCaptionTrack",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }

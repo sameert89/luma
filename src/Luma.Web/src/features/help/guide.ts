@@ -1,6 +1,7 @@
 import {
   ArrowDown,
   Bookmark,
+  Captions,
   Check,
   ChevronDown,
   CircleFadingArrowUp,
@@ -63,6 +64,54 @@ export type GuideGroup = { title: string; entries: GuideEntry[] }
 export type GuideSection = { id: string; title: string; summary: string; groups: GuideGroup[]; notes?: string[] }
 
 export const guideSections: GuideSection[] = [
+  {
+    id: 'v2-apps',
+    title: 'Luma 2.0 applications and files',
+    summary: 'Switch applications, manage writable libraries, upload and recover files',
+    groups: [
+      {
+        title: 'Applications and file management',
+        entries: [
+          {
+            label: 'Luma logo',
+            name: 'Application switcher',
+            where: 'Top-left Luma logo',
+            what: 'Choose Gallery, Flick or Panels. Each application keeps its own search and filters. Flick and Panels have their own navigation; use the logo to return to Gallery, even when a feed is empty.',
+          },
+          {
+            label: 'Panels',
+            name: 'Comic library and reader',
+            where: 'Luma logo → Panels',
+            what: 'Search comics by title or author, filter by series, reading status or favourites, and open a comic to resume reading. Add / discover comics scans supported archives or explicitly classifies an image folder after administrator unlock. Details edits title, series, author, description, favourite and cover page. The reader offers single or continuous pages, reading direction, fit, zoom, fullscreen and saved progress.',
+          },
+          {
+            label: 'Manage files',
+            name: 'File and folder changes',
+            where: 'Gallery, inside a configured writable library',
+            what: 'Create folders, move items within the same library, or delete the current folder or selected media. Deletion recycles by default; permanent deletion requires explicit confirmation and cannot be undone. Library roots cannot be deleted. File management requires administrator unlock and a writable media mount; read-only browsing remains available.',
+          },
+          {
+            label: 'Upload files / Upload folder',
+            name: 'Resumable uploads',
+            where: 'Gallery → Manage files',
+            what: 'Choose files or a folder to upload into the current folder. Pause, resume or cancel from the upload queue. After refreshing, unlock file management and reselect the matching file to resume its saved offset. Existing destinations are not overwritten, and completed uploads appear after indexing.',
+          },
+          {
+            label: 'Recycle bin',
+            name: 'Restore or permanently remove recycled items',
+            where: 'Gallery, inside a writable library',
+            what: 'Shows original paths and deletion dates. Restore returns an item to its original path; use an alternative relative path if that location is occupied. Restore never overwrites another file. Permanently delete asks for confirmation. Automatic retention cleanup is not available yet; recycled files consume media-volume space. The recycle bin is not a backup.',
+          },
+          {
+            label: 'Needs attention',
+            name: 'Interrupted file operation recovery',
+            where: 'Background jobs → an operation needing attention',
+            what: 'Review source, staging and destination evidence, then explicitly choose a supported recovery action. A missing mount or collision keeps the operation reserved until resolved. Do not remove internal staging folders or journal rows to clear it.',
+          },
+        ],
+      },
+    ],
+  },
   {
     id: 'libraries',
     title: 'Libraries, folders and gallery',
@@ -187,7 +236,7 @@ export const guideSections: GuideSection[] = [
             icons: [EyeOff],
             name: 'Hide folder',
             where: 'Folder actions menu, for folders inside a library (not the library itself)',
-            what: 'Leaves the folder and everything in it out of browsing, search, Reels, slideshows and indexing. Nothing is deleted; show it again from Settings.',
+            what: 'Leaves the folder and everything in it out of browsing, search, Flick, slideshows and indexing. Nothing is deleted; show it again from Settings.',
           },
           {
             label: 'Use as folder cover',
@@ -203,7 +252,7 @@ export const guideSections: GuideSection[] = [
           {
             icons: [SlidersHorizontal],
             name: 'Filters',
-            where: 'Header, right of search (in Reels: the Flick menu)',
+            where: 'Header, right of search (in Flick: the Flick menu)',
             what: 'Opens Filters and sorting to limit results by folder, tags, search, media type, favourite state, date, size and more.',
           },
           {
@@ -216,7 +265,7 @@ export const guideSections: GuideSection[] = [
             label: 'Hide filters',
             name: 'Hide filters / Show filters',
             where: 'Folder or gallery actions menu',
-            what: 'Hides or shows the row of active filters under the header. Hiding the row does not clear anything; the filters still apply. Reels remembers its own choice.',
+            what: 'Hides or shows the row of active filters under the header. Hiding the row does not clear anything; the filters still apply. Flick remembers its own choice.',
           },
           {
             label: 'Tags: beach ×',
@@ -327,7 +376,7 @@ export const guideSections: GuideSection[] = [
           {
             icons: [Plus],
             name: 'Find or create a tag',
-            where: 'Tags in Media details, the Reels Tags sheet and bulk Edit tags',
+            where: 'Tags in Media details, the Flick Tags sheet and bulk Edit tags',
             what: 'Matching tags list below the field as you type; tap one to add it (tags already on the item show Added). Create “…” adds a new tag, as does pressing Enter.',
           },
           {
@@ -350,13 +399,13 @@ export const guideSections: GuideSection[] = [
           {
             icons: [Heart],
             name: 'Like',
-            where: 'Action row in the viewer and Reels, and Media details',
+            where: 'Action row in the viewer and Flick, and Media details',
             what: 'Marks the item as a favourite; press again to return it to unrated. Liked thumbnails show a small heart.',
           },
           {
             icons: [HeartCrack],
             name: 'Dislike',
-            where: 'Action row in the viewer and Reels, and Media details',
+            where: 'Action row in the viewer and Flick, and Media details',
             what: 'Marks the item as disliked; press again to return it to unrated. Disliked items still appear unless you filter them out.',
           },
           {
@@ -449,7 +498,7 @@ export const guideSections: GuideSection[] = [
             icons: [Clapperboard],
             name: 'Watch on Flick',
             where: 'Viewer menu, for videos and GIFs',
-            what: 'Continues in Reels starting at this item, with the same folder and filters.',
+            what: 'Continues in Flick starting at this item, with the same folder and filters.',
           },
           {
             icons: [ChevronLeft, ChevronRight],
@@ -511,6 +560,24 @@ export const guideSections: GuideSection[] = [
         title: 'Video playback',
         entries: [
           {
+            icons: [Captions],
+            name: 'Captions (CC)',
+            where: 'Video playback bar (above it on smaller screens); lower left in Flick',
+            what: 'Turns captions on or off for the current video. Captions are off by default. Luma does no subtitle discovery, extraction or conversion until you turn CC on. It discovers matching external SRT and embedded SubRip/SRT, then prepares only the selected track. Caption settings lets you choose among available tracks. Turning CC off removes the track and cancels pending discovery without stopping playback.',
+          },
+          {
+            label: 'Caption settings',
+            name: 'Supported subtitle files (2.0)',
+            where: 'Beside CC after captions are enabled',
+            what: 'For movie.mkv or movie.mp4, place movie.srt in the same folder; .SRT is also recognized. Language-suffixed files such as movie.en.srt and subtitles in other folders are not matched. Embedded tracks must actually use the SubRip/SRT codec. ASS/SSA, PGS/VobSub image subtitles, MP4 mov_text and other codecs are not supported; there is no OCR or automatic subtitle generation. SRT text must be UTF-8 or BOM-marked UTF-16, up to 4 MiB.',
+          },
+          {
+            label: 'Plain text only',
+            name: 'Subtitle styling and caching',
+            where: 'Video captions',
+            what: 'Stylized subtitles are not supported. Author fonts, colors, bold/italic markup, positioning and effects are discarded; captions use the browser’s plain presentation above the playback bar. Extracted SRT, converted WebVTT and all temporary subtitle files stay in the configured Luma cache directory, never beside originals. Cached captions are reused until the source changes or the bounded caption cache evicts them. Preparation errors leave playback available; turn CC off and on to retry.',
+          },
+          {
             icons: [Play, Pause],
             name: 'Play / Pause',
             where: 'Left of the video control bar',
@@ -538,7 +605,7 @@ export const guideSections: GuideSection[] = [
             icons: [ListVideo],
             name: 'Autoplay next video',
             where: 'Video control bar, including fullscreen',
-            what: 'When on, the next video starts by itself when the current one ends. Luma remembers the choice. Reels uses its own Auto-scroll instead.',
+            what: 'When on, the next video starts by itself when the current one ends. Luma remembers the choice. Flick uses its own Auto-scroll instead.',
           },
           {
             label: '1×',
@@ -566,13 +633,13 @@ export const guideSections: GuideSection[] = [
           {
             label: 'Import metadata tags',
             name: 'Import metadata tags',
-            where: 'Media details, and Media information in Reels',
+            where: 'Media details, and Media information in Flick',
             what: 'Reads this file’s embedded EXIF/XMP tags into Luma. Tick Include adjacent XMP sidecars to read a matching .xmp file too.',
           },
           {
             label: 'Export XMP',
             name: 'Export XMP',
-            where: 'Media details, and Media information in Reels',
+            where: 'Media details, and Media information in Flick',
             what: 'Prepares a download of this item’s tags as XMP; Download export appears when it is ready.',
           },
         ],
@@ -603,46 +670,46 @@ export const guideSections: GuideSection[] = [
     ],
     notes: [
       'Watch progress is saved on this Luma server, so every browser and device using it shares the same progress. It is not a per-person account sync.',
-      'Resume appears in the normal viewer only; Reels always starts a video from the beginning.',
+      'Resume appears in the normal viewer only; Flick always starts a video from the beginning.',
     ],
   },
   {
     id: 'reels',
-    title: 'Reels',
+    title: 'Flick',
     summary: 'Full-screen vertical browsing of videos and GIFs',
     groups: [
       {
-        title: 'Reels controls',
+        title: 'Flick controls',
         entries: [
           {
             icons: [Clapperboard],
-            name: 'Reels',
-            where: 'Bottom bar or side navigation',
-            what: 'Opens Reels with your current filters. Without a media type filter it shows videos and GIFs.',
+            name: 'Flick',
+            where: 'Top-left Luma logo → Flick',
+            what: 'Opens Flick with its own saved filters. Switching applications does not copy Gallery filters; the viewer’s Watch on Flick action deliberately carries the current item and context. Without a media type filter Flick shows videos and GIFs.',
           },
           {
             icons: [EllipsisVertical, X],
             name: 'Flick menu',
             where: 'Bottom right, beside Like and Dislike',
-            what: 'Opens or closes the Reels actions.',
+            what: 'Opens or closes the Flick actions.',
           },
           {
             icons: [SlidersHorizontal],
             name: 'Filters',
             where: 'Flick menu',
-            what: 'Opens Filters and sorting for Reels.',
+            what: 'Opens Filters and sorting for Flick.',
           },
           {
             icons: [EyeOff, Eye],
             name: 'Hide filters / Show filters',
             where: 'Flick menu',
-            what: 'Hides or shows the active-filter row without clearing any filter. This choice applies to Reels only; Library and Search keep their own.',
+            what: 'Hides or shows the active-filter row without clearing any filter. This choice applies to Flick only; Library and Search keep their own.',
           },
           {
             icons: [VolumeX, Volume2],
             name: 'Mute / Unmute',
             where: 'Flick menu',
-            what: 'Reels start muted; your choice is remembered on this device.',
+            what: 'Flick start muted; your choice is remembered on this device.',
           },
           {
             icons: [Timer],
@@ -673,7 +740,7 @@ export const guideSections: GuideSection[] = [
           {
             label: 'Open in viewer',
             name: 'Open in viewer',
-            where: 'View options in Reels',
+            where: 'View options in Flick',
             what: 'Opens the current reel in the normal viewer with its full video controls.',
           },
           {
@@ -687,8 +754,8 @@ export const guideSections: GuideSection[] = [
     ],
     notes: [
       'Watch on Flick in the viewer starts at the item you were viewing and keeps your folder and explicit filters.',
-      'Reels has a volume slider in View options but no right-side volume swipe: vertical swipes always move between reels.',
-      'Reels remembers where you were for the same set of filters.',
+      'Flick has a volume slider in View options but no right-side volume swipe: vertical swipes always move between reels.',
+      'Flick remembers where you were for the same set of filters.',
     ],
   },
   {
@@ -790,10 +857,10 @@ export const guideSections: GuideSection[] = [
             what: 'Smart covers show a mosaic for albums with three or more photos and fit single photos to the card; Cropped covers fill the card with one photo. Covers you picked yourself keep their photo either way.',
           },
           {
-            label: 'Reels',
-            name: 'Reels default order',
+            label: 'Flick',
+            name: 'Flick default order',
             where: 'Settings',
-            what: 'Chooses the order Reels opens in on this device, such as Shuffle for a new feed each visit. Same as the library keeps whatever order the library is in. Leaving Reels gives the library its own order back.',
+            what: 'Chooses the order Flick opens in on this device, such as Shuffle for a new feed each visit. Gallery and Flick retain independent filters and ordering when you switch applications.',
           },
           {
             icons: [Shuffle],
@@ -858,7 +925,7 @@ export const gestures: Gesture[] = [
   },
   {
     gesture: 'Double-tap left or right third',
-    where: 'Videos in the viewer and Reels',
+    where: 'Videos in the viewer and Flick',
     result: 'Skips back or forward 10 seconds.',
   },
   { gesture: 'Press and hold', where: 'Playing videos', result: 'Plays at 2× until you let go.' },
@@ -875,12 +942,12 @@ export const gestures: Gesture[] = [
   },
   {
     gesture: 'Swipe up or down',
-    where: 'Reels',
+    where: 'Flick',
     result: 'Next or previous reel. Mouse wheel and trackpad scrolling do the same.',
   },
   {
     gesture: 'Double-tap / triple-tap the centre',
-    where: 'Reels (videos, photos and GIFs)',
+    where: 'Flick (videos, photos and GIFs)',
     result: 'Likes / dislikes the reel.',
   },
   { gesture: 'Tap the bottom strip', where: 'Video reels', result: 'Reveals the seek bar.' },
@@ -914,7 +981,7 @@ export const shortcutGroups: ShortcutGroup[] = [
     ],
   },
   {
-    title: 'Reels',
+    title: 'Flick',
     shortcuts: [
       { keys: ['↑', '↓'], result: 'Previous or next reel' },
       { keys: ['←', '→'], result: 'Back or forward 5 seconds in a video' },

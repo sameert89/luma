@@ -197,6 +197,7 @@ export function ViewerVideoControls({
   onFullscreen,
   onPictureInPicture,
   onAutoplay,
+  captions,
 }: {
   video: RefObject<HTMLVideoElement | null>
   mediaId: number
@@ -215,6 +216,7 @@ export function ViewerVideoControls({
   onFullscreen: () => void
   onPictureInPicture: () => void
   onAutoplay?: () => void
+  captions?: ReactNode
 }) {
   // Upright phones stack the scrubber on its own full-width row; every other layout keeps
   // the single row. Speed and picture in picture stay in View options there, so the second
@@ -280,6 +282,7 @@ export function ViewerVideoControls({
           <PictureInPicture2 className="size-4" />
         </IconButton>
       )}
+      <div className="contents max-md:absolute max-md:bottom-24 max-md:left-2 max-md:flex max-md:gap-1">{captions}</div>
       <IconButton
         label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         className="order-1 border-transparent"

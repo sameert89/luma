@@ -21,6 +21,7 @@ public sealed class CaptionTests
         Assert.DoesNotContain("an8", vtt);
         var unicode = Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(Srt)).ToArray();
         Assert.Equal(vtt, SrtCaptions.Convert(unicode));
+        Assert.Contains("{plain text}", SrtCaptions.Convert(Encoding.UTF8.GetBytes(Srt.Replace("Second line", "{plain text}"))));
     }
     [Theory]
     [InlineData("not subtitles")]

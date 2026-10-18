@@ -171,7 +171,7 @@ export function Viewer({
   const prefer = (value: 'liked' | 'disliked' | 'neutral') => preference.mutate({ id: item.id, value })
   useEffect(() => {
     function key(event: KeyboardEvent) {
-      if (!open || detailsOpen) return
+      if (!open || detailsOpen || document.querySelectorAll('[role="dialog"][data-state="open"]').length > 1) return
       if (
         event.target instanceof HTMLElement &&
         (event.target.closest('input,select,textarea,video,[contenteditable="true"]') ||

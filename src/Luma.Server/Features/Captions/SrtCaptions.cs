@@ -13,7 +13,7 @@ public static partial class SrtCaptions
     private static readonly UTF8Encoding Utf8 = new(false, true);
     [GeneratedRegex(@"^(\d{1,3}):([0-5]\d):([0-5]\d)[,.](\d{3})\s+-->\s+(\d{1,3}):([0-5]\d):([0-5]\d)[,.](\d{3})(?:\s.*)?$", RegexOptions.NonBacktracking)]
     private static partial Regex Timing();
-    [GeneratedRegex(@"<[^>]*>|\{[^}]*\}", RegexOptions.NonBacktracking)]
+    [GeneratedRegex(@"<[^>]*>|\{\\[^}]*\}", RegexOptions.NonBacktracking)]
     private static partial Regex Styling();
 
     public static string Convert(byte[] bytes)

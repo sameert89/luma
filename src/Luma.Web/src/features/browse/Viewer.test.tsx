@@ -386,3 +386,54 @@ it('autoplays the next video when one ends only while Autoplay is on, and rememb
   await userEvent.click(screen.getByRole('button', { name: 'Next item' }))
   expect(stage.props.autoPlay).toBe(false)
 })
+
+it('does not navigate the video behind an open caption settings dialog', async () => {
+  const media = {
+    id: 700,
+    libraryId: 1,
+    folderId: 1,
+    fileName: 'movie.mp4',
+    mediaType: 'video',
+    preference: 'neutral',
+    tags: [],
+    thumbnail: { status: 'ready', url: '/thumb' },
+    preview: { status: 'ready', url: '/poster' },
+  } as Media
+  const next = { ...media, id: 701, fileName: 'next.mp4' }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url.includes('/neighbors?')
+              ? { previous: null, next }
+              : url === '/api/tasks' || url === '/api/libraries'
+                ? []
+                : media,
+          ),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+    ),
+  )
+  const changed = vi.fn()
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      <Viewer active={media} filters={{}} onChange={changed} onClose={vi.fn()} restoreFocus={vi.fn()} />
+    </QueryClientProvider>,
+  )
+  await userEvent.click(await screen.findByRole('button', { name: 'Viewer menu' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Next item' })).toBeEnabled())
+  const captionDialog = document.createElement('div')
+  captionDialog.setAttribute('role', 'dialog')
+  captionDialog.setAttribute('data-state', 'open')
+  document.body.append(captionDialog)
+  try {
+    await userEvent.keyboard('{ArrowRight}')
+    expect(changed).not.toHaveBeenCalled()
+  } finally {
+    captionDialog.remove()
+  }
+  await userEvent.keyboard('{ArrowRight}')
+  expect(changed).toHaveBeenCalledWith(next)
+})

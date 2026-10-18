@@ -39,6 +39,7 @@ export function Modal({
   hideHeader = false,
   restoreFocus,
   onClosed,
+  portalContainer,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -50,6 +51,7 @@ export function Modal({
   hideHeader?: boolean
   restoreFocus?: () => void
   onClosed?: () => void
+  portalContainer?: HTMLElement
 }) {
   const previousFocus = useRef<HTMLElement | null>(null)
   const change = useRef(onOpenChange)
@@ -90,7 +92,7 @@ export function Modal({
   }, [open])
   return (
     <Primitive.Root open={open} onOpenChange={onOpenChange}>
-      <Primitive.Portal>
+      <Primitive.Portal container={portalContainer}>
         {open && (
           <>
             <Primitive.Overlay className="motion-overlay fixed inset-0 z-40 bg-black/70" />

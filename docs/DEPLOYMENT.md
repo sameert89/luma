@@ -322,3 +322,27 @@ ASP.NET Core can report the same timing for every request via
 `Logging:LogLevel:Microsoft.AspNetCore.Hosting.Diagnostics=Information`, but a
 gallery requests hundreds of thumbnails per screen, so that writes far more to the
 log than the requests being investigated cost. Prefer the threshold.
+
+## Captions in 2.0
+
+Captions work with a read-only media mount. CC is off by default and no subtitle
+inspection or extraction runs until the viewer enables it. For `movie.mkv` or
+`movie.mp4`, use `movie.srt` in the same folder (`.SRT` is also recognized), or an
+embedded SubRip/SRT stream. A container's other text/image subtitle codecs are
+not automatically converted to SRT. ASS/SSA, image subtitles, author fonts,
+colors, markup, positioning and effects are unsupported; the player renders
+plain captions. There is no OCR, speech recognition or external subtitle search.
+
+FFprobe discovers supported streams and FFmpeg copies only the chosen embedded
+SRT stream; the video itself is not transcoded. Both binaries must be installed
+(the container already includes them). SRT input accepts UTF-8 and BOM-marked
+UTF-16 up to 4 MiB. Native browser text tracks display converted WebVTT above the
+playback bar. Caption settings selects between available tracks. Changing videos
+starts with captions off. An error preparing subtitles does not stop playback.
+
+Everything generated lives in `Luma:Indexing:CachePath/captions`: temporary
+extraction files, retained raw SRT, converted VTT and manifests. The dedicated
+cache is limited to 128 MiB and 512 entries, and uses least-recently-used eviction;
+missing captions are rebuilt only after explicit CC use. A missing VTT can be
+rebuilt from retained SRT without re-extraction. This cache is disposable and may
+be omitted from backups. No generated subtitle is written beside source media.
