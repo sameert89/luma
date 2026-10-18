@@ -39,7 +39,9 @@ function themeManifests(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === 'help' ? './' : '/',
+  build: mode === 'help' ? { outDir: 'help-dist', rollupOptions: { input: 'help.html' } } : {},
   plugins: [react(), tailwindcss(), themeManifests()],
   // Preserve the browser-facing host for the API's same-origin checks.
   server: { proxy: { '/api': { target: apiTarget, changeOrigin: false } } },
@@ -50,4 +52,4 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
     clearMocks: true,
   },
-})
+}))

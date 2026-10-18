@@ -68,16 +68,16 @@ Either terminate TLS in Luma itself or put it behind a reverse proxy.
 Compose, add to the `luma` service:
 
 ```yaml
-    ports:
-      - "5443:5443"
-    environment:
-      ASPNETCORE_URLS: "https://+:5443;http://+:5080"
-      ASPNETCORE_Kestrel__Certificates__Default__Path: /certs/luma.crt
-      ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /certs/luma.key
-      # Optional: send plain-HTTP visitors to HTTPS.
-      Luma__Https__RedirectHttp: "true"
-    volumes:
-      - /path/to/certs:/certs:ro
+ports:
+  - "5443:5443"
+environment:
+  ASPNETCORE_URLS: "https://+:5443;http://+:5080"
+  ASPNETCORE_Kestrel__Certificates__Default__Path: /certs/luma.crt
+  ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /certs/luma.key
+  # Optional: send plain-HTTP visitors to HTTPS.
+  Luma__Https__RedirectHttp: "true"
+volumes:
+  - /path/to/certs:/certs:ro
 ```
 
 The certificate must be trusted by every device that opens Luma (for example from a
@@ -121,7 +121,7 @@ Unlocking runs a mount check. Failed checks disable file actions for the affecte
 library and block new file operations and upload writes before filesystem work.
 Browsing, playback, captions and tag editing remain available. Correct the mount
 or permissions, then use **Check media mounts** in Settings to restore file actions.
-Checks are explicit; capability reads use memory and never inspect originals.
+A background check also runs at server startup; capability reads use memory and never inspect originals. The startup banner explains read-only libraries and remains dismissible for that server boot.
 A check reflects current root access, not a guarantee against later filesystem changes.
 Existing operation journals and recovery evidence are retained.
 To opt in for library 1, generate a token with `openssl rand -hex 32` and store it
@@ -156,7 +156,7 @@ There are at most 128 active upload sessions and 1–4 concurrent chunk transfer
 Reservation accounting does not reserve physical disk space. Recycled content and
 other writes consume the same volume, so monitor actual free space too.
 
-Open Settings → File management and unlock this tab with the token. Refreshing
+Open Settings → General → File management and unlock this tab with the token. Refreshing
 requires unlocking again; the browser does not persist the token. Use trusted
 HTTPS for remote access. The token grants file management across the configured
 writable libraries and protected comic administration; it is not a general login
@@ -353,3 +353,78 @@ cache is limited to 128 MiB and 512 entries, and uses least-recently-used evicti
 missing captions are rebuilt only after explicit CC use. A missing VTT can be
 rebuilt from retained SRT without re-extraction. This cache is disposable and may
 be omitted from backups. No generated subtitle is written beside source media.
+
+## Application defaults and comic locations
+
+A library is a configured media root. Give every root a unique stable ID, mount
+its directory, and configure consecutive `Luma__Indexing__Libraries__0`, `__1`,
+`__2`, etc. entries with `Id`, `Name` and container `Path`. See the multiple-root
+example in [README](../README.md#luma-20-file-management-and-multiple-libraries).
+
+Panels' first visit asks for comic locations within those libraries. An empty
+relative path selects a whole root. Saving locations queues a recursive scan for
+supported archives; image folders are included only when explicitly selected.
+Later visits open the saved bookshelf. Use **Comic locations** to change or
+rescan sources. This needs read access to originals and write access to Luma's
+data/cache directory; it does not require a writable media mount or administrator
+token. Removing a source hides its books while preserving metadata and reading
+progress for re-adding it.
+
+```yaml
+environment:
+  Luma__Ui__FlickEnabled: "true"
+  Luma__Ui__PanelsEnabled: "true"
+  Luma__Ui__Preferences__luma-theme: "forest"
+  Luma__Ui__Preferences__luma-reels-sort: '{"sort":"modified","order":"desc"}'
+  Luma__Ui__Preferences__luma-reels-state: '{"muted":true,"autoScroll":false}'
+  Luma__Ui__Preferences__luma-panels-reader-defaults: '{"mode":"single","fit":"screen","direction":"ltr"}'
+  Luma__Panels__Sources__0__LibraryId: "2"
+  Luma__Panels__Sources__0__RelativePath: "Manga"
+  Luma__Panels__Sources__0__ImageFolders: "false"
+```
+
+**In-app choices take precedence.** Global Flick/Panels switches are in Settings
+→ General → Applications after administrator unlock; they are stored in SQLite
+and override environment flags on subsequent boots. Disabling Panels pauses new
+comic jobs. Source environment entries seed a fresh installation only; saved
+Comic locations override them thereafter. Other UI choices are per-browser and
+use the environment value only when no local choice exists. These defaults do
+not overwrite existing users' preferences. Restart after editing environment
+configuration.
+
+Supported `Luma__Ui__Preferences__` keys and values:
+
+| Key                                            | Value                                                                                               |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `luma-theme`                                   | Theme ID, for example `forest`                                                                      |
+| `luma-appearance-v2`                           | JSON appearance object: `background`, `blur`, `opacity`, `darkness`, `motion`, `splashes`           |
+| `luma-album-covers`                            | `smart` or `cropped`                                                                        |
+| `luma-reels-sort`                              | JSON `sort` and `order`                                                                             |
+| `luma-slideshow-seconds`                       | Slideshow interval in seconds                                                                       |
+| `luma-video-autoplay`                          | `true` or `false`                                                                                   |
+| `luma-viewer-fill`, `luma-reels-fill`          | `true` or `false`                                                                                   |
+| `luma-show-filters`, `luma-reels-show-filters` | `true` or `false`                                                                                   |
+| `luma-reels-state`                             | JSON `muted` and `autoScroll`                                                                       |
+| `luma-panels-reader-defaults`                  | JSON `mode` (`single`/`continuous`), `fit` (`screen`/`width`/`height`/`original`), `direction` (`ltr`/`rtl`) |
+
+Use the JSON shape stored under the matching browser storage key to reproduce
+complex appearance/cover settings. Uploaded background image bytes remain local
+to that browser; environment configuration selects built-in backgrounds. Saved
+per-book reader preferences override reader defaults. Secrets are never exposed
+through UI defaults; use the dedicated file-access-token configuration.
+
+When an HTTPS reverse proxy changes the internal origin, modern browsers send
+`Sec-Fetch-Site: same-origin`, which captions and file operations accept. For
+clients without Fetch Metadata, set `Luma__PublicOrigin` to the exact trusted
+browser-facing origin, for example `https://luma.example.com`. Cross-site
+requests remain rejected.
+
+## Standalone help deployment
+
+Run `npm ci` and `npm run build:help` in `src/Luma.Web`. Upload the generated
+`help-dist/` directory to a static host. It contains the same guide as the app,
+with relative assets, no API connection and no server/data dependencies.
+The **Publish user guide** GitHub Actions workflow builds and deploys it to Pages
+on manual dispatch. After merging, select **GitHub Actions** as the repository's
+Pages source and run that workflow. Rebuild/redeploy whenever the guide changes.
+CI builds the guide on every change so both copies stay buildable.

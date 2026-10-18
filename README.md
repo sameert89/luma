@@ -42,11 +42,11 @@ See the [deployment guide](docs/DEPLOYMENT.md) for upgrades, HTTPS/PWA setup, ba
 
 The Compose defaults are suitable for a single media root. The most commonly changed values are:
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `LUMA_MEDIA_PATH` | Absolute host path mounted read-only as the media library | Required |
-| `LUMA_CASE_SENSITIVE` | Whether media paths use case-sensitive identity | `true` |
-| `LUMA_SCAN_ON_STARTUP` | Start a full scan when the service starts | `false` |
+| Variable               | Purpose                                                   | Default  |
+| ---------------------- | --------------------------------------------------------- | -------- |
+| `LUMA_MEDIA_PATH`      | Absolute host path mounted read-only as the media library | Required |
+| `LUMA_CASE_SENSITIVE`  | Whether media paths use case-sensitive identity           | `true`   |
+| `LUMA_SCAN_ON_STARTUP` | Start a full scan when the service starts                 | `false`  |
 
 ASP.NET Core configuration also accepts JSON, environment variables, and command-line arguments. Nested environment keys use double underscores, such as `Luma__DatabasePath` and `Luma__Indexing__CachePath`.
 
@@ -219,3 +219,16 @@ volumes:
 Keep library IDs stable and unique; use consecutive environment array indexes
 starting at 0. Paths are container paths. Restart after changing mounts or roots.
 Panels sources select folders within these configured libraries.
+
+## Standalone user guide
+
+The same guide shown in **Settings → Help** can be hosted independently, with no
+Luma server or media access. Run `npm ci && npm run build:help` in `src/Luma.Web`
+and serve `help-dist/` from any static web host. Relative assets support a GitHub
+Pages project URL such as `https://sameert89.github.io/luma/`.
+
+For GitHub Pages, merge the workflow into the default branch, choose **Settings →
+Pages → Build and deployment → GitHub Actions**, then run **Actions → Publish user
+guide → Run workflow**. The workflow publishes only the guide. Re-run it after
+help changes. See [deployment configuration](docs/DEPLOYMENT.md#application-defaults-and-comic-locations)
+for environment defaults, precedence and comic locations.
