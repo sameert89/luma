@@ -37,25 +37,25 @@ it('does no caption work until CC is turned on and removes the track when off', 
   const { container, fetch } = mount()
   expect(fetch).not.toHaveBeenCalled()
   expect(container.querySelector('track')).toBeNull()
-  expect(screen.getByRole('button', { name: 'Captions', exact: true })).toHaveAttribute('aria-pressed', 'false')
-  await userEvent.click(screen.getByRole('button', { name: 'Captions', exact: true }))
+  expect(screen.getByRole('button', { name: 'Captions' })).toHaveAttribute('aria-pressed', 'false')
+  await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
   await waitFor(() =>
     expect(container.querySelector('track')).toHaveAttribute('src', '/api/media/1/captions/sidecar?key=key'),
   )
   expect(fetch).toHaveBeenCalledWith('/api/media/1/captions', expect.objectContaining({ method: 'POST' }))
   fireEvent.load(container.querySelector('track')!)
-  await userEvent.click(screen.getByRole('button', { name: 'Captions', exact: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
   expect(container.querySelector('track')).toBeNull()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
 })
 it('changes tracks only when selected and new videos start without captions', async () => {
   const { container, rerender, fetch } = mount()
-  await userEvent.click(screen.getByRole('button', { name: 'Captions', exact: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
   await waitFor(() => expect(container.querySelector('track')).not.toBeNull())
   await userEvent.click(screen.getByRole('button', { name: 'Caption settings' }))
   await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Caption track' }), 'embedded-2')
   expect(container.querySelector('track')).toHaveAttribute('src', '/api/media/1/captions/embedded-2?key=key')
-  await userEvent.click(screen.getByRole('button', { name: 'Close', exact: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Close' }))
   rerender(<Harness id={2} />)
   expect(container.querySelector('track')).toBeNull()
   expect(fetch.mock.calls.some(call => call[0] === '/api/media/2/captions')).toBe(false)
@@ -64,7 +64,7 @@ it('reports unsupported or missing subtitles without interfering with playback',
   const { container } = mount([])
   const player = screen.getByTestId('player') as HTMLVideoElement
   player.currentTime = 17
-  await userEvent.click(screen.getByRole('button', { name: 'Captions', exact: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
   expect(await screen.findByRole('status')).toHaveTextContent('No supported SRT captions found.')
   expect(player.currentTime).toBe(17)
   expect(container.querySelector('track')).toBeNull()
@@ -76,9 +76,9 @@ it('turning CC off aborts in-flight discovery', async () => {
     signal = init.signal ?? undefined
     return new Promise(() => {})
   })
-  await userEvent.click(screen.getByRole('button', { name: 'Captions', exact: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
   await waitFor(() => expect(signal).toBeDefined())
-  await userEvent.click(screen.getByRole('button', { name: 'Captions', exact: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
   expect(signal?.aborted).toBe(true)
   expect(container.querySelector('track')).toBeNull()
 })
@@ -86,7 +86,7 @@ it('reports a track load failure without changing playback position', async () =
   const { container } = mount()
   const player = screen.getByTestId('player') as HTMLVideoElement
   player.currentTime = 8
-  await userEvent.click(screen.getByRole('button', { name: 'Captions', exact: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
   await waitFor(() => expect(container.querySelector('track')).not.toBeNull())
   fireEvent.error(container.querySelector('track')!)
   expect(screen.getByRole('status')).toHaveTextContent('Playback can continue')
@@ -97,7 +97,7 @@ it('keeps caption settings inside the fullscreen element', async () => {
   const descriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement')
   Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: container })
   try {
-    await userEvent.click(screen.getByRole('button', { name: 'Captions', exact: true }))
+    await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
     await waitFor(() => expect(container.querySelector('track')).not.toBeNull())
     await userEvent.click(screen.getByRole('button', { name: 'Caption settings' }))
     expect(container.querySelector('[role="dialog"]')).not.toBeNull()

@@ -388,17 +388,26 @@ it('autoplays the next video when one ends only while Autoplay is on, and rememb
 })
 
 it('does not navigate the video behind an open caption settings dialog', async () => {
-  const media = {
+  const media: Media = {
     id: 700,
     libraryId: 1,
     folderId: 1,
     fileName: 'movie.mp4',
     mediaType: 'video',
+    extension: '.mp4',
+    availability: 'present',
+    modifiedAt: '2026-01-01T00:00:00Z',
+    effectiveDate: '2026-01-01T00:00:00Z',
+    capturedAt: null,
+    width: null,
+    height: null,
+    durationMs: 1000,
+    sizeBytes: 100,
     preference: 'neutral',
     tags: [],
-    thumbnail: { status: 'ready', url: '/thumb' },
-    preview: { status: 'ready', url: '/poster' },
-  } as Media
+    thumbnail: { status: 'ready', url: '/thumb', width: null, height: null },
+    preview: { status: 'ready', url: '/poster', width: null, height: null },
+  }
   const next = { ...media, id: 701, fileName: 'next.mp4' }
   vi.stubGlobal(
     'fetch',
