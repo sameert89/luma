@@ -30,3 +30,18 @@ test('deletion defaults to recycling and reviewing does not send a mutation', as
   await user.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(screen.queryByText('Delete 2 selected items?')).not.toBeInTheDocument()
 })
+
+test('read-only capabilities disable file actions and a successful recheck restores them', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(['file-capabilities'], { accessConfigured: true, libraries: [{ libraryId: 1, writable: false }] })
+  render(
+    <QueryClientProvider client={client}>
+      <FileToolbar libraryId={1} folderId={2} />
+    </QueryClientProvider>,
+  )
+  expect(screen.getByRole('button', { name: 'Manage files' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Recycle bin' })).toBeDisabled()
+  expect(screen.getByText(/File changes disabled/)).toBeInTheDocument()
+  await client.invalidateQueries({ queryKey: ['file-capabilities'] })
+  expect(await screen.findByRole('button', { name: 'Manage files' })).toBeEnabled()
+})

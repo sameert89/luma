@@ -76,3 +76,19 @@ describe('upload recovery', () => {
     expect(JSON.parse(localStorage.getItem('luma-upload-sessions-v1')!)[0].id).toBe('session')
   })
 })
+
+it('stops immediately when upload finalization is disabled by a mount check', async () => {
+  localStorage.clear()
+  vi.resetModules()
+  const { ApiError } = await import('../../lib/api/client')
+  mocks.request.mockReset().mockImplementation(async (path: string) => {
+    if (path.endsWith('/finalize'))
+      throw new ApiError(409, { code: 'media_not_writable', title: 'File changes disabled', traceId: 'test' })
+    return { id: 'session', state: 'waitingForClient', committedOffset: 0 }
+  })
+  const queue = await import('./uploadQueue')
+  await queue.addUploads([new File([], 'empty.txt')], 1, '')
+  await waitFor(() => expect(queue.uploadSnapshot()[0].state).toBe('failed'))
+  expect(queue.uploadSnapshot()[0].error).toBe('File changes disabled')
+  expect(mocks.request.mock.calls.filter(call => call[0].endsWith('/finalize'))).toHaveLength(1)
+})

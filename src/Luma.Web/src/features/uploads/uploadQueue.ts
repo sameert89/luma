@@ -70,6 +70,8 @@ function update(key: string, value: Partial<QueuedUpload>) {
   }
   for (const listener of listeners) listener()
 }
+const writeUnavailable = (error: unknown) =>
+  error instanceof ApiError && ['media_not_writable', 'read_only_library'].includes(error.problem?.code ?? '')
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds))
 export async function addUploads(files: File[], libraryId: number, destination: string) {
   if (files.length > 10000) throw new Error('Choose at most 10,000 files at once.')
@@ -187,8 +189,11 @@ async function transfer(item: QueuedUpload) {
           body: item.file!.slice(offset, Math.min(offset + 8 * 1024 * 1024, item.size)),
         })
         if (!response.ok) {
-          const problem = (await response.json().catch(() => ({}))) as { title?: string }
-          throw new Error(problem.title ?? `Upload failed (${response.status}).`)
+          const problem = (await response.json().catch(() => ({}))) as components['schemas']['ApiProblem']
+          throw new ApiError(response.status, {
+            ...problem,
+            title: problem.title ?? `Upload failed (${response.status}).`,
+          })
         }
         session = (await response.json()) as Session
         offset = session.committedOffset
@@ -196,7 +201,7 @@ async function transfer(item: QueuedUpload) {
         update(item.key, { offset, speed: (offset - initial) / Math.max((performance.now() - start) / 1000, 0.1) })
       } catch (error) {
         controller.signal.throwIfAborted()
-        if (++failures > 4) throw error
+        if (writeUnavailable(error) || ++failures > 4) throw error
         await sleep(1000 * 2 ** (failures - 1))
         session = await request<Session>(`/api/files/uploads/${session.id}`, controller.signal)
         offset = session.committedOffset
@@ -211,7 +216,7 @@ async function transfer(item: QueuedUpload) {
         await waitForOperation(session.operationId!, controller.signal)
         break
       } catch (error) {
-        if (attempt >= 4) throw error
+        if (writeUnavailable(error) || attempt >= 4) throw error
         await sleep(1000 * 2 ** attempt)
         session = await request<Session>(`/api/files/uploads/${session.id}`, controller.signal)
       }

@@ -25,21 +25,24 @@ export function FileToolbar({
   })
   const [open, setOpen] = useState(false)
   const [trashOpen, setTrashOpen] = useState(false)
-  if (
-    !capabilities.data?.accessConfigured ||
-    !capabilities.data.libraries.some(item => item.libraryId === libraryId && item.writable)
-  )
+  if (!capabilities.data?.accessConfigured || !capabilities.data.libraries.some(item => item.libraryId === libraryId))
     return null
+  const writable = capabilities.data.libraries.some(item => item.libraryId === libraryId && item.writable)
   return (
     <>
-      <QuietButton onClick={() => setOpen(true)}>
+      <QuietButton disabled={!writable} onClick={() => setOpen(true)}>
         <FolderCog className="size-4" aria-hidden="true" />
         Manage files
       </QuietButton>
-      <QuietButton onClick={() => setTrashOpen(true)}>
+      <QuietButton disabled={!writable} onClick={() => setTrashOpen(true)}>
         <Trash2 className="size-4" aria-hidden="true" />
         Recycle bin
       </QuietButton>
+      {!writable && (
+        <p className="text-sm text-muted">
+          File changes disabled. Check Writable, the :rw mount and permissions in Settings → File management.
+        </p>
+      )}
       <Modal
         open={open}
         onOpenChange={setOpen}
@@ -47,7 +50,7 @@ export function FileToolbar({
         description="Operations apply to this library. Destructive changes are confirmed before starting."
         sheet
       >
-        {open && <FileActions libraryId={libraryId} folderId={folderId} selected={selected} />}
+        {open && writable && <FileActions libraryId={libraryId} folderId={folderId} selected={selected} />}
       </Modal>
       <Modal
         open={trashOpen}
@@ -56,7 +59,7 @@ export function FileToolbar({
         description="Restore deleted content without overwriting existing files."
         sheet
       >
-        {trashOpen && <RecycleBin libraryId={libraryId} />}
+        {trashOpen && writable && <RecycleBin libraryId={libraryId} />}
       </Modal>
     </>
   )

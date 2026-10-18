@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { SettingsSection } from '../../components/ui/SettingsSection'
 import { Field, Input, QuietButton } from '../../components/ui/Controls'
 import { mutationHeaders, setMutationToken } from '../../lib/api/mutationAccess'
@@ -6,6 +7,7 @@ import { errorMessage, request } from '../browse/api'
 import type { components } from '../../lib/api/generated'
 
 export function FileAccess() {
+  const client = useQueryClient()
   const [value, setValue] = useState('')
   const [unlocked, setUnlocked] = useState(() => !!mutationHeaders('/api/files/access').Authorization)
   const [error, setError] = useState('')
@@ -24,6 +26,7 @@ export function FileAccess() {
     } catch (error) {
       setStorageError(`Storage check failed: ${errorMessage(error)} Browsing remains available.`)
     } finally {
+      await client.invalidateQueries({ queryKey: ['file-capabilities'] })
       setChecking(false)
     }
   }
@@ -50,8 +53,9 @@ export function FileAccess() {
     >
       <p className="text-sm text-muted">
         The access token stays in this tab. Unlock file management again after refreshing. Existing Docker installations
-        must change the media mount from :ro to :rw and enable Writable to use uploads, moves or deletion. Read-only
-        browsing and playback continue to work.
+        must change the media mount from :ro to :rw and enable Writable to use uploads, moves or deletion. A failed
+        mount check disables file changes for that library until a successful recheck. Browsing, playback, captions and
+        tag editing continue to work.
       </p>
       {unlocked ? (
         <QuietButton

@@ -6,6 +6,7 @@ import { FileRecoveryDialog } from './FileRecoveryDialog'
 const evidence = {
   operation: {
     id: 'operation',
+    libraryId: 1,
     kind: 'move',
     source: 'photo.jpg',
     destination: 'moved.jpg',
@@ -86,4 +87,27 @@ describe('operation recovery review', () => {
     expect(screen.getByRole('checkbox')).not.toBeChecked()
     expect(confirm).toBeDisabled()
   })
+})
+
+it('keeps recovery evidence visible but disables mutations for an unavailable mount', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async (path: string) =>
+        new Response(
+          JSON.stringify(
+            path.includes('capabilities')
+              ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: false }] }
+              : { ...evidence, actions: ['retry'] },
+          ),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+    ),
+  )
+  mount()
+  const retry = await screen.findByRole('button', { name: 'Retry from saved checkpoint' })
+  await userEvent.click(screen.getByRole('checkbox'))
+  expect(retry).toBeDisabled()
+  expect(screen.getByText(/File changes disabled/)).toBeInTheDocument()
+  expect(screen.getByText(evidence.stagingPath)).toBeInTheDocument()
 })

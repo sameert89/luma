@@ -117,6 +117,13 @@ picture-in-picture is offered where the browser supports it.
 
 The default media mount remains read-only. File management requires both an
 administrator token and an explicitly writable library backed by a writable mount.
+Unlocking runs a mount check. Failed checks disable file actions for the affected
+library and block new file operations and upload writes before filesystem work.
+Browsing, playback, captions and tag editing remain available. Correct the mount
+or permissions, then use **Check media mounts** in Settings to restore file actions.
+Checks are explicit; capability reads use memory and never inspect originals.
+A check reflects current root access, not a guarantee against later filesystem changes.
+Existing operation journals and recovery evidence are retained.
 To opt in for library 1, generate a token with `openssl rand -hex 32` and store it
 as `LUMA_FILE_ACCESS_TOKEN` in the deployment's private `.env` file. Do not commit
 that file. The token must contain at least 32 UTF-8 bytes.

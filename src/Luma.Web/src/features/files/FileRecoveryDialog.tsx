@@ -27,15 +27,21 @@ export function FileRecoveryDialog({
     queryFn: ({ signal }) => request<Evidence>(`/api/files/operations/${id}/recovery`, signal),
     staleTime: 0,
   })
+  const capabilities = useQuery({
+    queryKey: ['file-capabilities'],
+    queryFn: ({ signal }) => request<components['schemas']['FileCapabilities']>('/api/files/capabilities', signal),
+  })
   const [confirmed, setConfirmed] = useState(false),
     [destination, setDestination] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('')
   const row = evidence.data?.operation
+  const blocked = capabilities.data?.libraries?.some(item => item.libraryId === row?.libraryId && !item.writable)
   const alternative = row?.recoveryState === 'reserved' && ['move', 'restore', 'upload'].includes(row.kind ?? '')
   const actions = [...(evidence.data?.actions ?? [])]
   if (alternative && destination.trim() && !actions.includes('retry')) actions.unshift('retry')
   async function resolve(action: string) {
+    if (blocked) return
     setBusy(true)
     setError('')
     try {
@@ -148,9 +154,15 @@ export function FileRecoveryDialog({
                 I reviewed these paths and the recovery action.
               </label>
             )}
+            {blocked && (
+              <p role="status" className="text-sm text-muted">
+                File changes disabled. Correct the media mount or permissions and use Check media mounts in Settings
+                before recovery.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               {actions.map(action => (
-                <QuietButton key={action} disabled={!confirmed || busy} onClick={() => void resolve(action)}>
+                <QuietButton key={action} disabled={!confirmed || busy || blocked} onClick={() => void resolve(action)}>
                   {labels[action] ?? action}
                 </QuietButton>
               ))}

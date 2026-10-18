@@ -213,3 +213,16 @@ Errors leave video playback independent (`422 invalid_srt`/`captions_unavailable
 `503 captions_busy`/`captions_unavailable`, `504 captions_timeout`). No styled
 ASS/SSA, image subtitles, OCR, auto-translation or speech recognition is supported.
 UTF-8 and BOM-marked UTF-16 SRT are accepted.
+
+### Media write availability
+
+`POST /api/files/storage-check` (administrator access) updates the in-memory
+write availability of each library. `GET /api/files/capabilities` reports
+`writable: false` for configured read-only libraries and libraries whose last
+check failed, without probing source storage. Until the first check, configured
+writability is reported for API compatibility; the web unlock flow runs the check.
+A failed check rejects new file operations, upload writes and recovery mutations
+with `media_not_writable` (409). A successful recheck restores availability.
+The last check resets on server restart. Existing operation recovery and journals
+are retained; a mount changing after a successful check can still fail an active
+operation through the existing recovery flow.
