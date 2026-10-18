@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import packageJson from './package.json' with { type: 'json' }
 
 const webDirectory = path.dirname(fileURLToPath(import.meta.url))
 const fixtureDirectory = path.resolve(webDirectory, '../../.local/browser-fixture-v2')
@@ -10,7 +11,21 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   // The app's service worker never handles /api, but blocking it keeps page.route() interception deterministic.
-  use: { baseURL: 'http://127.0.0.1:4173', trace: 'retain-on-failure', serviceWorkers: 'block' },
+  use: {
+    baseURL: 'http://127.0.0.1:4173',
+    trace: 'retain-on-failure',
+    serviceWorkers: 'block',
+    // Most scenarios start after onboarding. The first-visit scenario overrides this state.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://127.0.0.1:4173',
+          localStorage: [{ name: 'luma-version-seen', value: packageJson.version }],
+        },
+      ],
+    },
+  },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },

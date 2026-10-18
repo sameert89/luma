@@ -50,3 +50,9 @@ jobs:
       - run: npm run test:e2e
         if: runner.os == 'Linux'
         working-directory: src/Luma.Web
+      - uses: actions/upload-artifact@v4
+        if: failure() && runner.os == 'Linux'
+        with:
+          name: browser-test-results
+          path: src/Luma.Web/test-results
+          retention-days: 7
