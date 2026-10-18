@@ -120,6 +120,7 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
         <Field label="Upload background image">
           <Input
             type="file"
+            className="py-2 file:mr-3 file:h-7 file:align-middle file:border-0 file:bg-transparent file:text-ink"
             accept="image/jpeg,image/png,image/webp"
             disabled={busy}
             onChange={event => {

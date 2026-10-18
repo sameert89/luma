@@ -92,7 +92,9 @@ export function SearchHeader({
   }
   return (
     <header className="relative z-30 flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:px-6">
-      {logo ?? (
+      {logo ? (
+        <div className={mobile && open ? 'hidden' : 'shrink-0'}>{logo}</div>
+      ) : (
         <a
           href="/"
           className={`shrink-0 text-xl font-semibold tracking-tight ${mobile && open ? 'hidden' : ''}`}

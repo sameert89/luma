@@ -23,10 +23,16 @@ public sealed class MutationAccess(IConfiguration configuration)
     {
         if (request.Headers["Sec-Fetch-Site"] == "cross-site")
             throw new ApiRequestException(403, "cross_origin_write", "Cross-site file operations are not allowed.");
+        // Browsers set this forbidden header themselves. Behind TLS-terminating proxies,
+        // it proves same-origin even when Kestrel sees an internal HTTP scheme/host.
+        if (request.Headers["Sec-Fetch-Site"] == "same-origin") return;
         var origin = request.Headers.Origin.ToString();
+        var publicOrigin = request.HttpContext.RequestServices?.GetService<IConfiguration>()?["Luma:PublicOrigin"];
+        if (origin.Length != 0 && Uri.TryCreate(publicOrigin, UriKind.Absolute, out var configured)
+            && string.Equals(origin, configured.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase)) return;
         if (origin.Length != 0 && (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) ||
             !string.Equals(uri.GetLeftPart(UriPartial.Authority), $"{request.Scheme}://{request.Host}", StringComparison.OrdinalIgnoreCase)))
-            throw new ApiRequestException(403, "cross_origin_write", "Cross-origin file operations are not allowed.");
+            throw new ApiRequestException(403, "cross_origin_write", "Cross-origin requests are not allowed. Configure Luma:PublicOrigin for your external HTTPS URL.");
     }
 
     private static byte[]? Hash(string? token)

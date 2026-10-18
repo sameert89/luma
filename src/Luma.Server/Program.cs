@@ -65,6 +65,7 @@ builder.Services.AddSingleton<ScanWorker>();
 builder.Services.AddSingleton<AutomaticLibraryRefresh>();
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
+    builder.Services.AddHostedService<FileStorageMonitor>();
     builder.Services.AddHostedService(services => services.GetRequiredService<FileOperationWorker>());
     builder.Services.AddHostedService(services => services.GetRequiredService<ComicWorker>());
     builder.Services.AddHostedService(services => services.GetRequiredService<ScanWorker>());

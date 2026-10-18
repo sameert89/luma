@@ -1,3 +1,4 @@
+import { StorageWarning } from '../features/files/StorageWarning'
 import { useAppearance, AppearanceBackdrop, AppearanceSettings, AppIntroduction } from './appearance/Appearance'
 import { AppSwitcher, type Experience } from './navigation/AppSwitcher'
 import { readExperience, saveExperience, sectionPath } from './navigation/experienceState'
@@ -787,6 +788,7 @@ export function App() {
       >
         Skip to collection
       </a>
+      {section !== 'reels' && section !== 'panels' && <StorageWarning onSettings={() => navigateSection('settings')} />}
       {restored.isError && (
         <p role="alert" className="p-3 text-danger">
           Could not restore the open item: {errorMessage(restored.error)}
@@ -1186,10 +1188,8 @@ export function App() {
       {section !== 'reels' && section !== 'panels' && (
         <BottomNavigation items={navItems} active={section} onChange={id => navigateSection(id as Section)} />
       )}
-      {showBackgroundJobs && !active && (
-        <div
-          className={`fixed ${section === 'reels' || section === 'panels' ? 'bottom-6' : 'bottom-20'} right-4 z-30 sm:right-6 md:bottom-6`}
-        >
+      {showBackgroundJobs && !active && section !== 'reels' && section !== 'panels' && (
+        <div className="fixed bottom-20 right-4 z-30 sm:right-6 md:bottom-6">
           <BackgroundJobsButton libraryId={home ? undefined : filters.libraryId} />
         </div>
       )}

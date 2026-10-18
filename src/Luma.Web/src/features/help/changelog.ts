@@ -6,6 +6,18 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.1',
+    date: '2026-10-19',
+    headline: 'Luma 2.0 preview: Gallery, Flick and Panels',
+    changes: [
+      'Click the Luma logo to switch between Gallery, Flick and Panels. Each application keeps its own search and filters.',
+      'Manage writable libraries with uploads, folders, moves and a recycle bin. Configure an administrator access token, then enter it in Settings → File management to unlock this tab. Read-only media keeps browsing, playback, captions and tagging available.',
+      'Startup checks warn when a writable library still has a read-only mount. Correct the :rw mount and permissions, then recheck it in Settings.',
+      'Captions are opt-in: turn on CC for matching same-folder SRT or embedded SubRip. Styled subtitles are unsupported; extraction and conversion files stay in the Luma cache.',
+      'Panels provides a comic bookshelf and reader. This is a beta: back up SQLite and original/staging media before upgrading; rollback requires the matching pre-upgrade backup.',
+    ],
+  },
+  {
     version: '1.0.11',
     date: '2026-10-01',
     headline: 'Pull to refresh just refreshes, and Reels opens your way',

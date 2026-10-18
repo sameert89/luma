@@ -95,4 +95,18 @@ public sealed class MutationSafetyTests
         Assert.Throws<InvalidOperationException>(() => new MutationAccess(configuration));
         Assert.False(new LibraryOptions().Writable);
     }
+    [Fact]
+    public void Browser_same_origin_metadata_accepts_tls_termination_without_allowing_cross_site_requests()
+    {
+        var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        context.Request.Scheme = "http";
+        context.Request.Host = new("luma:5080");
+        context.Request.Headers.Origin = "https://photos.example.com";
+        context.Request.Headers["Sec-Fetch-Site"] = "same-origin";
+        MutationAccess.CheckOrigin(context.Request);
+        context.Request.Headers["Sec-Fetch-Site"] = "cross-site";
+        Assert.Throws<Luma.Server.Http.ApiRequestException>(() => MutationAccess.CheckOrigin(context.Request));
+        context.Request.Headers.Remove("Sec-Fetch-Site");
+        Assert.Throws<Luma.Server.Http.ApiRequestException>(() => MutationAccess.CheckOrigin(context.Request));
+    }
 }

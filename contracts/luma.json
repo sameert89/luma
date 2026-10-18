@@ -2573,6 +2573,26 @@
         }
       }
     },
+    "/api/files/storage-status": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileStorageStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileStorageReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/panels/comics": {
       "get": {
         "tags": [
@@ -4082,6 +4102,28 @@
           "destination": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "FileStorageReport": {
+        "required": [
+          "bootId",
+          "accessConfigured",
+          "libraries"
+        ],
+        "type": "object",
+        "properties": {
+          "bootId": {
+            "type": "string"
+          },
+          "accessConfigured": {
+            "type": "boolean"
+          },
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileStorageStatus"
+            }
           }
         }
       },

@@ -181,3 +181,41 @@ The implementation and local verification are documented in the gate records. Ta
 Source: <https://github.com/sameert89/luma>
 
 Created by Sameer Trivedi.
+
+## Luma 2.0 file management and multiple libraries
+
+Browsing, playback, captions and tags work with read-only originals. For uploads,
+moves and deletion, configure a secret and explicitly opt each writable library in:
+
+```yaml
+environment:
+  Luma__Files__AccessToken: "${LUMA_FILES_TOKEN}"
+  Luma__PublicOrigin: "https://luma.example.com"
+  Luma__Indexing__Libraries__0__Writable: "true"
+volumes:
+  - /your/photos:/media:rw
+```
+
+Set `LUMA_FILES_TOKEN` to a random secret of at least 32 characters. Restart Luma,
+open **Settings → General → File management**, paste that exact secret into
+**Administrator access token**, then click **Unlock file management**. Unlocking
+lasts for this browser tab only. Never put the token in a URL. Failed startup or
+manual mount checks disable file changes; correct permissions/mounts and use
+**Check media mounts** to restore them.
+
+A library is a server-configured mounted root, not an album. To add another root,
+mount it into the container and add the next numbered library configuration:
+
+```yaml
+environment:
+  Luma__Indexing__Libraries__1__Id: "2"
+  Luma__Indexing__Libraries__1__Name: "Comics"
+  Luma__Indexing__Libraries__1__Path: "/comics"
+  Luma__Indexing__Libraries__1__Writable: "false"
+volumes:
+  - /your/comics:/comics:ro
+```
+
+Keep library IDs stable and unique; use consecutive environment array indexes
+starting at 0. Paths are container paths. Restart after changing mounts or roots.
+Panels sources select folders within these configured libraries.

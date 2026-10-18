@@ -47,4 +47,15 @@ public sealed class FileStorageCheckTests
         Assert.False(status.CanWrite);
         Assert.Contains(":ro to :rw", status.Warning);
     }
+    [Fact]
+    public async Task Startup_diagnostic_publishes_unwritable_roots_without_blocking_browsing()
+    {
+        var availability = new FileWriteAvailability();
+        var options = new IndexingOptions { Libraries = [new() { Id = 7, Name = "Photos", Writable = true, Path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")) }] };
+        using var monitor = new FileStorageMonitor(options, availability, Microsoft.Extensions.Logging.Abstractions.NullLogger<FileStorageMonitor>.Instance);
+        await monitor.StartAsync(default);
+        await monitor.ExecuteTask!;
+        Assert.False(availability.CanWrite(7));
+        Assert.NotNull(Assert.Single(availability.Statuses).Warning);
+    }
 }

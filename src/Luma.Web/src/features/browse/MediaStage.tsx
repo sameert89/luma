@@ -599,7 +599,7 @@ export function MediaStage({
     <div className="relative flex h-full min-h-0 w-full flex-col">
       <div
         ref={host}
-        className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden bg-black ${chromeHidden ? 'cursor-none' : ''}`}
+        className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden ${reels ? 'bg-canvas' : 'bg-black'} ${chromeHidden ? 'cursor-none' : ''}`}
         onWheel={event => {
           if (reels && Math.abs(event.deltaY) > 40 && Date.now() - lastWheel.current > 500) {
             lastWheel.current = Date.now()

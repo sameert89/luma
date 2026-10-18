@@ -11,6 +11,9 @@ public static class FileEndpoints
         app.MapGet("/api/files/capabilities", (IndexingOptions options, MutationAccess access, FileWriteAvailability availability) =>
             TypedResults.Ok(new FileCapabilities(access.Enabled, options.Libraries.Select(x => new FileCapability(x.Id, x.Writable && availability.CanWrite(x.Id))).ToArray())))
             .WithName("GetFileCapabilities");
+        app.MapGet("/api/files/storage-status", (FileWriteAvailability availability, MutationAccess access) =>
+            TypedResults.Ok(new FileStorageReport(availability.BootId, access.Enabled, availability.Statuses)))
+            .WithName("GetFileStorageStatus");
         var files = app.MapGroup("/api/files").AddEndpointFilter<MutationAccessFilter>();
         files.MapPost("/storage-check", async (IndexingOptions options, FileWriteAvailability availability, CancellationToken ct) =>
         {

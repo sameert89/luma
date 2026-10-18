@@ -15,7 +15,7 @@ export function AppSwitcher({ active, onSelect }: { active: Experience; onSelect
     <>
       <button
         type="button"
-        className="flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-2 text-sm font-semibold"
+        className="relative inline-flex min-h-11 shrink-0 items-center rounded-xl pl-1 pr-4 text-sm font-semibold"
         aria-label={`Switch application, ${name}`}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
@@ -23,8 +23,7 @@ export function AppSwitcher({ active, onSelect }: { active: Experience; onSelect
         <span className="text-xl tracking-tight">
           luma<span className="text-accent">.</span>
         </span>
-        <span>{name}</span>
-        <ChevronDown className="size-4" aria-hidden="true" />
+        <ChevronDown className="absolute right-0 top-2 size-3 text-muted" aria-hidden="true" />
       </button>
       <Modal
         open={open}

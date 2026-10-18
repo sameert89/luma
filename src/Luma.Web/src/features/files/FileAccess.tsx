@@ -52,6 +52,11 @@ export function FileAccess() {
       description="Unlock explicitly writable libraries for this tab. Read-only libraries stay protected."
     >
       <p className="text-sm text-muted">
+        Administrator setup: set Luma__Files__AccessToken to a secret of at least 32 characters in Docker environment,
+        enable Luma__Indexing__Libraries__0__Writable=true and mount that library with :rw. Restart Luma, then paste the
+        same secret below and select Unlock file management. The token is never shown or stored by Luma.
+      </p>
+      <p className="text-sm text-muted">
         The access token stays in this tab. Unlock file management again after refreshing. Existing Docker installations
         must change the media mount from :ro to :rw and enable Writable to use uploads, moves or deletion. A failed
         mount check disables file changes for that library until a successful recheck. Browsing, playback, captions and
