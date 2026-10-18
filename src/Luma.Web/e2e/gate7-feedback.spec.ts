@@ -1,6 +1,5 @@
-import { switchExperience } from './helpers'
+import { switchExperience, openFixtureDatabase } from './helpers'
 import { test, expect, type Page } from '@playwright/test'
-import { DatabaseSync } from 'node:sqlite'
 import { execFileSync } from 'node:child_process'
 import { copyFile, mkdir, utimes } from 'node:fs/promises'
 import path from 'node:path'
@@ -29,14 +28,7 @@ test.beforeAll(() => {
     '+faststart',
     path.join(fixture, 'media/feedback-clip.mp4'),
   ])
-  const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
-  db.function('luma_key', { deterministic: true }, (value: string) => value.normalize('NFC').toUpperCase())
-  db.function('luma_reverse', { deterministic: true }, (value: string) => [...value].reverse().join(''))
-  db.function(
-    'luma_ticks',
-    { deterministic: true },
-    (value: string) => BigInt(Date.parse(value)) * 10000n + 621355968000000000n,
-  )
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   try {
     db.prepare(
       `UPDATE Media SET FolderId=2,FileName='feedback-clip.mp4',RelativePath='feedback-clip.mp4',
@@ -97,10 +89,9 @@ test('prepares an unindexed folder starting from what is on screen', async ({ pa
     const stamp = new Date(Date.UTC(2026, 0, 1 + index))
     await utimes(file, stamp, stamp)
   }
-  const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   let folderId: number
   try {
-    db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON')
     const row = db
       .prepare(
         `INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)

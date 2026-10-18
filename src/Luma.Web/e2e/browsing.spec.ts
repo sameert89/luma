@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { galleryAction, viewerAction } from './helpers'
-import { DatabaseSync } from 'node:sqlite'
+import { galleryAction, viewerAction, openFixtureDatabase } from './helpers'
 import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -207,10 +206,9 @@ test('opening an unindexed folder discovers its files and prepares previews with
   const relative = `On-demand-${testInfo.project.name}-${Date.now()}`
   await mkdir(path.join(fixture, 'media', relative), { recursive: true })
   await copyFile(path.join(fixture, 'cache', 'palette-1.jpg'), path.join(fixture, 'media', relative, 'new-photo.jpg'))
-  const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   let folderId: number
   try {
-    db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON')
     const row = db
       .prepare(
         `INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)

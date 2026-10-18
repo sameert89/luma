@@ -1,7 +1,6 @@
-import { switchExperience } from './helpers'
+import { switchExperience, openFixtureDatabase } from './helpers'
 import { test, expect } from '@playwright/test'
 import { viewerAction } from './helpers'
-import { DatabaseSync } from 'node:sqlite'
 import { execFileSync } from 'node:child_process'
 import { copyFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -30,14 +29,7 @@ test.beforeAll(async () => {
   ])
   await writeFile(path.join(fixture, 'media/stage6-broken.mkv'), 'unsupported fixture')
   await copyFile(path.join(fixture, 'cache/palette-1.jpg'), path.join(fixture, 'media/stage6-image.jpg'))
-  const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
-  db.function('luma_key', { deterministic: true }, (value: string) => value.normalize('NFC').toUpperCase())
-  db.function('luma_reverse', { deterministic: true }, (value: string) => [...value].reverse().join(''))
-  db.function(
-    'luma_ticks',
-    { deterministic: true },
-    (value: string) => BigInt(Date.parse(value)) * 10000n + 621355968000000000n,
-  )
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   try {
     for (const [id, name, type, mime, extension, date] of [
       [1499, 'stage6-image.jpg', 'image', 'image/jpeg', '.jpg', '03'],
