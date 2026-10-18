@@ -539,6 +539,77 @@
         }
       }
     },
+    "/api/media/{id}/captions": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "DiscoverCaptions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptionList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/{id}/captions/{trackId}": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetCaptionTrack",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/media/{id}/original": {
       "get": {
         "tags": [
@@ -3483,6 +3554,52 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          }
+        }
+      },
+      "CaptionList": {
+        "required": [
+          "sourceKey",
+          "tracks",
+          "warning"
+        ],
+        "type": "object",
+        "properties": {
+          "sourceKey": {
+            "type": "string"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaptionTrack"
+            }
+          },
+          "warning": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CaptionTrack": {
+        "required": [
+          "id",
+          "label",
+          "language",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
           }
         }
       },

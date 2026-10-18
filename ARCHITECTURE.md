@@ -73,6 +73,7 @@ Original media may be accessed for:
 - incremental re-indexing
 - explicit original-file viewing or downloading
 - video streaming
+- explicit, opt-in caption discovery and SRT extraction/conversion during playback
 - metadata import/export
 - explicit administrative operations
 

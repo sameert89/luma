@@ -184,3 +184,32 @@ Queueing a task also dismisses finished tasks beyond the ten most recent of its 
 (migration 0021), so the queue cannot grow without bound between manual clears. Active
 tasks, completed traversals still preparing previews, and the underlying scan and job rows
 are never touched.
+
+## Opt-in SRT captions (2.0)
+
+`POST /api/media/{id}/captions` discovers same-folder/same-basename `.srt` (or `.SRT`)
+and embedded SubRip tracks only after the viewer turns CC on. It returns
+`CaptionList { sourceKey, tracks: [{ id, label, language, kind }], warning }`.
+This explicit playback request may inspect originals and invoke ffprobe; normal
+browse, detail, indexing and video requests do not discover captions. Cross-origin
+requests are rejected. Caption access follows existing read/playback access and
+works with a read-only media mount; administrator file-management unlock is not needed.
+
+`GET /api/media/{id}/captions/{trackId}?key={sourceKey}` returns plain `text/vtt`
+for a discovered track. It extracts only the selected embedded SRT, or reads the
+matching sidecar, then strips author styling and converts timestamps to WebVTT.
+Unsupported tracks are absent from discovery. The original video is not transcoded.
+The source key binds the selection to indexed revision, source location/size/mtime
+and sidecar size/mtime; changed sources return `409 captions_changed`.
+
+All temporary, extracted SRT and converted VTT files live below the configured
+`Luma:Indexing:CachePath/captions` directory. A separate 128 MiB/512-entry LRU bounds
+caption assets and manifests; raw cached SRT can regenerate an evicted/missing VTT
+without re-extraction. Cache loss triggers on-demand recovery. Source media directories
+are never modified. Limits: 16 listed tracks, 4 MiB SRT input, 8 MiB VTT output,
+one caption preparation at a time, shared processing slots, a 30-second deadline
+and a two-second admission wait. FFmpeg output/logs and allocation sizes are bounded.
+Errors leave video playback independent (`422 invalid_srt`/`captions_unavailable`,
+`503 captions_busy`/`captions_unavailable`, `504 captions_timeout`). No styled
+ASS/SSA, image subtitles, OCR, auto-translation or speech recognition is supported.
+UTF-8 and BOM-marked UTF-16 SRT are accepted.

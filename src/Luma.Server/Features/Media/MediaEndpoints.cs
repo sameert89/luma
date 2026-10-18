@@ -10,6 +10,17 @@ public static class MediaEndpoints
 {
     public static void MapMedia(this IEndpointRouteBuilder app)
     {
+        app.MapPost("/api/media/{id:long}/captions", async (long id, HttpContext context, Luma.Server.Features.Captions.CaptionContent captions, CancellationToken ct) =>
+        {
+            Luma.Server.Features.Files.MutationAccess.CheckOrigin(context.Request);
+            return TypedResults.Ok(await captions.ListAsync(id, ct));
+        }).WithName("DiscoverCaptions");
+        app.MapGet("/api/media/{id:long}/captions/{trackId}", async (long id, string trackId, string key, HttpContext context, Luma.Server.Features.Captions.CaptionContent captions, CancellationToken ct) =>
+        {
+            var result = await captions.ServeAsync(id, trackId, key, ct);
+            context.Response.Headers.CacheControl = "private, max-age=86400";
+            return result;
+        }).WithName("GetCaptionTrack").Produces(200, contentType: "text/vtt");
         app.MapGet("/api/media/{id:long}/original", async (long id, bool? download, HttpContext context, OriginalContent content, CancellationToken ct) =>
             await content.ServeAsync(id, download ?? false, context, ct)).WithName("GetOriginalMedia")
             .Produces(200).Produces(206).Produces(304).Produces(416).Produces<ApiProblem>(503, "application/problem+json");

@@ -46,6 +46,7 @@ builder.Services.AddSingleton<RandomImage>();
 builder.Services.AddSingleton<LibraryBrowser>();
 builder.Services.AddSingleton<CacheContent>();
 builder.Services.AddSingleton<OriginalContent>();
+builder.Services.AddSingleton<Luma.Server.Features.Captions.CaptionContent>();
 builder.Services.AddSingleton<CacheAccessLog>();
 builder.Services.AddSingleton<TagService>();
 builder.Services.AddSingleton<MetadataJobs>();
