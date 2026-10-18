@@ -754,6 +754,12 @@ export const guideSections: GuideSection[] = [
         title: 'Settings sections',
         entries: [
           {
+            label: 'File management / Check media mounts',
+            name: 'Writable media mounts (2.0)',
+            where: 'Settings → File management',
+            what: 'Existing installations can keep browsing and playing media with a read-only mount. Uploads, moves, recycling and deletion require both Writable enabled for the library and a Docker media mount changed from :ro to :rw. Unlocking checks the mount and shows a warning if writes fail; Check media mounts retries that diagnostic after permissions or mounts are corrected. The diagnostic creates and removes a tiny probe in Luma’s excluded operation staging area, never an original media file.',
+          },
+          {
             icons: [Settings],
             name: 'Settings',
             where: 'Bottom bar or side navigation',

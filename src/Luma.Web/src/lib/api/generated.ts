@@ -752,6 +752,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/storage-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CheckFileStorage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files/access": {
         parameters: {
             query?: never;
@@ -1178,6 +1194,14 @@ export interface components {
             confirmed: boolean;
             expectedFailureCode: string | null;
             destination?: string | null;
+        };
+        FileStorageStatus: {
+            /** Format: int64 */
+            libraryId: number;
+            name: string;
+            configuredWritable: boolean;
+            canWrite: boolean;
+            warning: string | null;
         };
         FolderPage: {
             current: components["schemas"]["FolderSummary"];
@@ -3105,6 +3129,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchSuggestion"][];
+                };
+            };
+        };
+    };
+    CheckFileStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileStorageStatus"][];
                 };
             };
         };

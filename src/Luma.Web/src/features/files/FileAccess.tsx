@@ -3,12 +3,30 @@ import { SettingsSection } from '../../components/ui/SettingsSection'
 import { Field, Input, QuietButton } from '../../components/ui/Controls'
 import { mutationHeaders, setMutationToken } from '../../lib/api/mutationAccess'
 import { errorMessage, request } from '../browse/api'
+import type { components } from '../../lib/api/generated'
 
 export function FileAccess() {
   const [value, setValue] = useState('')
   const [unlocked, setUnlocked] = useState(() => !!mutationHeaders('/api/files/access').Authorization)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [storage, setStorage] = useState<components['schemas']['FileStorageStatus'][]>([])
+  const [checking, setChecking] = useState(false)
+  const [storageError, setStorageError] = useState('')
+  async function checkStorage() {
+    setChecking(true)
+    setStorageError('')
+    try {
+      setStorage(
+        (await request<components['schemas']['FileStorageStatus'][]>('/api/files/storage-check', undefined, 'POST')) ??
+          [],
+      )
+    } catch (error) {
+      setStorageError(`Storage check failed: ${errorMessage(error)} Browsing remains available.`)
+    } finally {
+      setChecking(false)
+    }
+  }
   async function unlock() {
     setBusy(true)
     setError('')
@@ -17,6 +35,7 @@ export function FileAccess() {
       await request('/api/files/access')
       setValue('')
       setUnlocked(true)
+      await checkStorage()
     } catch (error) {
       setMutationToken('')
       setError(errorMessage(error))
@@ -30,13 +49,17 @@ export function FileAccess() {
       description="Unlock explicitly writable libraries for this tab. Read-only libraries stay protected."
     >
       <p className="text-sm text-muted">
-        The access token stays in this tab. Unlock file management again after refreshing.
+        The access token stays in this tab. Unlock file management again after refreshing. Existing Docker installations
+        must change the media mount from :ro to :rw and enable Writable to use uploads, moves or deletion. Read-only
+        browsing and playback continue to work.
       </p>
       {unlocked ? (
         <QuietButton
           onClick={() => {
             setMutationToken('')
             setUnlocked(false)
+            setStorage([])
+            setStorageError('')
           }}
         >
           Lock file management
@@ -56,6 +79,23 @@ export function FileAccess() {
             {busy ? 'Checking…' : 'Unlock file management'}
           </QuietButton>
         </form>
+      )}
+      {unlocked && (
+        <QuietButton disabled={checking} onClick={() => void checkStorage()}>
+          {checking ? 'Checking media mounts…' : 'Check media mounts'}
+        </QuietButton>
+      )}
+      {storage
+        .filter(item => item.warning)
+        .map(item => (
+          <p key={item.libraryId} role="alert" className="text-sm text-danger">
+            {item.name}: {item.warning}
+          </p>
+        ))}
+      {storageError && (
+        <p role="alert" className="text-sm text-danger">
+          {storageError}
+        </p>
       )}
       {error && (
         <p role="alert" className="text-sm text-danger">
