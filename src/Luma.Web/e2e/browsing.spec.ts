@@ -29,27 +29,29 @@ test.beforeEach(async ({ page }) => {
     .toBeGreaterThan(0)
 })
 
-test('anchors mobile search to its icon and closes it with the cross', async ({ page }, testInfo) => {
+test('phone search has room for suggestions and closes without clearing the query', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile', 'Mobile search reveal')
   const open = page.getByRole('button', { name: 'Open search' })
   const filters = page.getByRole('button', { name: 'Filters', exact: true })
-  const filterPosition = await filters.boundingBox()
-  const buttonPosition = await open.boundingBox()
-  expect(buttonPosition!.x).toBeGreaterThan(page.viewportSize()!.width / 2)
   await open.click()
   const search = page.getByRole('combobox', { name: 'Search media' })
   await expect(search).toBeFocused()
-  await expect(page.getByRole('button', { name: 'Close search' })).toBeVisible()
-  await expect.poll(async () => (await filters.boundingBox())?.x).toBe(filterPosition!.x)
+  await expect(filters).toHaveCount(0)
   await search.fill('holiday')
+  await expect
+    .poll(async () => (await search.boundingBox())?.width ?? 0)
+    .toBeGreaterThan(page.viewportSize()!.width * 0.6)
+  await expect(page.getByRole('button', { name: 'Close search' })).toBeVisible()
   await page.screenshot({ animations: 'disabled', path: 'test-results/search-mobile.png' })
-  // With text entered the cross clears it first; the next cross closes the field.
-  await expect(page.getByRole('button', { name: 'Close search' })).toBeHidden()
-  await page.getByRole('button', { name: 'Clear search' }).click()
-  await expect(search).toHaveValue('')
   await page.getByRole('button', { name: 'Close search' }).click()
   await expect(open).toBeVisible()
+  await expect(filters).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Switch application,/ })).toBeVisible()
   await expect(search).toBeHidden()
+  await open.click()
+  await expect(search).toHaveValue('holiday')
+  await page.getByRole('button', { name: 'Clear search' }).click()
+  await expect(search).toHaveValue('')
 })
 
 test('previews distinct light and dark themes and scrolls settings clear of navigation', async ({ page }, testInfo) => {
