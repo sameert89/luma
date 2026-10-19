@@ -25,6 +25,10 @@ public sealed class ComicOrganizationTests
         await tags.BulkAsync(new([id], [tag.Id], []), default);
         var sources = new PanelSources(f.Database, f.Options, new ConfigurationBuilder().Build());
         await sources.SaveAsync([new(1, "Comics")], default);
+        Assert.Equal("waiting", await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE MediaId=@id", new { id }));
+        await db.ExecuteAsync("UPDATE ProcessingJobs SET State='pending' WHERE MediaId=@id", new { id });
+        await sources.InitializeAsync(default);
+        Assert.Equal("waiting", await db.ExecuteScalarAsync<string>("SELECT State FROM ProcessingJobs WHERE MediaId=@id", new { id }));
         var (predicate, parameters) = new MediaQuery().Normalize().Predicate();
         Assert.Equal(1, await db.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM Media m WHERE {predicate}", parameters));
         Assert.Empty(await tags.FindAsync("Comic", 20, default));

@@ -11,6 +11,7 @@ public sealed record PanelSourceConfiguration(bool Configured, IReadOnlyList<Pan
 public sealed record PanelSourceUpdate(IReadOnlyList<PanelSourceLocation> Locations);
 public sealed class PanelSources(Database database, IndexingOptions options, IConfiguration configuration)
 {
+    private const string PauseGallerySql = "UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN (SELECT m.Id FROM Media m WHERE m.FolderId IN (" + Luma.Server.Features.Libraries.HiddenFolders.Descendants + "))";
     public async Task<SourceFolderPage> FoldersAsync(long libraryId, string path, string? q, int offset, CancellationToken ct)
     {
         var root = options.Libraries.Find(x => x.Id == libraryId) ?? throw ApiRequestException.Missing();
@@ -52,6 +53,8 @@ public sealed class PanelSources(Database database, IndexingOptions options, ICo
     {
         var defaults = configuration.GetSection("Luma:Panels:Sources").Get<List<PanelSourceLocation>>() ?? [];
         if (defaults.Count != 0 && !(await GetAsync(ct)).Configured) await SaveAsync(defaults, ct);
+        await using var db = await database.OpenAsync(ct);
+        await db.ExecuteAsync(new CommandDefinition(PauseGallerySql, cancellationToken: ct));
     }
     public async Task SaveAsync(IReadOnlyList<PanelSourceLocation> locations, CancellationToken ct)
     {
@@ -72,6 +75,8 @@ public sealed class PanelSources(Database database, IndexingOptions options, ICo
         {
             await db.ExecuteAsync(new CommandDefinition("INSERT INTO PanelSources(LibraryId,RelativePath,PathKey,ImageFolders,ExcludeFromGallery) VALUES(@LibraryId,@RelativePath,@PathKey,@ImageFolders,@ExcludeFromGallery); INSERT INTO ComicJobs(LibraryId,Source,Recursive,ImageFolders,CreatedAt) VALUES(@LibraryId,@RelativePath,1,@ImageFolders,@now)", new { source.LibraryId, source.RelativePath, source.PathKey, source.ImageFolders, source.ExcludeFromGallery, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
         }
+        // Stop queued Gallery previews for excluded sources without discarding their identities.
+        await db.ExecuteAsync(new CommandDefinition(PauseGallerySql, transaction: tx, cancellationToken: ct));
         tx.Commit();
     }
     private sealed class SourceRow
