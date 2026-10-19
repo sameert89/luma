@@ -58,6 +58,14 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
             OR EXISTS(SELECT 1 FROM PanelSources s WHERE s.LibraryId=c.LibraryId
               AND (s.PathKey='' OR c.PathKey=s.PathKey OR (c.PathKey>=s.PathKey||'/' AND c.PathKey<s.PathKey||'0'))))
         """;
+    public async Task<IReadOnlyList<Luma.Server.Features.Media.SearchSuggestion>> SuggestAsync(string? q, int limit, CancellationToken ct)
+    {
+        if (q?.Length > 200 || limit is < 1 or > 20) throw ApiRequestException.Invalid();
+        if (string.IsNullOrWhiteSpace(q)) return [];
+        await using var db = await database.OpenAsync(ct);
+        var rows = await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + " AND instr(lower(c.Title),lower(@q))>0 ORDER BY c.Id DESC LIMIT @limit", new { q = q.Trim(), limit }, cancellationToken: ct));
+        return rows.Select(x => new Luma.Server.Features.Media.SearchSuggestion("comic", x.Title, x.Id, x.Series)).ToArray();
+    }
     public async Task<ComicList> ListAsync(string? q, string? state, string? series, bool? favourite, long? cursor, CancellationToken ct)
     {
         if (q?.Length > 200 || state is not (null or "unread" or "reading" or "completed") || cursor < 0) throw ApiRequestException.Invalid();

@@ -137,7 +137,6 @@ if (Directory.Exists(app.Environment.WebRootPath))
 // Build-time OpenAPI extraction must not create or migrate a database.
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
-    _ = app.Services.GetRequiredService<Luma.Server.Features.Files.MutationAccess>();
     await app.Services.GetRequiredService<MigrationRunner>().ApplyAsync(app.Lifetime.ApplicationStopping);
     // Browsing depends on WAL: without it every read blocks writers (and vice versa), and
     // requests fail with "database is locked" under indexing load.
@@ -149,6 +148,7 @@ if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
     }
     await app.Services.GetRequiredService<CursorSigner>().InitializeAsync(app.Lifetime.ApplicationStopping);
     await app.Services.GetRequiredService<IndexingSetup>().InitializeAsync(app.Lifetime.ApplicationStopping);
+    await app.Services.GetRequiredService<MutationAccess>().InitializeAsync(app.Services.GetRequiredService<Database>(), app.Lifetime.ApplicationStopping);
     await app.Services.GetRequiredService<UiConfiguration>().InitializeAsync(app.Lifetime.ApplicationStopping);
     await app.Services.GetRequiredService<PanelSources>().InitializeAsync(app.Lifetime.ApplicationStopping);
 }

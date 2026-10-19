@@ -34,6 +34,6 @@ public static class UiConfigurationEndpoints
     {
         app.MapGet("/api/ui-configuration", (UiConfiguration settings) => TypedResults.Ok(new UiConfigurationResponse(settings.Applications, settings.Defaults))).WithName("GetUiConfiguration");
         app.MapPut("/api/files/applications", async (ApplicationFlags flags, UiConfiguration settings, CancellationToken ct) =>
-        { await settings.SaveAsync(flags, ct); return TypedResults.NoContent(); }).AddEndpointFilter<MutationAccessFilter>().WithName("UpdateApplications");
+        { await settings.SaveAsync(flags, ct); return TypedResults.NoContent(); }).AddEndpointFilter<SameOriginFilter>().WithName("UpdateApplications");
     }
 }

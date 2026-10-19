@@ -11,6 +11,36 @@ public sealed record PanelSourceConfiguration(bool Configured, IReadOnlyList<Pan
 public sealed record PanelSourceUpdate(IReadOnlyList<PanelSourceLocation> Locations);
 public sealed class PanelSources(Database database, IndexingOptions options, IConfiguration configuration)
 {
+    public async Task<SourceFolderPage> FoldersAsync(long libraryId, string path, string? q, int offset, CancellationToken ct)
+    {
+        var root = options.Libraries.Find(x => x.Id == libraryId) ?? throw ApiRequestException.Missing();
+        path = MutationPaths.Normalize(path, allowRoot: true);
+        if (offset is < 0 or > 1000000 || q?.Length > 200) throw ApiRequestException.Invalid();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var key = Luma.Server.Features.Media.SearchText.Key(q.Trim());
+            await using var db = await database.OpenAsync(ct);
+            var rows = await db.QueryAsync<string>(new CommandDefinition("""
+                SELECT RelativePath FROM Folders WHERE LibraryId=@libraryId AND ParentId IS NOT NULL
+                  AND ((NameKey>=@key AND NameKey<@end)
+                    OR Id IN (SELECT rowid FROM FolderSearch WHERE FolderSearch MATCH @fts LIMIT 200))
+                ORDER BY NameKey,Id LIMIT 51
+                """, new { libraryId, key, end = key + "\U0010FFFF", fts = "NameKey:\"" + key.Replace("\"", "\"\"") + "\"" }, cancellationToken: ct));
+            var found = rows.Select(x => new SourceFolderChoice(x.Split('/')[^1], x)).ToArray();
+            return new(found.Take(50).ToArray(), null);
+        }
+        // Explicit source selection may browse originals, including unindexed comic-only trees.
+        // Normal gallery/search and indexed folder search never execute this branch.
+        var directory = SourcePaths.Resolve(root, path);
+        var items = new List<SourceFolderChoice>();
+        foreach (var folder in SourceTraversal.Enumerate(directory, recursive: false).OfType<DirectoryInfo>().Skip(offset))
+        {
+            ct.ThrowIfCancellationRequested();
+            items.Add(new(folder.Name, Path.GetRelativePath(root.Path, folder.FullName).Replace('\\', '/')));
+            if (items.Count == 51) break;
+        }
+        return new(items.Take(50).ToArray(), items.Count > 50 ? offset + 50 : null);
+    }
     public async Task<PanelSourceConfiguration> GetAsync(CancellationToken ct)
     {
         await using var db = await database.OpenAsync(ct);
@@ -51,3 +81,6 @@ public sealed class PanelSources(Database database, IndexingOptions options, ICo
         public bool ImageFolders { get; set; }
     }
 }
+
+public sealed record SourceFolderChoice(string Name, string RelativePath);
+public sealed record SourceFolderPage(IReadOnlyList<SourceFolderChoice> Items, int? NextOffset);

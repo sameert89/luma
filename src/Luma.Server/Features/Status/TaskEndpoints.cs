@@ -74,7 +74,7 @@ public static class TaskEndpoints
             var (kind, key) = Parse(id);
             if (kind == "comic")
             {
-                access.Authorize(context);
+                MutationAccess.CheckOrigin(context.Request);
                 await using var comicDb = await database.OpenAsync(ct);
                 await comicDb.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET State='cancelled' WHERE Id=@key AND State IN ('queued','running')", new { key }, cancellationToken: ct));
                 return Results.NoContent();
@@ -89,7 +89,7 @@ public static class TaskEndpoints
             var (kind, key) = Parse(id);
             if (kind == "comic")
             {
-                access.Authorize(context);
+                MutationAccess.CheckOrigin(context.Request);
                 await using var comicDb = await database.OpenAsync(ct);
                 var old = await comicDb.QuerySingleOrDefaultAsync<ComicJob>(new CommandDefinition("SELECT * FROM ComicJobs WHERE Id=@key", new { key }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
                 if (old.State is "queued" or "running") throw new ApiRequestException(409, "comic_job_active", "The comic task is still active.");

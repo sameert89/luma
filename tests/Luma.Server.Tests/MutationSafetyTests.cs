@@ -65,34 +65,27 @@ public sealed class MutationSafetyTests
     }
 
     [Fact]
-    public void Writes_require_long_configured_token_and_same_origin()
+    public async Task File_toggle_persists_over_environment_without_tokens_and_still_checks_origin()
     {
-        var token = new string('x', 48);
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Luma:Files:AccessToken"] = token }).Build();
+        await using var f = await PipelineFixture.CreateAsync();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Luma:Files:Enabled"] = "true" }).Build();
         var access = new MutationAccess(configuration);
         var context = new DefaultHttpContext();
         context.Request.Scheme = "https";
         context.Request.Host = new HostString("luma.example");
-        Assert.Equal(401, Assert.Throws<ApiRequestException>(() => access.Authorize(context)).Status);
-        context.Request.Headers.Authorization = "Bearer " + token;
         access.Authorize(context);
         context.Request.Headers.Origin = "https://evil.example";
         Assert.Equal(403, Assert.Throws<ApiRequestException>(() => access.Authorize(context)).Status);
         context.Request.Headers.Origin = "https://luma.example";
         access.Authorize(context);
-        context.Request.Headers["Sec-Fetch-Site"] = "cross-site";
-        Assert.Equal(403, Assert.Throws<ApiRequestException>(() => access.Authorize(context)).Status);
-        var disabled = new MutationAccess(new ConfigurationBuilder().Build());
-        Assert.False(disabled.Enabled);
-        context.Request.Headers.Remove("Sec-Fetch-Site");
-        Assert.Equal(401, Assert.Throws<ApiRequestException>(() => disabled.Authorize(context)).Status);
-    }
-
-    [Fact]
-    public void Weak_tokens_fail_closed_and_libraries_default_to_read_only()
-    {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Luma:Files:AccessToken"] = "weak" }).Build();
-        Assert.Throws<InvalidOperationException>(() => new MutationAccess(configuration));
+        await access.SaveAsync(false, f.Database, default);
+        var restarted = new MutationAccess(configuration);
+        await restarted.InitializeAsync(f.Database, default);
+        Assert.False(restarted.Enabled);
+        Assert.Equal(403, Assert.Throws<ApiRequestException>(() => restarted.Authorize(context)).Status);
+        await restarted.SaveAsync(true, f.Database, default);
+        restarted.Authorize(context);
+        Assert.False(new MutationAccess(new ConfigurationBuilder().Build()).Enabled);
         Assert.False(new LibraryOptions().Writable);
     }
     [Fact]

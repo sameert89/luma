@@ -9,11 +9,14 @@ public static class FileEndpoints
     public static void MapFileOperations(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/files/capabilities", (IndexingOptions options, MutationAccess access, FileWriteAvailability availability) =>
-            TypedResults.Ok(new FileCapabilities(access.Enabled, options.Libraries.Select(x => new FileCapability(x.Id, x.Writable && availability.CanWrite(x.Id))).ToArray())))
+            TypedResults.Ok(new FileCapabilities(access.Enabled, options.Libraries.Select(x => new FileCapability(x.Id, access.Enabled && x.Writable && availability.CanWrite(x.Id))).ToArray())))
             .WithName("GetFileCapabilities");
         app.MapGet("/api/files/storage-status", (FileWriteAvailability availability, MutationAccess access) =>
             TypedResults.Ok(new FileStorageReport(availability.BootId, access.Enabled, availability.Statuses)))
             .WithName("GetFileStorageStatus");
+        app.MapGet("/api/files/settings", (MutationAccess access) => TypedResults.Ok(new FileManagementSettings(access.Enabled))).WithName("GetFileManagementSettings");
+        app.MapPut("/api/files/settings", async (FileManagementSettings settings, MutationAccess access, Database database, CancellationToken ct) =>
+        { await access.SaveAsync(settings.Enabled, database, ct); return TypedResults.NoContent(); }).AddEndpointFilter<SameOriginFilter>().WithName("UpdateFileManagementSettings");
         var files = app.MapGroup("/api/files").AddEndpointFilter<MutationAccessFilter>();
         files.MapPost("/storage-check", async (IndexingOptions options, FileWriteAvailability availability, CancellationToken ct) =>
         {

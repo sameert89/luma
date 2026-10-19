@@ -2636,6 +2636,47 @@
         }
       }
     },
+    "/api/files/settings": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileManagementSettings",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileManagementSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "UpdateFileManagementSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileManagementSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/panels/sources": {
       "get": {
         "tags": [
@@ -2673,6 +2714,99 @@
         "responses": {
           "204": {
             "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/panels/suggestions": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicSuggestions",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchSuggestion"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/source-folders": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicSourceFolders",
+        "parameters": [
+          {
+            "name": "libraryId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceFolderPage"
+                }
+              }
+            }
           }
         }
       }
@@ -2904,6 +3038,13 @@
             "schema": {
               "type": "integer",
               "format": "int32"
+            }
+          },
+          {
+            "name": "mediaType",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -4029,6 +4170,17 @@
           },
           "relativePath": {
             "type": "string"
+          }
+        }
+      },
+      "FileManagementSettings": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -5282,6 +5434,41 @@
           "libraryId": {
             "type": "integer",
             "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "SourceFolderChoice": {
+        "required": [
+          "name",
+          "relativePath"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "relativePath": {
+            "type": "string"
+          }
+        }
+      },
+      "SourceFolderPage": {
+        "required": [
+          "items",
+          "nextOffset"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceFolderChoice"
+            }
+          },
+          "nextOffset": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         }

@@ -10,6 +10,8 @@ public static class PanelEndpoints
     public static void MapPanels(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/panels/sources", async (PanelSources sources, CancellationToken ct) => TypedResults.Ok(await sources.GetAsync(ct))).WithName("GetComicSources");
+        app.MapGet("/api/panels/suggestions", async (string? q, int? limit, ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.SuggestAsync(q, limit ?? 8, ct))).WithName("GetComicSuggestions");
+        app.MapGet("/api/panels/source-folders", async (long libraryId, string? path, string? q, int? offset, PanelSources sources, CancellationToken ct) => TypedResults.Ok(await sources.FoldersAsync(libraryId, path ?? "", q, offset ?? 0, ct))).AddEndpointFilter<SameOriginFilter>().WithName("GetComicSourceFolders");
         app.MapGet("/api/panels/comics", async (string? q, string? state, string? series, bool? favourite, long? cursor, ComicLibrary library, CancellationToken ct) =>
             TypedResults.Ok(await library.ListAsync(q, state, series, favourite, cursor, ct))).WithName("GetComicLibrary");
         app.MapGet("/api/panels/comics/{id:long}", async (long id, ComicLibrary library, CancellationToken ct) =>
@@ -23,7 +25,7 @@ public static class PanelEndpoints
         app.MapGet("/api/panels/statistics", async (ComicProgress progress, CancellationToken ct) =>
             TypedResults.Ok(await progress.StatisticsAsync(ct))).WithName("GetReadingStatistics");
         app.MapPut("/api/panels/sources", async (PanelSourceUpdate update, HttpContext context, PanelSources sources, CancellationToken ct) => { MutationAccess.CheckOrigin(context.Request); await sources.SaveAsync(update.Locations, ct); return TypedResults.NoContent(); }).WithName("UpdateComicSources");
-        var manage = app.MapGroup("/api/panels").AddEndpointFilter<MutationAccessFilter>();
+        var manage = app.MapGroup("/api/panels").AddEndpointFilter<SameOriginFilter>();
 
         manage.MapPost("/discover", async (ComicRegistration registration, ComicLibrary library, CancellationToken ct) =>
             TypedResults.Accepted(uri: (string?)null, value: await library.QueueAsync(registration, ct))).WithName("DiscoverComics");

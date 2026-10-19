@@ -1,5 +1,4 @@
 import type { components } from '../../lib/api/generated'
-import { mutationHeaders } from '../../lib/api/mutationAccess'
 import { request } from '../browse/api'
 import { waitForOperation, type OperationAccepted } from '../files/operations'
 import { ApiError } from '../../lib/api/client'
@@ -182,7 +181,6 @@ async function transfer(item: QueuedUpload) {
           method: 'PATCH',
           signal: controller.signal,
           headers: {
-            ...mutationHeaders('/api/files/uploads'),
             'Content-Type': 'application/octet-stream',
             Accept: 'application/json',
           },

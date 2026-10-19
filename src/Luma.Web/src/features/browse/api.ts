@@ -1,5 +1,4 @@
 import type { components, operations } from '../../lib/api/generated'
-import { mutationHeaders } from '../../lib/api/mutationAccess'
 import { ApiError } from '../../lib/api/client'
 
 export type Media = components['schemas']['MediaSummary']
@@ -23,7 +22,6 @@ export async function request<T>(path: string, signal?: AbortSignal, method = 'G
       method,
       keepalive: method === 'PUT' && path.startsWith('/api/panels/comics/') && path.endsWith('/progress'),
       headers: {
-        ...mutationHeaders(path),
         Accept: 'application/json',
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },

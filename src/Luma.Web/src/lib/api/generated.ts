@@ -688,6 +688,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileManagementSettings"];
+        put: operations["UpdateFileManagementSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panels/sources": {
         parameters: {
             query?: never;
@@ -697,6 +713,38 @@ export interface paths {
         };
         get: operations["GetComicSources"];
         put: operations["UpdateComicSources"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/source-folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicSourceFolders"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1259,6 +1307,9 @@ export interface components {
             libraryId: number;
             relativePath: string;
         };
+        FileManagementSettings: {
+            enabled: boolean;
+        };
         FileOperation: {
             id?: string;
             /** Format: int64 */
@@ -1646,6 +1697,15 @@ export interface components {
             detail?: string | null;
             /** Format: int64 */
             libraryId?: number | null;
+        };
+        SourceFolderChoice: {
+            name: string;
+            relativePath: string;
+        };
+        SourceFolderPage: {
+            items: components["schemas"]["SourceFolderChoice"][];
+            /** Format: int32 */
+            nextOffset: number | null;
         };
         StartScanRequest: {
             /** @default false */
@@ -3176,6 +3236,48 @@ export interface operations {
             };
         };
     };
+    GetFileManagementSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileManagementSettings"];
+                };
+            };
+        };
+    };
+    UpdateFileManagementSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileManagementSettings"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetComicSources: {
         parameters: {
             query?: never;
@@ -3215,6 +3317,54 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetComicSuggestions: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchSuggestion"][];
+                };
+            };
+        };
+    };
+    GetComicSourceFolders: {
+        parameters: {
+            query: {
+                libraryId: number;
+                path?: string;
+                q?: string;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceFolderPage"];
+                };
             };
         };
     };
@@ -3358,6 +3508,7 @@ export interface operations {
             query?: {
                 q?: string;
                 limit?: number;
+                mediaType?: string;
             };
             header?: never;
             path?: never;

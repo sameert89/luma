@@ -1,22 +1,30 @@
-using System.Security.Cryptography;
-using System.Text;
+using Dapper;
+using Luma.Server.Data;
 using Luma.Server.Http;
 
 namespace Luma.Server.Features.Files;
 
-// One administrator capability, independent of read-only browsing. No secret is returned by APIs.
+// A single-user preference, not authentication. Writable roots remain separately opt-in.
 public sealed class MutationAccess(IConfiguration configuration)
 {
-    private readonly byte[]? tokenHash = Hash(configuration["Luma:Files:AccessToken"]);
-    public bool Enabled => tokenHash is not null;
+    public bool Enabled { get; private set; } = configuration.GetValue("Luma:Files:Enabled", false);
 
+    public async Task InitializeAsync(Database database, CancellationToken ct)
+    {
+        await using var db = await database.OpenAsync(ct);
+        var stored = await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT Value FROM ApplicationState WHERE Key='fileManagementEnabled'", cancellationToken: ct));
+        if (stored is not null) Enabled = stored == "1";
+    }
+    public async Task SaveAsync(bool enabled, Database database, CancellationToken ct)
+    {
+        await using var db = await database.OpenAsync(ct);
+        await db.ExecuteAsync(new CommandDefinition("INSERT INTO ApplicationState(Key,Value) VALUES('fileManagementEnabled',@value) ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value", new { value = enabled ? "1" : "0" }, cancellationToken: ct));
+        Enabled = enabled;
+    }
     public void Authorize(HttpContext context)
     {
         CheckOrigin(context.Request);
-        var header = context.Request.Headers.Authorization.ToString();
-        var token = header.StartsWith("Bearer ", StringComparison.Ordinal) ? header[7..] : null;
-        if (tokenHash is null || token is null || !CryptographicOperations.FixedTimeEquals(tokenHash, SHA256.HashData(Encoding.UTF8.GetBytes(token))))
-            throw new ApiRequestException(401, "mutation_unauthorized", "File management requires the configured access token.");
+        if (!Enabled) throw new ApiRequestException(403, "file_management_disabled", "Enable file management in Settings to change original files.");
     }
 
     internal static void CheckOrigin(HttpRequest request)
@@ -35,13 +43,6 @@ public sealed class MutationAccess(IConfiguration configuration)
             throw new ApiRequestException(403, "cross_origin_write", "Cross-origin requests are not allowed. Configure Luma:PublicOrigin for your external HTTPS URL.");
     }
 
-    private static byte[]? Hash(string? token)
-    {
-        if (string.IsNullOrEmpty(token)) return null;
-        if (Encoding.UTF8.GetByteCount(token) < 32)
-            throw new InvalidOperationException("Luma:Files:AccessToken must contain at least 32 UTF-8 bytes.");
-        return SHA256.HashData(Encoding.UTF8.GetBytes(token));
-    }
 }
 
 public sealed class MutationAccessFilter(MutationAccess access) : IEndpointFilter
@@ -52,3 +53,13 @@ public sealed class MutationAccessFilter(MutationAccess access) : IEndpointFilte
         return next(context);
     }
 }
+
+public sealed class SameOriginFilter : IEndpointFilter
+{
+    public ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        MutationAccess.CheckOrigin(context.HttpContext.Request);
+        return next(context);
+    }
+}
+public sealed record FileManagementSettings(bool Enabled);
