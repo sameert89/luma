@@ -115,26 +115,20 @@ picture-in-picture is offered where the browser supports it.
 
 ## Optional file management and uploads
 
-The default media mount remains read-only. File management requires both an
-administrator token and an explicitly writable library backed by a writable mount.
-Unlocking runs a mount check. Failed checks disable file actions for the affected
-library and block new file operations and upload writes before filesystem work.
-Browsing, playback, captions and tag editing remain available. Correct the mount
-or permissions, then use **Check media mounts** in Settings to restore file actions.
-A background check also runs at server startup; capability reads use memory and never inspect originals. The startup banner explains read-only libraries and remains dismissible for that server boot.
-A check reflects current root access, not a guarantee against later filesystem changes.
-Existing operation journals and recovery evidence are retained.
-To opt in for library 1, generate a token with `openssl rand -hex 32` and store it
-as `LUMA_FILE_ACCESS_TOKEN` in the deployment's private `.env` file. Do not commit
-that file. The token must contain at least 32 UTF-8 bytes.
+The default media mount remains read-only. File management is a single-user
+preference, disabled by default. Turn on **Settings → General → File management →
+Enable file management**. There is no administrator token or per-tab unlock.
+The saved server choice overrides `Luma__Files__Enabled` on later boots. Old
+`Luma__Files__AccessToken` values are ignored and can be removed.
 
-Create `compose.files.yaml` alongside `docker-compose.yaml`:
+Each editable library also needs Writable enabled and a writable media mount.
+For example, create `compose.files.yaml` alongside `docker-compose.yaml`:
 
 ```yaml
 services:
   luma:
     environment:
-      Luma__Files__AccessToken: "${LUMA_FILE_ACCESS_TOKEN:?Set a private administrator token}"
+      Luma__Files__Enabled: "true"
       Luma__Indexing__Libraries__0__Writable: "true"
       Luma__Uploads__Concurrency: "2"
       Luma__Uploads__MaxFileBytes: "107374182400"
@@ -143,36 +137,26 @@ services:
       - "${LUMA_MEDIA_PATH:?Set LUMA_MEDIA_PATH}:/media:rw"
 ```
 
-Check and start with the same file pair on every invocation:
-
 ```sh
 docker compose -f docker-compose.yaml -f compose.files.yaml config
 docker compose -f docker-compose.yaml -f compose.files.yaml up -d
 ```
 
-The example limits each file to 100 GiB and active upload reservations to 200 GiB.
-The defaults are 1 TiB for each; configure these for available media-volume space.
-There are at most 128 active upload sessions and 1–4 concurrent chunk transfers.
-Reservation accounting does not reserve physical disk space. Recycled content and
-other writes consume the same volume, so monitor actual free space too.
+Startup and explicit mount checks disable file changes on read-only or failed
+roots. A brief floating notice explains that browsing/playback still work. Full
+mount details remain in File management; after correcting permissions, select
+**Check media mounts**. Indexed capability reads never access originals.
 
-Open Settings → General → File management and unlock this tab with the token. Refreshing
-requires unlocking again; the browser does not persist the token. Use trusted
-HTTPS for remote access. The token grants file management across the configured
-writable libraries and protected comic administration; it is not a general login
-system for read-only browsing or all existing APIs. Keep the service on trusted
-networks or behind an appropriate access gateway.
+The example allows 100 GiB files and 200 GiB of active upload reservations. The
+default for each limit is 1 TiB. Reservations do not reserve physical disk space;
+monitor actual media-volume space. Uploads allow at most 128 active sessions and
+1–4 concurrent chunk transfers. Native folder picking preserves relative paths.
+After refresh, reselect the matching files to resume durable upload offsets.
 
-For a reverse proxy, preserve the browser-facing `Host` and scheme; mutation
-requests reject a mismatching `Origin` or cross-site fetch. Forward `Authorization`
-and allow `PATCH` plus request bodies of at least 8 MiB for upload chunks (for
-nginx, `client_max_body_size 9m;` permits the maximum chunk). Set an upload timeout
-suited to slow clients, and avoid automatic retries of write requests. The upload
-protocol uses `/api/files/uploads`, not tus: clients query the committed offset
-after an interrupted response before retrying. The browser asks for file
-reselection after a refresh and resumes only a matching file. Folder picking
-preserves relative paths. Finalization publishes through the file journal, then
-queues indexing; uploaded content may take time to appear.
+Preserve same-origin browser headers behind a proxy. Cross-site requests remain
+rejected. Allow PATCH bodies of at least 8 MiB (for nginx, `client_max_body_size
+9m;`) and pass Range/If-Range headers unchanged. Do not automatically retry write
+requests. The upload protocol is `/api/files/uploads`, not tus.
 
 Gallery's Manage files and Recycle bin controls expose same-library moves,
 directory creation, recycling, explicit permanent deletion, restore and purge.
@@ -366,8 +350,7 @@ relative path selects a whole root. Saving locations queues a recursive scan for
 supported archives; image folders are included only when explicitly selected.
 Later visits open the saved bookshelf. Use **Comic locations** to change or
 rescan sources. This needs read access to originals and write access to Luma's
-data/cache directory; it does not require a writable media mount or administrator
-token. Removing a source hides its books while preserving metadata and reading
+data/cache directory; it does not require a writable media mount or file management to be enabled. Removing a source hides its books while preserving metadata and reading
 progress for re-adding it.
 
 ```yaml
@@ -384,7 +367,7 @@ environment:
 ```
 
 **In-app choices take precedence.** Global Flick/Panels switches are in Settings
-→ General → Applications after administrator unlock; they are stored in SQLite
+→ General → Applications independently of file management; they are stored in SQLite
 and override environment flags on subsequent boots. Disabling Panels pauses new
 comic jobs. Source environment entries seed a fresh installation only; saved
 Comic locations override them thereafter. Other UI choices are per-browser and
@@ -394,24 +377,24 @@ configuration.
 
 Supported `Luma__Ui__Preferences__` keys and values:
 
-| Key                                            | Value                                                                                               |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `luma-theme`                                   | Theme ID, for example `forest`                                                                      |
-| `luma-appearance-v2`                           | JSON appearance object: `background`, `blur`, `opacity`, `darkness`, `motion`, `splashes`           |
-| `luma-album-covers`                            | `smart` or `cropped`                                                                        |
-| `luma-reels-sort`                              | JSON `sort` and `order`                                                                             |
-| `luma-slideshow-seconds`                       | Slideshow interval in seconds                                                                       |
-| `luma-video-autoplay`                          | `true` or `false`                                                                                   |
-| `luma-viewer-fill`, `luma-reels-fill`          | `true` or `false`                                                                                   |
-| `luma-show-filters`, `luma-reels-show-filters` | `true` or `false`                                                                                   |
-| `luma-reels-state`                             | JSON `muted` and `autoScroll`                                                                       |
+| Key                                            | Value                                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `luma-theme`                                   | Theme ID, for example `forest`                                                                               |
+| `luma-appearance-v2`                           | JSON appearance object: `background`, `blur`, `opacity`, `darkness`, `motion`, `splashes`                    |
+| `luma-album-covers`                            | `smart` or `cropped`                                                                                         |
+| `luma-reels-sort`                              | JSON `sort` and `order`                                                                                      |
+| `luma-slideshow-seconds`                       | Slideshow interval in seconds                                                                                |
+| `luma-video-autoplay`                          | `true` or `false`                                                                                            |
+| `luma-viewer-fill`, `luma-reels-fill`          | `true` or `false`                                                                                            |
+| `luma-show-filters`, `luma-reels-show-filters` | `true` or `false`                                                                                            |
+| `luma-reels-state`                             | JSON `muted` and `autoScroll`                                                                                |
 | `luma-panels-reader-defaults`                  | JSON `mode` (`single`/`continuous`), `fit` (`screen`/`width`/`height`/`original`), `direction` (`ltr`/`rtl`) |
 
 Use the JSON shape stored under the matching browser storage key to reproduce
 complex appearance/cover settings. Uploaded background image bytes remain local
 to that browser; environment configuration selects built-in backgrounds. Saved
 per-book reader preferences override reader defaults. Secrets are never exposed
-through UI defaults; use the dedicated file-access-token configuration.
+through UI defaults.
 
 When an HTTPS reverse proxy changes the internal origin, modern browsers send
 `Sec-Fetch-Site: same-origin`, which captions and file operations accept. For

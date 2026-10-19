@@ -8,7 +8,7 @@ Luma is a lightweight, self-hosted photo and video browser built for large media
 - Photo and video viewing, slideshows, and the vertical Flick feed
 - Panels comic bookshelves with saved recursive sources and reading progress
 - Opt-in plain SRT captions from matching sidecars or embedded SubRip tracks
-- Optional uploads, folders, same-library moves and recycling after administrator unlock
+- Optional uploads, folders, same-library moves and recycling when file management is enabled
 - Keyword, path, date, media-type, size, orientation, preference, and tag filters
 - Cursor-paginated results, virtualized galleries, stable sorting, grouping, and shuffle
 - Tags, favourites, dislikes, custom album covers, hidden folders, and bulk editing
@@ -50,6 +50,10 @@ The Compose defaults are suitable for a single media root. The most commonly cha
 | `LUMA_MEDIA_PATH`      | Absolute host path mounted read-only as the media library | Required |
 | `LUMA_CASE_SENSITIVE`  | Whether media paths use case-sensitive identity           | `true`   |
 | `LUMA_SCAN_ON_STARTUP` | Start a full scan when the service starts                 | `false`  |
+
+The Compose environment also accepts `LUMA_FILES_ENABLED=false`,
+`LUMA_FLICK_ENABLED=true` and `LUMA_PANELS_ENABLED=true` as initial toggle defaults.
+Saved in-app choices take precedence on subsequent boots.
 
 ASP.NET Core configuration also accepts JSON, environment variables, and command-line arguments. Nested environment keys use double underscores, such as `Luma__DatabasePath` and `Luma__Indexing__CachePath`.
 
@@ -187,24 +191,25 @@ Created by Sameer Trivedi.
 
 ## Luma 2.0 file management and multiple libraries
 
-Browsing, playback, captions and tags work with read-only originals. For uploads,
-moves and deletion, configure a secret and explicitly opt each writable library in:
+Browsing, playback, captions and tags work with read-only originals. Enable
+**Settings → General → File management → Enable file management** to allow file
+changes. No password or administrator token is required. The switch is saved for
+the server and overrides the environment default on later boots.
 
 ```yaml
 environment:
-  Luma__Files__AccessToken: "${LUMA_FILES_TOKEN}"
+  Luma__Files__Enabled: "true"
   Luma__PublicOrigin: "https://luma.example.com"
   Luma__Indexing__Libraries__0__Writable: "true"
 volumes:
   - /your/photos:/media:rw
 ```
 
-Set `LUMA_FILES_TOKEN` to a random secret of at least 32 characters. Restart Luma,
-open **Settings → General → File management**, paste that exact secret into
-**Administrator access token**, then click **Unlock file management**. Unlocking
-lasts for this browser tab only. Never put the token in a URL. Failed startup or
-manual mount checks disable file changes; correct permissions/mounts and use
-**Check media mounts** to restore them.
+`Luma__Files__Enabled` defaults to `false`. Each library must also have Writable
+set to true and a writable mount. Failed mount checks disable changes for that
+library. Fix permissions/mounts and use **Check media mounts** to restore access.
+Flick and Panels default to enabled and their settings are independent of file
+management. Old `Luma__Files__AccessToken` values are ignored and can be removed.
 
 A library is a server-configured mounted root, not an album. To add another root,
 mount it into the container and add the next numbered library configuration:

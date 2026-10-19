@@ -4,18 +4,18 @@ Baseline: `0ba2838`, .NET 10 / Dapper / SQLite WAL, React 19 / TanStack Query an
 
 ## Source audit
 
-| Area | Existing implementation | Reuse / required changes |
-| --- | --- | --- |
-| Roots | `IndexingOptions`, `IndexingSetup`, `Libraries` | Stable IDs, no overlapping roots, case policy, symlink rejection. Add opt-in write configuration; configuration remains authoritative. |
-| Paths | `ScanWorker.SourcePaths`, `SourceTraversal` | Checks currently require every segment to exist. Add destination validation, protected internal directories, and journal staging paths. Exclude internal paths from traversal and watcher hints. |
-| Identity | `Media.Id`, `FolderAncestry`, path keys | Existing external moves produce missing old records. App-controlled moves must update existing IDs, paths and ancestry transactionally; don't infer identity for external moves. |
-| Discovery | `ScanWorker`, `DirtyFolders`, `AutomaticLibraryRefresh` | Keep discovery out of browse requests. Coordinate mutation with scan claims; enqueue relevant discovery after publication even in manual refresh mode. |
-| Tasks | `Scans`, `ProcessingJobs`, `MetadataJobs`, `TaskEndpoints` | Existing tasks are a projection of durable domain tables, not a generic queue. Add operation/upload projections to this same endpoint and controls; bounded domain workers are consistent with the existing design. |
-| Security | `Program`, common `ApiRequestException` | No existing user authentication. Write APIs require a server-configured mutation token plus explicitly writable root; reject cross-origin writes. Never enable anonymous destructive operations. |
-| Shell | `app/App.tsx`, `BottomNavigation`, `BackgroundJobsButton` | Existing URL/history and PWA restoration live in App. Preserve them, introduce logo switcher and experience-local route/query memory, retain floating task indicator everywhere. |
-| Feed | `browse/Reels`, `reelsSort`, `FilterForm` | Retain player, motion (video + GIF) behavior, and reusable query contract. Independent Flick query state supersedes the previous shared-state architectural contract. |
-| Comics | No existing subsystem | Separate indexed comic tables and bounded page providers. Explicit directory classification; on-demand archive pages and cached covers; never scan archives while listing. |
-| Appearance | `app/themes`, `styles.css`, `ThemePicker` | Extend existing tokens/preferences. Reduced motion and client appearance preferences remain separate from server write authority. |
+| Area       | Existing implementation                                    | Reuse / required changes                                                                                                                                                                                                 |
+| ---------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Roots      | `IndexingOptions`, `IndexingSetup`, `Libraries`            | Stable IDs, no overlapping roots, case policy, symlink rejection. Add opt-in write configuration; configuration remains authoritative.                                                                                   |
+| Paths      | `ScanWorker.SourcePaths`, `SourceTraversal`                | Checks currently require every segment to exist. Add destination validation, protected internal directories, and journal staging paths. Exclude internal paths from traversal and watcher hints.                         |
+| Identity   | `Media.Id`, `FolderAncestry`, path keys                    | Existing external moves produce missing old records. App-controlled moves must update existing IDs, paths and ancestry transactionally; don't infer identity for external moves.                                         |
+| Discovery  | `ScanWorker`, `DirtyFolders`, `AutomaticLibraryRefresh`    | Keep discovery out of browse requests. Coordinate mutation with scan claims; enqueue relevant discovery after publication even in manual refresh mode.                                                                   |
+| Tasks      | `Scans`, `ProcessingJobs`, `MetadataJobs`, `TaskEndpoints` | Existing tasks are a projection of durable domain tables, not a generic queue. Add operation/upload projections to this same endpoint and controls; bounded domain workers are consistent with the existing design.      |
+| Security   | `Program`, common `ApiRequestException`                    | No existing user authentication. File writes require the server-wide file-management switch and an explicitly writable root; reject cross-origin writes. This is a single-user application without token authentication. |
+| Shell      | `app/App.tsx`, `BottomNavigation`, `BackgroundJobsButton`  | Existing URL/history and PWA restoration live in App. Preserve them, introduce logo switcher and experience-local route/query memory, retain floating task indicator everywhere.                                         |
+| Feed       | `browse/Reels`, `reelsSort`, `FilterForm`                  | Retain player, motion (video + GIF) behavior, and reusable query contract. Independent Flick query state supersedes the previous shared-state architectural contract.                                                    |
+| Comics     | No existing subsystem                                      | Separate indexed comic tables and bounded page providers. Explicit directory classification; on-demand archive pages and cached covers; never scan archives while listing.                                               |
+| Appearance | `app/themes`, `styles.css`, `ThemePicker`                  | Extend existing tokens/preferences. Reduced motion and client appearance preferences remain separate from server write authority.                                                                                        |
 
 ## Incremental delivery
 
@@ -72,9 +72,9 @@ Required commands: backend build and tests, frontend build/tests/lint, generated
 
 ## Implemented increments
 
-- Mutation capability boundary: opt-in `LibraryOptions.Writable`, `Luma:Files:AccessToken` (minimum 32 UTF-8 bytes), Bearer authorization and same-origin browser checks. Browsing is unchanged. Client code must keep the secret in memory rather than localStorage.
+- Mutation capability boundary: opt-in `LibraryOptions.Writable`, `Luma:Files:Enabled`, a persisted Settings switch, and same-origin browser checks. Browsing is unchanged. Flick, Panels and comic metadata are independent of file management. Old access tokens are ignored.
 - Public relative paths reject traversal, internal staging, symlinks (including dangling links), Windows reserved names and excessive depth. Index traversal/watchers exclude staging at any nesting level.
-- First mutation implementation deliberately serializes each library and rejects an enqueue during indexing or unresolved work. Same-library moves only; no implicit overwrite or automatic recovery that guesses a public source's identity. `needsAttention` blocks further writes/indexing for that root until an administrator resolves the evidence. Automatic retention cleanup, cross-device moves and bulk batches are not yet implemented.
+- First mutation implementation deliberately serializes each library and rejects an enqueue during indexing or unresolved work. Same-library moves only; no implicit overwrite or automatic recovery that guesses a public source's identity. `needsAttention` blocks further writes/indexing for that root until the user resolves the evidence. Automatic retention cleanup, cross-device moves and bulk batches are not yet implemented.
 
 ### Upload protocol implemented
 
@@ -82,7 +82,7 @@ The [tusdotnet README](https://github.com/tusdotnet/tusdotnet/blob/master/README
 
 Chunks flush to disk before a FULL-synchronous offset checkpoint. A failed transfer may leave an uncommitted tail; the next request truncates it to the server checkpoint. Retrying a committed offset returns a conflict, so the client fetches the authoritative offset. Upload sessions waiting for bytes do not occupy workers; the first version conservatively reserves the entire library against mutations. Staging lives on the destination root. Finalization enqueues a journaled operation, uses a no-overwrite rename, updates session completion and schedules the existing shallow scan even in manual refresh mode.
 
-Browser controls appear in Gallery's folder toolbar. Settings unlocks the admin capability in memory only. Upload workers survive sub-app switches; localStorage records session IDs/targets/size/mtime, never token or file bytes. Refresh requires reselecting original files. Native folder selection preserves paths; drop currently accepts files only. Folder hierarchy is created through the operation journal before transfers begin. Conflicts are explicit; automatic replace, drag-and-drop directory traversal and adaptive concurrency remain unimplemented.
+Browser controls appear in Gallery's folder toolbar. Settings persists the file-management toggle for this server. Upload workers survive sub-app switches; localStorage records session IDs/targets/size/mtime, never file bytes. Refresh requires reselecting original files. Native folder selection preserves paths; drop currently accepts files only. Folder hierarchy is created through the operation journal before transfers begin. Conflicts are explicit; automatic replace, drag-and-drop directory traversal and adaptive concurrency remain unimplemented.
 
 ### Panels backend implemented
 
@@ -132,7 +132,7 @@ CI for `50e3a1b` passed backend formatting/build/tests on Linux and Windows, gen
 
 Panels now exposes the existing indexed favourites filter. Series-only and favourites-only deep links take precedence over a previous saved query, and changing filters resets cursor pagination. Three frontend regression tests cover URL precedence, persistence and pagination reset. Frontend build and all 169 unit tests pass locally.
 
-Deployment guidance now covers explicit writable-mount/token opt-in, bounded upload configuration, proxy headers/chunk limits, tab unlock, interrupted-operation recovery, and consistent backups of both SQLite and media-volume staging/trash. It distinguishes current manual purge from the still-pending automatic retention feature. Configuration names and limits were checked against server code; Docker is unavailable locally, so the Compose override has not been executed here. The restored local .NET SDK completed a Release solution build and all 184 backend tests successfully.
+Deployment guidance now covers explicit writable-mount/settings opt-in, bounded upload configuration, proxy headers/chunk limits, persistent file-management enablement, interrupted-operation recovery, and consistent backups of both SQLite and media-volume staging/trash. It distinguishes current manual purge from the still-pending automatic retention feature. Configuration names and limits were checked against server code; Docker is unavailable locally, so the Compose override has not been executed here. The restored local .NET SDK completed a Release solution build and all 184 backend tests successfully.
 
 ### Comic details editing
 
@@ -148,7 +148,7 @@ Synthetic browser fixtures now explicitly use manual refresh with refresh-on-ope
 
 ### Writable mount diagnostics
 
-File management now explains the :ro → :rw mount change required by existing Docker installations. After administrator unlock, an explicit protected storage diagnostic checks each opted-in writable root with a tiny, removed probe in the excluded operation staging area. A failed probe reports mount/permission/free-space guidance without blocking browsing/playback or revoking the tab token. Configured read-only roots are reported without filesystem access. Rechecking is available after configuration changes. The 2.0 in-app guide documents the diagnostic. Four backend checks, including Linux's read-only /sys mount, and five access/help UI checks pass; frontend build succeeds.
+File management now explains the :ro → :rw mount change required by existing Docker installations. When file management is enabled, an explicit storage diagnostic checks each opted-in writable root with a tiny, removed probe in the excluded operation staging area. A failed probe reports mount/permission/free-space guidance without blocking browsing/playback or revoking the tab token. Configured read-only roots are reported without filesystem access. Rechecking is available after configuration changes. The 2.0 in-app guide documents the diagnostic. Four backend checks, including Linux's read-only /sys mount, and five access/help UI checks pass; frontend build succeeds.
 
 ### Opt-in SRT caption backend
 

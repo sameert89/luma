@@ -6,6 +6,18 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.2',
+    date: '2026-10-19',
+    headline: 'Simpler single-user setup and consistent search',
+    changes: [
+      'Administrator tokens are gone. Enable file management with the saved Settings switch or its initial Luma__Files__Enabled environment default. Writable libraries still need a :rw mount.',
+      'Flick and Panels default to enabled and their switches work independently of file management.',
+      'Gallery, Collections, Flick and Panels share a visible header search with inline suggestions. Flick searches videos; Panels suggests comic titles only. Settings moves to the header and hides search and filters; bottom navigation contains Library and Collections.',
+      'The logo’s superscript icon identifies the active app. Settings has distinct group headings without a floating section bar, and read-only warnings are brief floating notices.',
+      'Choose comic folders by browsing mounted libraries, including folders not indexed yet, or search indexed folder names. Typing a full path is optional.',
+    ],
+  },
+  {
     version: '2.0.0-beta.1',
     date: '2026-10-18',
     headline: 'Luma 2.0 preview: Gallery, Flick and Panels',
