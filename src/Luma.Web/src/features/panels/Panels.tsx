@@ -197,10 +197,6 @@ export function Panels({
         value={search}
         onChange={setSearch}
         onSearch={() => change('q', search.trim())}
-        onClear={() => {
-          setSearch('')
-          change('q', '')
-        }}
         onSuggestion={suggestion => change('comic', String(suggestion.id))}
         suggestionsUrl="/api/panels/suggestions"
         searchLabel="Search comics"

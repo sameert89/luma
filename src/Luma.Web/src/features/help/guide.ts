@@ -451,10 +451,10 @@ export const guideSections: GuideSection[] = [
             what: 'Phone search starts collapsed. Search, Filters and Settings are grouped on the right. Tap Open search to replace the logo and actions with an input on the same header row; Close search restores the normal header without clearing your query. Suggestions open below the header at its full content width, so they are not squeezed by the other buttons. Desktop search stays visible.',
           },
           {
-            icons: [X],
+            icons: [Search],
             name: 'Clear search',
-            where: 'Header, when the search has text',
-            what: 'Clears the search and returns to the folder you searched from, or to the empty Search page.',
+            where: 'Search field',
+            what: 'Delete the text with your keyboard and submit the empty field to clear the search and return to the folder you searched from, or to the empty Search page. The cross on phones closes search without clearing your text.',
           },
         ],
       },

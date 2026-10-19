@@ -19,7 +19,6 @@ function Harness({ onSearch, onSuggestion }: { onSearch: () => void; onSuggestio
       onChange={setValue}
       onSearch={onSearch}
       onSuggestion={onSuggestion}
-      onClear={() => setValue('')}
       onHome={vi.fn()}
       onFilters={vi.fn()}
       searchRequested={false}
@@ -126,7 +125,6 @@ it('reveals phone search only on request, keeps actions together, and hides it o
         value="photos"
         onChange={vi.fn()}
         onSearch={vi.fn()}
-        onClear={vi.fn()}
         onHome={vi.fn()}
         onFilters={vi.fn()}
         onSettings={vi.fn()}
@@ -143,6 +141,8 @@ it('reveals phone search only on request, keeps actions together, and hides it o
   expect(opener.parentElement).toBe(screen.getByRole('button', { name: 'Settings' }).parentElement)
   await userEvent.click(opener)
   expect(screen.getByRole('textbox', { name: 'Search media' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull()
+  expect(screen.getAllByRole('button', { name: 'Close search' })).toHaveLength(1)
   expect(screen.queryByRole('button', { name: 'Switch application' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Filters' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()

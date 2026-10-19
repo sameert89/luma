@@ -868,7 +868,6 @@ export function App() {
           onFilters={() => setFilterOpen(true)}
           onSearch={submitSearch}
           onSuggestion={chooseSuggestion}
-          onClear={clearSearch}
           searchRequested={searchFocusRequested}
           scope={`${section}:${queryString(filters)}`}
           suggestionsUrl={section === 'reels' ? '/api/search/suggestions?mediaType=video' : undefined}

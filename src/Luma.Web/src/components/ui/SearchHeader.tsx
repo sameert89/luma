@@ -21,7 +21,6 @@ export function SearchHeader({
   onChange,
   onSearch,
   onSuggestion,
-  onClear,
   onHome,
   onFilters,
   searchRequested,
@@ -38,7 +37,6 @@ export function SearchHeader({
   onChange: (value: string) => void
   onSearch: () => void
   onSuggestion?: (suggestion: SearchSuggestion) => void
-  onClear: () => void
   onHome: () => void
   onFilters?: () => void
   searchRequested: boolean
@@ -233,17 +231,6 @@ export function SearchHeader({
               </ul>
             )}
           </div>
-          {value && (
-            <IconButton
-              label="Clear search"
-              onClick={() => {
-                onClear()
-                input.current?.focus()
-              }}
-            >
-              <X className="size-5" />
-            </IconButton>
-          )}
         </form>
       )}
       <div className="ml-auto flex min-h-11 shrink-0 items-center gap-2">
