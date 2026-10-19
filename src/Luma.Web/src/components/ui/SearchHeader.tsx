@@ -102,7 +102,7 @@ export function SearchHeader({
       {!hideSearch && (
         <form
           role="search"
-          className="order-last flex w-full min-w-0 items-center gap-2 sm:order-none sm:ml-auto sm:w-auto sm:max-w-xl sm:flex-1"
+          className="contents sm:ml-auto"
           onSubmit={event => {
             event.preventDefault()
             if (expanded && activeIndex >= 0) {
@@ -113,7 +113,7 @@ export function SearchHeader({
             onSearch()
           }}
         >
-          <div className="relative min-w-0 flex-1">
+          <div className="relative order-last w-full min-w-0 sm:order-none sm:ml-auto sm:w-auto sm:max-w-xl sm:flex-1">
             <div className="overflow-hidden">
               {/* A combobox: typing keeps focus in the field while Up/Down pick a suggestion. */}
               <Input

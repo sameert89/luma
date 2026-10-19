@@ -1,3 +1,4 @@
+import { FolderOpen, FolderPlus, Trash2, ScanLine, Check, ArrowUp, Home } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useEffect, useId, useRef, useState } from 'react'
 import { Checkbox, Field, Input, QuietButton, Select } from '../../components/ui/Controls'
@@ -73,6 +74,7 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
           </Field>
           <p className="break-words text-sm text-muted">{row.relativePath || 'Entire library'}</p>
           <QuietButton disabled={!row.libraryId} onClick={() => setBrowsing(index)}>
+            <FolderOpen className="size-4" aria-hidden="true" />
             Choose folder
           </QuietButton>
           <details className="text-sm text-muted">
@@ -86,6 +88,7 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
             </Field>
           </details>
           <QuietButton onClick={() => setLocations(rows => rows.filter((_, i) => i !== index))}>
+            <Trash2 className="size-4" aria-hidden="true" />
             Remove location
           </QuietButton>
           <label htmlFor={`${checkboxId}-${index}`} className="flex items-center gap-2 text-sm">
@@ -109,12 +112,14 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
             setBrowsing(locations.length)
           }}
         >
+          <FolderPlus className="size-4" aria-hidden="true" />
           Add location
         </QuietButton>
         <QuietButton
           disabled={busy || sources.isPending || locations.some(row => !row.libraryId)}
           onClick={() => void save()}
         >
+          <ScanLine className="size-4" aria-hidden="true" />
           {busy ? 'Saving…' : 'Save locations and scan'}
         </QuietButton>
       </div>
@@ -208,9 +213,22 @@ function FolderPicker({ library, onChoose }: { library?: Library; onChoose: (pat
         {library?.name} / {path || '(root)'}
       </p>
       <div className="flex flex-wrap gap-2">
-        <QuietButton onClick={() => onChoose(path)}>Use this folder</QuietButton>
-        {path && <QuietButton onClick={() => visit(path.split('/').slice(0, -1).join('/'))}>Up one folder</QuietButton>}
-        {path && <QuietButton onClick={() => visit('')}>Library root</QuietButton>}
+        <QuietButton onClick={() => onChoose(path)}>
+          <Check className="size-4" aria-hidden="true" />
+          Use this folder
+        </QuietButton>
+        {path && (
+          <QuietButton onClick={() => visit(path.split('/').slice(0, -1).join('/'))}>
+            <ArrowUp className="size-4" aria-hidden="true" />
+            Up one folder
+          </QuietButton>
+        )}
+        {path && (
+          <QuietButton onClick={() => visit('')}>
+            <Home className="size-4" aria-hidden="true" />
+            Library root
+          </QuietButton>
+        )}
       </div>
       <div className="max-h-72 space-y-2 overflow-auto">
         {[...rows.values()].map(item => (
@@ -219,6 +237,7 @@ function FolderPicker({ library, onChoose }: { library?: Library; onChoose: (pat
             className="w-full justify-start text-left"
             onClick={() => visit(item.relativePath)}
           >
+            <FolderOpen className="size-4 shrink-0" aria-hidden="true" />
             <span className="min-w-0">
               <span className="block truncate">{item.name}</span>
               {typed && <span className="block break-words text-xs text-muted">{item.relativePath}</span>}

@@ -13,7 +13,7 @@ function mount(nextCursor: number | null = null, configured = true) {
     Promise.resolve(
       new Response(
         JSON.stringify(
-          url.includes('/suggestions')
+          url.includes('/suggestions') || url === '/api/tasks'
             ? []
             : url.includes('/source-folders')
               ? { items: [{ name: 'Manga', relativePath: 'Manga' }], nextOffset: null }
@@ -74,6 +74,8 @@ it('starts from the first page when the favourites filter changes', async () => 
 it('first visit saves recursive comic locations without file-management unlock', async () => {
   const fetch = mount(null, false)
   expect(await screen.findByRole('heading', { name: 'Choose where your comics live' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Save locations and scan' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Add comic location' }))
   await userEvent.click(screen.getByRole('button', { name: 'Add location' }))
   await userEvent.click(await screen.findByRole('button', { name: 'Manga' }))
   await userEvent.click(screen.getByRole('button', { name: 'Use this folder' }))

@@ -1,8 +1,9 @@
+import { Modal } from '../../components/ui/Modal'
 import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minus, Plus } from 'lucide-react'
-import { IconButton, QuietButton, Select, Input } from '../../components/ui/Controls'
+import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minus, Plus, SlidersHorizontal } from 'lucide-react'
+import { IconButton, QuietButton, Select, Input, Range } from '../../components/ui/Controls'
 import { useReadingSession } from './useReadingSession'
 import type { Comic } from './api'
 
@@ -28,7 +29,8 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [imageError, setImageError] = useState(false)
-  const [controls, setControls] = useState(true)
+  const [controls, setControls] = useState(false)
+  const [jump, setJump] = useState(false)
   const root = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
@@ -59,7 +61,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   useEffect(() => {
     function keys(event: KeyboardEvent) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !controls && !jump) {
         if (document.fullscreenElement) void document.exitFullscreen()
         else onExit()
       }
@@ -78,7 +80,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     }
     window.addEventListener('keydown', keys)
     return () => window.removeEventListener('keydown', keys)
-  }, [direction, onExit, mode])
+  }, [direction, onExit, mode, controls, jump])
   useEffect(() => {
     const images = [page - 1, page + 1]
       .filter(index => index >= 0 && index < comic.pageCount)
@@ -115,9 +117,17 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
           <ArrowLeft className="size-5" />
         </IconButton>
         <h1 className="min-w-0 flex-1 truncate font-semibold">{comic.title}</h1>
-        <QuietButton onClick={() => setControls(!controls)}>{controls ? 'Hide controls' : 'Show controls'}</QuietButton>
+        <IconButton label="Reader settings" onClick={() => setControls(true)}>
+          <SlidersHorizontal className="size-5" />
+        </IconButton>
       </div>
-      {controls && (
+      <Modal
+        open={controls}
+        onOpenChange={setControls}
+        title="Reader settings"
+        description="Reading direction, fit, zoom and display."
+        portalContainer={root.current ?? undefined}
+      >
         <div className="flex flex-wrap items-center gap-2 p-3">
           <Select
             aria-label="Reading mode"
@@ -159,7 +169,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
             <Maximize className="size-4" />
           </IconButton>
         </div>
-      )}
+      </Modal>
       {error && (
         <p role="alert" className="px-3 text-sm text-danger">
           Progress could not be saved: {error}
@@ -247,24 +257,46 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
         <IconButton label="Previous page" disabled={page === 0} onClick={() => move(-1)}>
           <ChevronLeft className="size-5" />
         </IconButton>
-        <Input
-          aria-label="Go to page"
-          type="number"
-          min={1}
-          max={comic.pageCount}
-          className="w-20"
-          value={page + 1}
-          onChange={event => {
-            const index = Math.max(0, Math.min(comic.pageCount - 1, Number(event.target.value) - 1))
-            setPage(index)
-            if (mode === 'continuous') virtual.scrollToIndex(index)
-          }}
-        />
-        <span className="text-sm text-muted">/ {comic.pageCount}</span>
+        <QuietButton onClick={() => setJump(true)} aria-label="Go to page">
+          {page + 1} / {comic.pageCount}
+        </QuietButton>
         <IconButton label="Next page" disabled={page === comic.pageCount - 1} onClick={() => move(1)}>
           <ChevronRight className="size-5" />
         </IconButton>
       </footer>
+      <Modal
+        open={jump}
+        onOpenChange={setJump}
+        title="Go to page"
+        description="Choose a page in this comic."
+        portalContainer={root.current ?? undefined}
+      >
+        <div className="flex flex-wrap items-center gap-3 p-5">
+          <Input
+            aria-label="Go to page"
+            type="number"
+            min={1}
+            max={comic.pageCount}
+            className="max-w-24 text-center"
+            value={page + 1}
+            onChange={event => {
+              const index = Math.max(0, Math.min(comic.pageCount - 1, Number(event.target.value) - 1))
+              setPage(index)
+              if (mode === 'continuous') virtual.scrollToIndex(index)
+            }}
+          />
+          <span className="text-sm text-muted">of {comic.pageCount}</span>
+          <Range
+            aria-label="Page position"
+            className="w-full"
+            min={1}
+            max={comic.pageCount}
+            value={page + 1}
+            onChange={event => move(Number(event.target.value) - 1 - page)}
+          />
+          <QuietButton onClick={() => setJump(false)}>Done</QuietButton>
+        </div>
+      </Modal>
     </div>
   )
 }

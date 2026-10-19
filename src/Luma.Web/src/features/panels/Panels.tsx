@@ -3,7 +3,7 @@ import type { components } from '../../lib/api/generated'
 import { ComicLocations } from './ComicLocations'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { BookOpen, Star } from 'lucide-react'
+import { BookOpen, Star, FolderPlus, FolderCog } from 'lucide-react'
 import { Checkbox, Input, Select, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { errorMessage, request } from '../browse/api'
@@ -33,6 +33,17 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
     queryKey: ['comic-sources'],
     queryFn: ({ signal }) => request<components['schemas']['PanelSourceConfiguration']>('/api/panels/sources', signal),
   })
+  const tasks = useQuery({
+    queryKey: ['tasks'],
+    queryFn: ({ signal }) => request<components['schemas']['BackgroundTask'][]>('/api/tasks', signal),
+    refetchInterval: 3000,
+  })
+  const discovery =
+    tasks.data?.filter(task => task.kind === 'comic' && ['queued', 'running'].includes(task.state)) ?? []
+  const discovering = discovery.length > 0
+  useEffect(() => {
+    void client.invalidateQueries({ queryKey: ['comics'] })
+  }, [tasks.dataUpdatedAt])
   const configured = sources.data?.configured === true && (sources.data.locations?.length ?? 0) > 0
   const [manage, setManage] = useState(false)
   const [details, setDetails] = useState<number | null>(null)
@@ -46,6 +57,7 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
         signal,
       ),
     enabled: !comicId && configured,
+    refetchInterval: discovering ? 3000 : false,
   })
   const reading = useQuery({
     queryKey: ['comic', comicId],
@@ -118,12 +130,18 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
       />
       <div className="flex flex-wrap items-center gap-3 p-4">
         <h1 className="flex-1 text-xl font-semibold">Comic library</h1>
-        <QuietButton onClick={() => setManage(true)}>Comic locations</QuietButton>
+        <QuietButton onClick={() => setManage(true)}>
+          <FolderCog className="size-4" aria-hidden="true" />
+          Comic locations
+        </QuietButton>
       </div>
-      {(!configured || manage) && !sources.isPending && !manage && (
-        <section aria-label="Set up comic library" className="min-h-0 overflow-auto">
-          <h2 className="px-5 text-lg font-semibold">Choose where your comics live</h2>
-          <ComicLocations onSaved={() => void sources.refetch()} />
+      {!configured && !sources.isPending && (
+        <section aria-label="Set up comic library" className="space-y-4 p-5">
+          <h2 className="text-lg font-semibold">Choose where your comics live</h2>
+          <QuietButton variant="accent" onClick={() => setManage(true)}>
+            <FolderPlus className="size-4" aria-hidden="true" />
+            Add comic location
+          </QuietButton>
         </section>
       )}
       {filtersOpen && (
@@ -155,6 +173,17 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
             Favourites only
           </label>
         </div>
+      )}
+      {discovering && (
+        <p role="status" className="px-4 pb-3 text-sm text-accent">
+          Discovering comics… {discovery.reduce((sum, task) => sum + task.processed, 0)} processed. Follow progress in
+          Background jobs.
+        </p>
+      )}
+      {library.isFetching && !discovering && configured && (
+        <p role="status" className="px-4 text-sm text-muted">
+          Loading comics…
+        </p>
       )}
       {stats.data && (
         <p className="px-4 pb-3 text-sm text-muted">
@@ -204,7 +233,7 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
             </article>
           ))}
         </div>
-        {library.data?.items.length === 0 && (
+        {library.data?.items.length === 0 && !discovering && (
           <p className="text-muted">No comics match. Add archives or explicitly classify an image folder as a comic.</p>
         )}
         <div className="mt-4 flex gap-2">
