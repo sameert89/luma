@@ -226,7 +226,23 @@ volumes:
 
 Keep library IDs stable and unique; use consecutive environment array indexes
 starting at 0. Paths are container paths. Restart after changing mounts or roots.
-Panels sources select folders within these configured libraries.
+Panels sources select folders within these configured libraries. Use **Panels →
+Comic locations** to open the location dialog and browse folders. **Exclude from
+Gallery** is checked by default: it skips Gallery discovery for that location and
+its descendants, hides already-indexed comic images and comic-only tags, and
+omits them from XMP exports. Existing IDs, tags and reading progress are preserved.
+Uncheck to include the images in Gallery again; rescan for files added while
+excluded. Manually hidden folders remain independent. Overlapping comic locations
+share stable library/path identities; any containing exclusion takes precedence.
+
+Panels browses locations and subfolders in order, supports title/series search and
+comic tags in **Details**, and shows live discovery progress plus **Background
+jobs** in its header. The reader's settings icon and compact page counter open
+separate popups for display preferences and page jumping.
+
+**Beta.3 upgrades SQLite to schema 33.** Back up the database before upgrading.
+To return to beta.2 or an earlier release, restore its matching pre-upgrade
+SQLite backup; older binaries cannot open schema 33.
 
 ## Standalone user guide
 

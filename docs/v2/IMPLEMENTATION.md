@@ -175,3 +175,18 @@ All 183 frontend tests pass with `npm test -- --maxWorkers=2`. An earlier full r
 ### CI verification follow-up
 
 The four checks on 8daa276 stopped at the same C# switch-arm whitespace violation, before build/tests. Commit 54425ff fixes it; both Windows jobs then completed successfully, while both Linux jobs passed backend/frontend verification and reached real browser tests (62 passed, 8 failed, 4 skipped). Browser evidence exposed an empty mobile Search field being closed by a simultaneous scope change, addressed with a regression test, and a one-pixel Settings/navigation overlap, addressed with scroll clearance. Browser playback scenarios now set their own Flick filters rather than inheriting Gallery state, and use the mobile view-options speed selector. Caption fixtures are marked missing and their owned source directory removed after each scenario, preserving scan/cache foreign keys while excluding the temporary clip from later browse queries. The complete local frontend suite passes 184 tests, with production build/lint/format checks passing. Fresh Linux/Windows CI results remain pending.
+
+## Beta.3 comic organization
+
+Migration 33 adds `PanelSources.ExcludeFromGallery` (default true), `ComicTags`
+using the existing normalized `Tags` identities, and a discovery queue uniqueness
+key per library/source. Gallery hidden-subtree predicates include excluded comic
+sources without changing manually hidden folders or deleting indexed media.
+Gallery scans skip these sources; existing identities and tag links survive.
+XMP export uses the same visibility predicate. Gallery tag collections and
+suggestions omit tags belonging only to hidden media or comics. Comic tagging
+reuses the shared editor and normalization; tag rename/merge/delete includes
+comic associations. Shelf folder listing reads SQLite only, with bounded pages.
+Search includes series names. Discovery progress and its task button live in the
+Panels header; reader preferences and page jump use the shared accessible modal.
+Rollback to beta.2 or older requires its pre-migration SQLite backup.

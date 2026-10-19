@@ -364,6 +364,7 @@ environment:
   Luma__Panels__Sources__0__LibraryId: "2"
   Luma__Panels__Sources__0__RelativePath: "Manga"
   Luma__Panels__Sources__0__ImageFolders: "false"
+  Luma__Panels__Sources__0__ExcludeFromGallery: "true"
 ```
 
 **In-app choices take precedence.** Global Flick/Panels switches are in Settings
@@ -411,3 +412,20 @@ The **Publish user guide** GitHub Actions workflow builds and deploys it to Page
 on manual dispatch. After merging, select **GitHub Actions** as the repository's
 Pages source and run that workflow. Rebuild/redeploy whenever the guide changes.
 CI builds the guide on every change so both copies stay buildable.
+
+### Comic visibility and beta.3 rollback
+
+Comic locations always open in a dialog. Each source defaults to **Exclude from
+Gallery**, including sources created before beta.3. Exclusion skips Gallery scans
+and hides existing media and exclusive tags from Gallery results and XMP export.
+It preserves stable media IDs, tags and reading progress; it does not move files.
+Uncheck to include images in Gallery again, then rescan to discover new images.
+Existing manual hidden-folder choices are independent. For overlapping comic
+sources, any containing source with exclusion enabled hides that subtree. Two
+locations in the same library queue separately and use the same comic path IDs.
+Server-configured library roots must remain non-overlapping.
+
+Beta.3 adds migration 33 (comic tags and source visibility). Stop Luma and back up
+SQLite before upgrading. Returning to beta.2 or older requires restoring the
+matching database backup; the migration guard rejects newer schemas. Keep a
+matching original-media backup when rolling back file operations as well.

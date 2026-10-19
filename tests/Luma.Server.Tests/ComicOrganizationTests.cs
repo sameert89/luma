@@ -71,6 +71,7 @@ public sealed class ComicOrganizationTests
             Assert.Equal("Base/Manga/DBZ", Assert.Single((await library.FoldersAsync(1, "Base/Manga", null, default)).Items).RelativePath);
             Assert.Single((await library.ListAsync(null, null, null, null, null, default, 1, "Base")).Items);
             Assert.Equal(2, (await library.ListAsync(null, null, null, null, null, default, 1, "Base/Manga/DBZ")).Items.Count);
+            Assert.Equal(4, (await library.SuggestAsync("Dragon", 8, default)).Count);
             Assert.Equal(4, (await library.ListAsync("Dragon", null, null, null, null, default)).Items.Count);
             var tags = new TagService(f.Database);
             var tag = (await tags.CreateAsync("Shonen", default)).Tag;
@@ -84,6 +85,8 @@ public sealed class ComicOrganizationTests
             Assert.Equal(target.Id, Assert.Single(await library.TagsAsync(id, default)).Id);
             await tags.DeleteAsync(target.Id, default);
             Assert.Empty(await library.TagsAsync(id, default));
+            await db.ExecuteAsync("INSERT INTO Comics(LibraryId,RelativePath,PathKey,Format,Title,PageCount,SourceSize,SourceModifiedTicks,AddedAt) VALUES(1,'Base',@key,'folder','Root image book',1,1,1,'2026-01-01')", new { key = f.Root.Key("Base") });
+            Assert.Equal(2, (await library.ListAsync(null, null, null, null, null, default, 1, "Base")).Items.Count);
         }
         finally { Directory.Move(offline, f.Root.Path); }
     }

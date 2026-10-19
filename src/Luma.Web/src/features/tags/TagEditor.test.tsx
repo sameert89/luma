@@ -69,7 +69,7 @@ it('uses comic suggestions and changes comic tags without touching gallery media
     </QueryClientProvider>,
   )
   await userEvent.type(screen.getByRole('searchbox', { name: 'Find or create a tag' }), 'bea')
-  await userEvent.click(await screen.findByRole('button', { name: 'Beaches' }))
+  await userEvent.click(await screen.findByRole('button', { name: /Beaches/ }))
   await waitFor(() =>
     expect(fetch).toHaveBeenCalledWith('/api/panels/comics/9/tags', expect.objectContaining({ method: 'POST' })),
   )

@@ -6,6 +6,19 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.3',
+    date: '2026-10-19',
+    headline: 'Organized comic shelves and a quieter reader',
+    changes: [
+      'Search input follows the header actions on phones. Comic locations always opens in a dialog with icons for its main actions.',
+      'Panels shows discovery progress and Background jobs in its header. Open saved locations and browse their subfolders; search also matches series names.',
+      'Reader settings opens from an icon button. A compact page counter opens page jump and a progress slider without stretching the footer.',
+      'Tag comics from Details using the shared tag editor. Comic-only tags stay out of Gallery collections and suggestions; shared tags retain their normal merge and rename behavior.',
+      'Comic locations default to Exclude from Gallery. This skips Gallery indexing and hides existing comic images, their exclusive tags and XMP exports while preserving indexed identities, metadata and reading progress. Uncheck to include them again.',
+      'Database schema advances to 33. Back up SQLite before upgrading; returning to beta.2 or an older release requires restoring its matching pre-upgrade database.',
+    ],
+  },
+  {
     version: '2.0.0-beta.2',
     date: '2026-10-19',
     headline: 'Simpler single-user setup and consistent search',

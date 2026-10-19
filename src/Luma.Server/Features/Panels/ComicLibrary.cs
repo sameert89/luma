@@ -66,7 +66,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         if (q?.Length > 200 || limit is < 1 or > 20) throw ApiRequestException.Invalid();
         if (string.IsNullOrWhiteSpace(q)) return [];
         await using var db = await database.OpenAsync(ct);
-        var rows = await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + " AND instr(lower(c.Title),lower(@q))>0 ORDER BY c.Id DESC LIMIT @limit", new { q = q.Trim(), limit }, cancellationToken: ct));
+        var rows = await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + " AND (instr(lower(c.Title),lower(@q))>0 OR instr(lower(c.Series),lower(@q))>0) ORDER BY c.Id DESC LIMIT @limit", new { q = q.Trim(), limit }, cancellationToken: ct));
         return rows.Select(x => new Luma.Server.Features.Media.SearchSuggestion("comic", x.Title, x.Id, x.Series)).ToArray();
     }
     public async Task<ComicList> ListAsync(string? q, string? state, string? series, bool? favourite, long? cursor, CancellationToken ct, long? libraryId = null, string? path = null, string? tag = null)
@@ -78,7 +78,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         var rows = (await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + "\n" + """
             AND (@q IS NULL OR instr(lower(c.Title),lower(@q))>0 OR instr(lower(c.Author),lower(@q))>0 OR instr(lower(c.Series),lower(@q))>0)
             AND (@libraryId IS NULL OR c.LibraryId=@libraryId)
-            AND (@path IS NULL OR (substr(c.RelativePath,1,length(@prefix))=@prefix AND instr(substr(c.RelativePath,length(@prefix)+1),'/')=0))
+            AND (@path IS NULL OR c.RelativePath=@path OR (substr(c.RelativePath,1,length(@prefix))=@prefix AND instr(substr(c.RelativePath,length(@prefix)+1),'/')=0))
             AND (@tag IS NULL OR EXISTS(SELECT 1 FROM ComicTags ct JOIN Tags t ON t.Id=ct.TagId WHERE ct.ComicId=c.Id AND t.NormalizedKey=@tag))
             AND (@state IS NULL OR COALESCE(p.State,'unread')=@state) AND (@series IS NULL OR c.Series=@series)
             AND (@favourite IS NULL OR c.Favourite=@favourite) AND (@cursor IS NULL OR c.Id<@cursor)
