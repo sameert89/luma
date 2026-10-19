@@ -190,3 +190,10 @@ comic associations. Shelf folder listing reads SQLite only, with bounded pages.
 Search includes series names. Discovery progress and its task button live in the
 Panels header; reader preferences and page jump use the shared accessible modal.
 Rollback to beta.2 or older requires its pre-migration SQLite backup.
+
+## Beta.4 phone search correction
+
+Phone search starts collapsed across all experiences. The right-hand action group
+contains Search, Filters and Settings; Search reveals the full-width field below
+the action row, and Close search removes that row. Inline suggestions and desktop
+search remain available. No schema migration is added; schema 33 remains current.

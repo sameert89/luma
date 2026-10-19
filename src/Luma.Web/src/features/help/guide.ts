@@ -448,7 +448,7 @@ export const guideSections: GuideSection[] = [
             icons: [Search, X],
             name: 'Open search / Close search',
             where: 'Header on phones',
-            what: 'Reveals or tucks away the search field.',
+            what: 'Phone search starts collapsed. Search, Filters and Settings are grouped on the right. Tap Open search to reveal and focus the input below those actions; Close search tucks the row away again without clearing your query. Suggestions appear below the input while typing. Desktop search stays visible.',
           },
           {
             icons: [X],

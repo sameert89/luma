@@ -6,6 +6,15 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.4',
+    date: '2026-10-19',
+    headline: 'Restore phone search reveal',
+    changes: [
+      'Phone search starts collapsed in Gallery, Collections, Flick and Panels. Search, Filters and Settings stay grouped on the right; tap Search to reveal and focus the field below them, and Close search to tuck it away.',
+      'Search suggestions remain inline. Desktop search stays visible. No database migration is added.',
+    ],
+  },
+  {
     version: '2.0.0-beta.3',
     date: '2026-10-19',
     headline: 'Organized comic shelves and a quieter reader',
