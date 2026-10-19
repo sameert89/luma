@@ -1,3 +1,4 @@
+import { LoaderCircle } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsSection } from '../../components/ui/SettingsSection'
@@ -14,9 +15,12 @@ export function FileAccess() {
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [storage, setStorage] = useState<components['schemas']['FileStorageStatus'][]>([])
+  const [checking, setChecking] = useState(false)
+  const [storage, setStorage] = useState<components['schemas']['FileStorageStatus'][] | null>(null)
   async function checkStorage() {
     setBusy(true)
+    setChecking(true)
+    setStorage(null)
     setError('')
     try {
       setStorage(
@@ -28,6 +32,7 @@ export function FileAccess() {
       await Promise.all(
         ['file-capabilities', 'storage-status'].map(key => client.invalidateQueries({ queryKey: [key] })),
       )
+      setChecking(false)
       setBusy(false)
     }
   }
@@ -62,17 +67,35 @@ export function FileAccess() {
         Writable=true and a :rw mount. Read-only libraries keep browsing and playback available.
       </p>
       {settings.data?.enabled && (
-        <QuietButton disabled={busy} onClick={() => void checkStorage()}>
-          Check media mounts
-        </QuietButton>
-      )}
-      {storage
-        .filter(item => item.warning)
-        .map(item => (
-          <p key={item.libraryId} className="text-sm text-muted">
-            {item.name}: {item.warning}
+        <div className="space-y-2">
+          <QuietButton disabled={busy} aria-busy={checking} onClick={() => void checkStorage()}>
+            {checking && <LoaderCircle className="size-4 motion-safe:animate-spin" aria-hidden="true" />}
+            {checking ? 'Checking media mounts…' : 'Check media mounts'}
+          </QuietButton>
+          <p className="text-sm text-muted">
+            Recheck write access after changing mounts or permissions. This does not change the mount configuration.
           </p>
-        ))}
+        </div>
+      )}
+      <p role="status" className="text-sm text-muted">
+        {checking
+          ? 'Checking library write access…'
+          : storage !== null
+            ? storage.length === 0
+              ? 'Mount check complete. No media libraries are configured.'
+              : `Mount check complete. ${storage.filter(item => item.canWrite).length} of ${storage.length} libraries are writable. Read-only libraries keep browsing and playback available.`
+            : ''}
+      </p>
+      {storage?.map(item => (
+        <p key={item.libraryId} className="text-sm text-muted">
+          <strong>
+            {item.name}:{' '}
+            {item.canWrite ? 'Writable' : item.configuredWritable ? 'Write access unavailable' : 'Configured read-only'}
+            .
+          </strong>
+          {item.warning && ` ${item.warning}`}
+        </p>
+      ))}
       {(error || settings.isError) && (
         <p role="alert" className="text-sm text-danger">
           {error || errorMessage(settings.error)}

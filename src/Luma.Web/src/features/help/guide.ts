@@ -102,7 +102,7 @@ export const guideSections: GuideSection[] = [
             icons: [Settings],
             name: 'Read-only startup warning and recheck',
             where: 'Startup banner / Settings → General → File management',
-            what: 'Luma checks write access at startup and when enabling file management. Read-only roots and failed checks disable uploads, folder creation, moves, recycling, restore and deletion for that library. Browsing, captions and database tags keep working. Correct the mount or permissions and choose Check media mounts to restore write actions. The tiny diagnostic probe uses excluded staging, never an original file. A brief floating notice dismisses automatically; detailed mount information stays in Settings. Dismiss hides the notice for this server boot.',
+            what: 'Luma checks write access at startup and when enabling file management. Read-only roots and failed checks disable uploads, folder creation, moves, recycling, restore and deletion for that library. Browsing, captions and database tags keep working. Correct the mount or permissions and choose Check media mounts to restore write actions. The button shows Checking while it runs, then reports how many libraries are writable and the result for each library; it does not change Docker mounts or library configuration. The tiny diagnostic probe uses excluded staging, never an original file. A brief floating notice dismisses automatically; detailed mount information stays in Settings. Dismiss hides the notice for this server boot.',
           },
         ],
       },
