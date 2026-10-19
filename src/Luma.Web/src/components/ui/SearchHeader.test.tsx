@@ -77,47 +77,6 @@ it('chooses a suggestion by tapping it', async () => {
   expect(onSuggestion).toHaveBeenCalledWith(suggestions[0])
 })
 
-it('closes an expanded phone search field when nothing was searched and the view changes', async () => {
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn().mockImplementation(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
-  )
-  function Harness({ scope }: { scope: string }) {
-    const [value, setValue] = useState('')
-    return (
-      <SearchHeader
-        value={value}
-        onChange={setValue}
-        onSearch={vi.fn()}
-        onClear={() => setValue('')}
-        onHome={vi.fn()}
-        onFilters={vi.fn()}
-        searchRequested={false}
-        scope={scope}
-      />
-    )
-  }
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
-  const shell = (scope: string) => (
-    <QueryClientProvider client={client}>
-      <Harness scope={scope} />
-    </QueryClientProvider>
-  )
-  const { rerender } = render(shell('library:'))
-  await userEvent.click(screen.getByRole('button', { name: 'Open search' }))
-  const field = screen.getByRole('search')
-  expect(field).toHaveAttribute('data-open', 'true')
-
-  // Still open while the caret is in it: clearing a query leaves the field ready for the next one.
-  await userEvent.click(screen.getByRole('textbox', { name: 'Search media' }))
-  rerender(shell('library:folderId=2'))
-  expect(field).toHaveAttribute('data-open', 'true')
-
-  screen.getByRole('button', { name: 'Close search' }).focus()
-  rerender(shell('search:q=beach'))
-  expect(screen.getByRole('search')).toHaveAttribute('data-open', 'false')
-})
-
 // The suggestion list floats over the filter row, and Clear all filters sits directly under it.
 // Choosing happens on pointer down, so by the time the click arrives the list has gone and the
 // click lands on whatever it was covering -- which cleared the filters instead of picking the
@@ -155,56 +114,29 @@ it('does not press what the suggestion list was covering', async () => {
   expect(clearAllFilters).toHaveBeenCalledTimes(1)
 })
 
-it('keeps phone search open when its navigation request also changes scope', () => {
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
-  )
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
-  const shell = (requested: boolean) => (
+it('keeps search visible with its logo and actions on phones, and hides it on Settings', async () => {
+  const client = new QueryClient()
+  const ui = (hidden: boolean) => (
     <QueryClientProvider client={client}>
       <SearchHeader
-        value=""
+        value="photos"
         onChange={vi.fn()}
         onSearch={vi.fn()}
         onClear={vi.fn()}
         onHome={vi.fn()}
         onFilters={vi.fn()}
-        searchRequested={requested}
-        scope={requested ? 'search:' : 'library:'}
+        onSettings={vi.fn()}
+        searchRequested={false}
+        hideSearch={hidden}
+        logo={<button>Switch application</button>}
       />
     </QueryClientProvider>
   )
-  const { rerender } = render(shell(false))
-  rerender(shell(true))
-  expect(screen.getByRole('search')).toHaveAttribute('data-open', 'true')
-  expect(screen.getByRole('textbox', { name: 'Search media' })).toBeInTheDocument()
-})
-
-it('lets a phone search close without clearing its query so the application logo remains reachable', async () => {
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
-  )
-  const onClear = vi.fn()
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <SearchHeader
-        value="photos"
-        onChange={vi.fn()}
-        onSearch={vi.fn()}
-        onClear={onClear}
-        onHome={vi.fn()}
-        onFilters={vi.fn()}
-        searchRequested={false}
-        logo={<button>Switch application</button>}
-      />
-    </QueryClientProvider>,
-  )
-  await userEvent.click(screen.getByRole('button', { name: 'Open search' }))
-  expect(screen.getByRole('button', { name: 'Switch application' }).parentElement).toHaveClass('hidden')
+  const { rerender } = render(ui(false))
+  expect(screen.getByRole('textbox', { name: 'Search media' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Switch application' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Filters' })).toBeVisible()
+  rerender(ui(true))
+  expect(screen.queryByRole('search')).toBeNull()
   expect(screen.queryByRole('button', { name: 'Filters' })).toBeNull()
-  await userEvent.click(screen.getByRole('button', { name: 'Close search' }))
-  expect(screen.getByRole('button', { name: 'Switch application' }).parentElement).not.toHaveClass('hidden')
-  expect(onClear).not.toHaveBeenCalled()
 })

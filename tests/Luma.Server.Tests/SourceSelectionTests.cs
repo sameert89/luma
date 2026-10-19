@@ -35,7 +35,7 @@ public sealed class SourceSelectionTests
         await using var db = await f.Database.OpenAsync(default);
         await db.ExecuteAsync("UPDATE Media SET MediaType='video' WHERE FileName='clip-video.jpg'");
         var suggestions = await SearchSuggestions.SuggestAsync(f.Database, "clip", 8, default, "video");
-        Assert.Equal("clip-video.jpg", Assert.Single(suggestions.Where(x => x.Kind == "file")).Label);
+        Assert.Equal("clip-video.jpg", Assert.Single(suggestions, x => x.Kind == "file").Label);
         await db.ExecuteAsync("""
             INSERT INTO Comics(LibraryId,RelativePath,PathKey,Format,Title,Author,PageCount,SourceSize,SourceModifiedTicks,AddedAt)
             VALUES(1,'moon.cbz','MOON.CBZ','zip','Moon','Sun',3,1,1,'2026-01-01')

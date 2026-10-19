@@ -1,5 +1,5 @@
 import type { components } from '../../lib/api/generated'
-import { BookOpen, ChevronDown, Clapperboard, Images } from 'lucide-react'
+import { BookOpen, Clapperboard, Images } from 'lucide-react'
 import { useState } from 'react'
 import { Modal } from '../../components/ui/Modal'
 import { QuietButton } from '../../components/ui/Controls'
@@ -19,12 +19,14 @@ export function AppSwitcher({
   applications?: components['schemas']['ApplicationFlags']
 }) {
   const [open, setOpen] = useState(false)
-  const name = experiences.find(item => item.id === active)!.name
+  const current = experiences.find(item => item.id === active)!
+  const name = current.name
+  const Icon = current.icon
   return (
     <>
       <button
         type="button"
-        className="relative inline-flex min-h-11 shrink-0 items-center rounded-xl pl-1 pr-4 text-sm font-semibold"
+        className="relative inline-flex min-h-11 shrink-0 items-center rounded-xl pl-1 pr-5 text-sm font-semibold"
         aria-label={`Switch application, ${name}`}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
@@ -32,7 +34,7 @@ export function AppSwitcher({
         <span className="text-xl tracking-tight">
           luma<span className="text-accent">.</span>
         </span>
-        <ChevronDown className="absolute right-0 top-2 size-3 text-muted" aria-hidden="true" />
+        <Icon className="absolute right-0 top-1 size-3.5 text-accent" aria-hidden="true" />
       </button>
       <Modal
         open={open}

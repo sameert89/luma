@@ -40,7 +40,7 @@ export function ApplicationSettings() {
         <label key={key} className="flex items-center gap-2 text-sm">
           <Checkbox
             checked={flags?.[key] ?? true}
-            disabled={busy}
+            disabled={busy || !flags}
             onChange={event => void change(key, event.target.checked)}
           />
           Enable {key === 'flickEnabled' ? 'Flick' : 'Panels'}

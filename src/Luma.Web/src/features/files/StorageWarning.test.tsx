@@ -21,14 +21,12 @@ function warning(onSettings = vi.fn()) {
     </QueryClientProvider>
   )
 }
-test('warns before administrator unlock and dismisses only for the current server boot', async () => {
+test('shows a brief floating notice and dismisses only for the current server boot', async () => {
   const onSettings = vi.fn()
   const first = render(warning(onSettings))
-  expect(await screen.findByRole('alert')).toHaveTextContent('Read-only mount')
-  await userEvent.click(screen.getByRole('button', { name: 'Open file management' }))
-  expect(onSettings).toHaveBeenCalledOnce()
+  expect(await screen.findByRole('status')).toHaveTextContent('Read-only media')
   await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.queryByRole('status')).toBeNull()
   expect(sessionStorage.getItem('luma-storage-warning')).toBe('boot-1')
   first.unmount()
   vi.mocked(request).mockResolvedValue({
@@ -36,5 +34,7 @@ test('warns before administrator unlock and dismisses only for the current serve
     libraries: [{ libraryId: 1, name: 'Photos', warning: 'Read-only mount after reboot' }],
   })
   render(warning())
-  expect(await screen.findByRole('alert')).toHaveTextContent('after reboot')
+  expect(await screen.findByRole('status')).toHaveTextContent('Read-only media')
+  await userEvent.click(screen.getByRole('button', { name: 'Details' }))
+  expect(screen.queryByRole('status')).toBeNull()
 })

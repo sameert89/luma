@@ -31,7 +31,7 @@ function emptyApi() {
         Promise.resolve(
           new Response(
             JSON.stringify(
-              url === '/api/tasks' || url.startsWith('/api/libraries')
+              url === '/api/tasks' || url.includes('/suggestions') || url.startsWith('/api/libraries')
                 ? []
                 : { items: [], nextCursor: null, previousCursor: null },
             ),
@@ -55,7 +55,7 @@ function browsingApi() {
               ? { libraries: [] }
               : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -109,13 +109,13 @@ describe('browsing shell', () => {
     vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
     browsingApi()
     renderApp()
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'shuffle')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     const firstSeed = new URLSearchParams(window.location.search).get('seed')
     expect(firstSeed).toMatch(/^[0-9a-f]{32}$/)
     expect(screen.getByTestId('gallery-scroll')).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.click(screen.getByRole('button', { name: 'Reshuffle' }))
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(new URLSearchParams(window.location.search).get('seed')).not.toBe(firstSeed)
@@ -151,7 +151,7 @@ describe('browsing shell', () => {
     expect(screen.getByRole('button', { name: 'Done selecting' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Select all' })).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Done selecting' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     expect(screen.queryByRole('textbox', { name: 'Keyword' })).not.toBeInTheDocument()
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'name')
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort direction' }), 'asc')
@@ -170,9 +170,7 @@ describe('browsing shell', () => {
     )
     expect(window.location.search).toContain('folderId=2')
     expect(screen.getAllByRole('button', { name: 'Library' })[0]).toHaveAttribute('aria-current', 'page')
-    expect(
-      screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search')),
-    ).not.toHaveAttribute('aria-current', 'page')
+    expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1)
     await userEvent.click(screen.getByRole('button', { name: 'Folder actions for Trips' }))
     await userEvent.click(screen.getByRole('button', { name: 'Folder information' }))
     expect(screen.getByRole('dialog', { name: 'Folder information' })).toHaveTextContent('Trips')
@@ -185,7 +183,7 @@ describe('browsing shell', () => {
     await userEvent.click(
       screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))!,
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'name')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(screen.queryByRole('heading', { name: 'Search your media' })).not.toBeInTheDocument()
@@ -201,7 +199,7 @@ describe('browsing shell', () => {
       ).toBe(true),
     )
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Beach{Enter}')
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
     expect(window.location.search).toBe('?view=search')
     expect(screen.getByRole('combobox', { name: 'Search media' })).toHaveValue('')
@@ -231,7 +229,7 @@ describe('browsing shell', () => {
                     ? { libraries: [] }
                     : { items: [] }
         return Promise.resolve(
-          new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+          new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
             headers: { 'Content-Type': 'application/json' },
           }),
         )
@@ -269,11 +267,9 @@ describe('browsing shell', () => {
     await waitFor(() => expect(window.location.search).toContain('preference=liked'))
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Search media"]')!
     expect(input).not.toHaveFocus()
-    expect(input.closest('form')).toHaveAttribute('inert')
+    expect(input.closest('form')).not.toHaveAttribute('inert')
     await visitGallery()
-    await userEvent.click(
-      screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))!,
-    )
+    await userEvent.click(input)
     await waitFor(() => expect(input).toHaveFocus())
   })
 
@@ -363,12 +359,8 @@ describe('browsing shell', () => {
 
   it('clears a search started from Search back to its default page', async () => {
     browsingApi()
-    renderApp()
-    await userEvent.click(
-      (await screen.findAllByRole('button', { name: 'Search' })).find(button =>
-        button.textContent?.includes('Search'),
-      )!,
-    )
+    renderApp('/gallery/search?view=search')
+
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Beach{Enter}')
     expect(window.location.search).toContain('q=Beach')
     await userEvent.click(screen.getByRole('button', { name: 'Clear search' }))
@@ -396,7 +388,7 @@ describe('browsing shell', () => {
                   ? { libraries: [] }
                   : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -590,7 +582,7 @@ describe('browsing shell', () => {
   it('opens filters from the keyboard and restores focus after Escape', async () => {
     emptyApi()
     renderApp()
-    const trigger = screen.getByRole('button', { name: 'Filters' })
+    const trigger = screen.getAllByRole('button', { name: 'Filters' })[0]
     trigger.focus()
     await userEvent.keyboard('{Enter}')
     expect(screen.getByRole('dialog', { name: 'Filters and sorting' })).toBeVisible()
@@ -602,7 +594,7 @@ describe('browsing shell', () => {
     emptyApi()
     renderApp()
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Summer{Enter}')
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Favourite state' }), 'liked')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(window.location.search).toContain('q=Summer')
@@ -637,7 +629,7 @@ describe('browsing shell', () => {
                 ? clip
                 : { items: [clip], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -825,11 +817,9 @@ describe('browsing shell', () => {
     expect(window.location.search).toContain('mediaType=motion')
     expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
     await visitGallery()
-    await userEvent.click(
-      screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))!,
-    )
+    await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'photo{Enter}')
     expect(window.location.search).not.toContain('mediaType=motion')
-    expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
+    expect(new URLSearchParams(location.search).get('q')).toBe('photo')
     await switchApp('Flick')
     expect(window.location.search).toContain('mediaType=motion')
   })
@@ -862,7 +852,7 @@ describe('browsing shell', () => {
                 ? clip
                 : { items: [clip], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -918,7 +908,7 @@ describe('browsing shell', () => {
                 ? clip
                 : { items: [clip], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -980,7 +970,7 @@ describe('browsing shell', () => {
                 ? photo
                 : { items: [photo], nextCursor: null, previousCursor: null }
         return Promise.resolve(
-          new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+          new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
             headers: { 'Content-Type': 'application/json' },
           }),
         )
@@ -989,7 +979,7 @@ describe('browsing shell', () => {
     renderApp()
     await switchApp('Flick')
     await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Filters' }))
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Filters' }))[0])
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Media type' }), 'image')
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Favourite state' }), 'liked')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
@@ -1013,19 +1003,13 @@ describe('browsing shell', () => {
           ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
           : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
     })
     vi.stubGlobal('fetch', fetch)
-    renderApp()
-    await screen.findByRole('button', { name: 'Open Photos' })
-    await userEvent.click(
-      (await screen.findAllByRole('button', { name: 'Search' })).find(button =>
-        button.textContent?.includes('Search'),
-      )!,
-    )
+    renderApp('/gallery/search?view=search')
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
     expect(screen.queryByTestId('gallery-scroll')).not.toBeInTheDocument()
   })
@@ -1440,7 +1424,7 @@ it('pulls to refresh the listing without asking the server to scan anything', as
               ? { libraries: [] }
               : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -1489,7 +1473,7 @@ it('opens Reels in the order chosen in Settings, and gives the library its own o
               ? { libraries: [] }
               : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -1550,14 +1534,13 @@ it('keeps Panels queries and deep links separate from Gallery', async () => {
   emptyApi()
   renderApp()
   await switchApp('Panels')
-  await userEvent.click(await screen.findByRole('button', { name: 'Search comics' }))
-  await userEvent.type(await screen.findByRole('textbox', { name: 'Search comics' }), 'moon')
+  await userEvent.type(await screen.findByRole('combobox', { name: 'Search comics' }), 'moon{Enter}')
   await waitFor(() => expect(window.location.pathname).toBe('/panels'))
   expect(new URLSearchParams(window.location.search).get('q')).toBe('moon')
   await switchApp('Gallery')
   expect(new URLSearchParams(window.location.search).get('q')).toBeNull()
   await switchApp('Panels')
-  expect(await screen.findByRole('textbox', { name: 'Search comics' })).toHaveValue('moon')
+  expect(await screen.findByRole('combobox', { name: 'Search comics' })).toHaveValue('moon')
   cleanup()
   window.history.replaceState(null, '', '/panels?q=direct&comic=42')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })

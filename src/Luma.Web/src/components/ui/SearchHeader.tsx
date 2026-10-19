@@ -1,4 +1,4 @@
-import { ArrowLeft, FileImage, FolderOpen, Search, SlidersHorizontal, Tag, X } from 'lucide-react'
+import { BookOpen, FileImage, FolderOpen, Search, SlidersHorizontal, Settings, Tag, X } from 'lucide-react'
 import { useDeferredValue, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { IconButton, Input } from './Controls'
@@ -10,6 +10,7 @@ import type { components } from '../../lib/api/generated'
 export type SearchSuggestion = components['schemas']['SearchSuggestion']
 
 const kinds: Record<string, { label: string; icon: typeof Tag }> = {
+  comic: { label: 'Comic', icon: BookOpen },
   tag: { label: 'Tag', icon: Tag },
   folder: { label: 'Folder', icon: FolderOpen },
   file: { label: 'File', icon: FileImage },
@@ -26,6 +27,12 @@ export function SearchHeader({
   searchRequested,
   scope = '',
   logo,
+  onSettings,
+  hideSearch = false,
+  suggestionsUrl = '/api/search/suggestions',
+  searchLabel = 'Search media',
+  placeholder = 'Search names, folders and tags',
+  actions,
 }: {
   value: string
   onChange: (value: string) => void
@@ -33,13 +40,17 @@ export function SearchHeader({
   onSuggestion?: (suggestion: SearchSuggestion) => void
   onClear: () => void
   onHome: () => void
-  onFilters: () => void
+  onFilters?: () => void
   searchRequested: boolean
   scope?: string
   logo?: ReactNode
+  onSettings?: () => void
+  hideSearch?: boolean
+  suggestionsUrl?: string
+  searchLabel?: string
+  placeholder?: string
+  actions?: ReactNode
 }) {
-  const [open, setOpen] = useState(false)
-  const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 639px)').matches ?? false)
   // Suggestions show while the field is focused and edited; choosing, submitting or Escape hides them.
   const [listOpen, setListOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -47,9 +58,12 @@ export function SearchHeader({
   const input = useRef<HTMLInputElement>(null)
   const typed = useDeferredValue(value.trim())
   const suggestions = useQuery({
-    queryKey: ['search-suggestions', typed],
+    queryKey: ['search-suggestions', suggestionsUrl, typed],
     queryFn: ({ signal }) =>
-      request<SearchSuggestion[]>(`/api/search/suggestions?q=${encodeURIComponent(typed)}&limit=8`, signal),
+      request<SearchSuggestion[]>(
+        `${suggestionsUrl}${suggestionsUrl.includes('?') ? '&' : '?'}q=${encodeURIComponent(typed)}&limit=8`,
+        signal,
+      ),
     enabled: !!onSuggestion && listOpen && typed.length > 0,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
@@ -57,47 +71,25 @@ export function SearchHeader({
   const items = listOpen && typed ? (suggestions.data ?? []) : []
   const expanded = items.length > 0
   useEffect(() => {
-    if (searchRequested && mobile) {
-      setOpen(true)
-      requestAnimationFrame(() => input.current?.focus())
-    }
-  }, [searchRequested, mobile])
+    if (searchRequested && !hideSearch) requestAnimationFrame(() => input.current?.focus())
+  }, [searchRequested, hideSearch])
   useEffect(() => {
-    const query = window.matchMedia?.('(max-width: 639px)')
-    if (!query) return
-    const update = () => setMobile(query.matches)
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
-  }, [])
-  useEffect(() => setActiveIndex(-1), [typed])
-  // Opening search and then going somewhere else leaves an empty field taking up the header.
-  // Moving to another view closes it again, unless something was searched or is being typed.
-  const browsed = useRef(scope)
+    setActiveIndex(-1)
+  }, [typed])
   useEffect(() => {
-    if (scope === browsed.current) return
-    browsed.current = scope
-    if (!searchRequested && !value.trim() && document.activeElement !== input.current) {
-      setOpen(false)
-      setListOpen(false)
-    }
-  }, [scope, value, searchRequested])
-  function toggle() {
-    setOpen(!open)
-    if (!open) requestAnimationFrame(() => input.current?.focus())
-  }
+    setListOpen(false)
+  }, [scope])
   function choose(suggestion: SearchSuggestion) {
     setListOpen(false)
     setActiveIndex(-1)
     onSuggestion?.(suggestion)
   }
   return (
-    <header className="relative z-30 flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:px-6">
-      {logo ? (
-        <div className={mobile && open ? 'hidden' : 'shrink-0'}>{logo}</div>
-      ) : (
+    <header className="relative z-30 flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-canvas px-4 py-3 sm:px-6">
+      {logo ?? (
         <a
           href="/"
-          className={`shrink-0 text-xl font-semibold tracking-tight ${mobile && open ? 'hidden' : ''}`}
+          className="shrink-0 text-xl font-semibold tracking-tight"
           aria-label="Luma home"
           onClick={event => {
             event.preventDefault()
@@ -107,17 +99,10 @@ export function SearchHeader({
           luma<span className="text-accent">.</span>
         </a>
       )}
-      {mobile && open && (
-        <IconButton label="Close search" onClick={toggle}>
-          <ArrowLeft className="size-5" />
-        </IconButton>
-      )}
-      <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+      {!hideSearch && (
         <form
           role="search"
-          className="search-reveal max-w-xl"
-          data-open={open || !mobile}
-          inert={mobile && !open}
+          className="order-last flex w-full min-w-0 items-center gap-2 sm:order-none sm:ml-auto sm:w-auto sm:max-w-xl sm:flex-1"
           onSubmit={event => {
             event.preventDefault()
             if (expanded && activeIndex >= 0) {
@@ -128,15 +113,15 @@ export function SearchHeader({
             onSearch()
           }}
         >
-          <div className="relative min-w-0">
+          <div className="relative min-w-0 flex-1">
             <div className="overflow-hidden">
               {/* A combobox: typing keeps focus in the field while Up/Down pick a suggestion. */}
               <Input
                 ref={input}
                 shape="pill"
                 className="focus-visible:ring-inset"
-                aria-label="Search media"
-                placeholder="Search names, folders and tags"
+                aria-label={searchLabel}
+                placeholder={placeholder}
                 value={value}
                 maxLength={200}
                 role={onSuggestion ? 'combobox' : undefined}
@@ -165,12 +150,6 @@ export function SearchHeader({
                   } else if (event.key === 'Escape' && expanded) {
                     event.preventDefault()
                     setListOpen(false)
-                  } else if (event.key === 'Escape' && mobile) {
-                    setOpen(false)
-                    event.currentTarget
-                      .closest('form')
-                      ?.parentElement?.querySelector<HTMLButtonElement>('button:not([type="submit"])')
-                      ?.focus()
                   }
                 }}
               />
@@ -232,32 +211,34 @@ export function SearchHeader({
               </ul>
             )}
           </div>
+          {value && (
+            <IconButton
+              label="Clear search"
+              onClick={() => {
+                onClear()
+                input.current?.focus()
+              }}
+            >
+              <X className="size-5" />
+            </IconButton>
+          )}
+          <IconButton label="Search" type="submit">
+            <Search className="size-5" />
+          </IconButton>
         </form>
-        {value && (!mobile || open) && (
-          <IconButton
-            label="Clear search"
-            onClick={() => {
-              onClear()
-              input.current?.focus()
-            }}
-          >
-            <X className="size-5" />
-          </IconButton>
-        )}
-        {(!mobile || !open) && (
-          <IconButton
-            label={mobile ? (open ? 'Close search' : 'Open search') : 'Search'}
-            aria-expanded={mobile ? open : undefined}
-            onClick={mobile ? toggle : onSearch}
-          >
-            {mobile && open ? <X className="size-5" /> : <Search className="size-5" />}
-          </IconButton>
-        )}
-        {!(mobile && open) && (
+      )}
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {!hideSearch && onFilters && (
           <IconButton label="Filters" onClick={onFilters}>
             <SlidersHorizontal className="size-5" />
           </IconButton>
         )}
+        {onSettings && (
+          <IconButton label="Settings" onClick={onSettings}>
+            <Settings className="size-5" />
+          </IconButton>
+        )}
+        {actions}
       </div>
     </header>
   )

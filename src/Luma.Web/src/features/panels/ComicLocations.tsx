@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useId, useRef, useState } from 'react'
 import { Checkbox, Field, Input, QuietButton, Select } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
-import { errorMessage, request, type Library, type FolderPage } from '../browse/api'
+import { errorMessage, request, type Library } from '../browse/api'
 import type { components } from '../../lib/api/generated'
 
 type Location = components['schemas']['PanelSourceLocation']
@@ -41,7 +41,7 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
       onSaved?.()
     } catch (error) {
       setMessage(
-        `${errorMessage(error)} Check that the library is configured and the folder path is relative to its root. Comic locations work with read-only media mounts and do not require file-management unlock.`,
+        `${errorMessage(error)} Check that the library is configured and the folder path is relative to its root. Comic locations work with read-only media mounts and are independent of the file-management switch.`,
       )
     } finally {
       setBusy(false)
@@ -71,21 +71,23 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
               ))}
             </Select>
           </Field>
-          <Field label="Folder relative to library">
-            <Input
-              placeholder="Comics/Manga (empty means library root)"
-              value={row.relativePath}
-              onChange={event => patch(index, { relativePath: event.target.value })}
-            />
-          </Field>
-          <div className="flex flex-wrap gap-2">
-            <QuietButton disabled={!row.libraryId} onClick={() => setBrowsing(index)}>
-              Browse indexed folders
-            </QuietButton>
-            <QuietButton onClick={() => setLocations(rows => rows.filter((_, i) => i !== index))}>
-              Remove location
-            </QuietButton>
-          </div>
+          <p className="break-words text-sm text-muted">{row.relativePath || 'Entire library'}</p>
+          <QuietButton disabled={!row.libraryId} onClick={() => setBrowsing(index)}>
+            Choose folder
+          </QuietButton>
+          <details className="text-sm text-muted">
+            <summary>Enter a path manually</summary>
+            <Field label="Folder relative to library">
+              <Input
+                placeholder="Optional relative path"
+                value={row.relativePath}
+                onChange={event => patch(index, { relativePath: event.target.value })}
+              />
+            </Field>
+          </details>
+          <QuietButton onClick={() => setLocations(rows => rows.filter((_, i) => i !== index))}>
+            Remove location
+          </QuietButton>
           <label htmlFor={`${checkboxId}-${index}`} className="flex items-center gap-2 text-sm">
             <Checkbox
               id={`${checkboxId}-${index}`}
@@ -98,13 +100,14 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
       ))}
       <div className="flex flex-wrap gap-2">
         <QuietButton
-          disabled={locations.length >= 32}
-          onClick={() =>
+          disabled={locations.length >= 32 || libraries.isPending}
+          onClick={() => {
             setLocations(rows => [
               ...rows,
               { libraryId: libraries.data?.[0]?.id ?? 0, relativePath: '', imageFolders: false },
             ])
-          }
+            setBrowsing(locations.length)
+          }}
         >
           Add location
         </QuietButton>
@@ -116,8 +119,8 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
         </QuietButton>
       </div>
       <p className="text-sm text-muted">
-        New disks or shares must first be mounted and configured as Luma libraries on the server. Folder browsing uses
-        the existing index; enter a relative path directly if it has not been indexed yet.
+        New disks or shares must first be mounted and configured as Luma libraries on the server. Browse folders
+        directly, including locations not indexed yet, or search indexed folder names.
       </p>
       {message && (
         <p role="status" className="text-sm">
@@ -130,67 +133,106 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
           if (!open) setBrowsing(null)
         }}
         title="Choose comic folder"
-        description="Browse indexed folders or choose the library root."
+        description="Browse your library folders or search by folder name."
         sheet
       >
         {browsing !== null && locations[browsing] && (
-          <FolderPicker
-            library={libraries.data?.find(item => item.id === locations[browsing].libraryId)}
-            onChoose={relativePath => {
-              patch(browsing, { relativePath })
-              setBrowsing(null)
-            }}
-          />
+          <div className="space-y-3 p-5">
+            <Field label="Choose library">
+              <Select
+                value={locations[browsing].libraryId}
+                onChange={event => patch(browsing, { libraryId: Number(event.target.value), relativePath: '' })}
+              >
+                {libraries.data?.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <FolderPicker
+              key={locations[browsing].libraryId}
+              library={libraries.data?.find(item => item.id === locations[browsing].libraryId)}
+              onChoose={relativePath => {
+                patch(browsing, { relativePath })
+                setBrowsing(null)
+              }}
+            />
+          </div>
         )}
       </Modal>
     </div>
   )
 }
 function FolderPicker({ library, onChoose }: { library?: Library; onChoose: (path: string) => void }) {
-  const [folder, setFolder] = useState(library?.rootFolderId),
-    [path, setPath] = useState(''),
-    [cursor, setCursor] = useState<string>()
-  const query = useQuery({
-    queryKey: ['comic-folder-picker', library?.id, folder, cursor],
+  const [path, setPath] = useState(''),
+    [search, setSearch] = useState(''),
+    [offset, setOffset] = useState(0)
+  const typed = useDeferredValue(search.trim())
+  const browse = useQuery({
+    queryKey: ['comic-source-folders', library?.id, path, offset],
     queryFn: ({ signal }) =>
-      request<FolderPage>(
-        `/api/folders?libraryId=${library!.id}&parentId=${folder}&limit=48${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      request<components['schemas']['SourceFolderPage']>(
+        `/api/panels/source-folders?libraryId=${library!.id}&path=${encodeURIComponent(path)}&offset=${offset}`,
         signal,
       ),
-    enabled: !!folder,
+    enabled: !!library,
   })
+  const matches = useQuery({
+    queryKey: ['comic-folder-search', library?.id, typed],
+    queryFn: ({ signal }) =>
+      request<components['schemas']['SourceFolderPage']>(
+        `/api/panels/source-folders?libraryId=${library!.id}&q=${encodeURIComponent(typed)}`,
+        signal,
+      ),
+    enabled: !!library && !!typed,
+  })
+  const rows = new Map<string, components['schemas']['SourceFolderChoice']>()
+  for (const item of browse.data?.items ?? [])
+    if (!typed || item.name.toLowerCase().includes(typed.toLowerCase())) rows.set(item.relativePath, item)
+  if (typed) for (const item of matches.data?.items ?? []) rows.set(item.relativePath, item)
+  function visit(next: string) {
+    setPath(next)
+    setSearch('')
+    setOffset(0)
+  }
   return (
-    <div className="space-y-3 p-5">
+    <div className="space-y-3">
+      <Input
+        aria-label="Search folders"
+        placeholder="Find folders by name"
+        value={search}
+        onChange={event => setSearch(event.target.value)}
+      />
       <p className="break-words text-sm">
         {library?.name} / {path || '(root)'}
       </p>
-      <QuietButton onClick={() => onChoose(path)}>Use this folder</QuietButton>
-      <QuietButton
-        onClick={() => {
-          setFolder(library?.rootFolderId)
-          setPath('')
-          setCursor(undefined)
-        }}
-      >
-        Library root
-      </QuietButton>
-      {query.data?.items.map(item => (
-        <QuietButton
-          key={item.id}
-          className="w-full justify-start"
-          onClick={() => {
-            setFolder(item.id)
-            setPath([path, item.name].filter(Boolean).join('/'))
-            setCursor(undefined)
-          }}
-        >
-          {item.name}
-        </QuietButton>
-      ))}
-      {query.data?.nextCursor && (
-        <QuietButton onClick={() => setCursor(query.data!.nextCursor!)}>More folders</QuietButton>
+      <div className="flex flex-wrap gap-2">
+        <QuietButton onClick={() => onChoose(path)}>Use this folder</QuietButton>
+        {path && <QuietButton onClick={() => visit(path.split('/').slice(0, -1).join('/'))}>Up one folder</QuietButton>}
+        {path && <QuietButton onClick={() => visit('')}>Library root</QuietButton>}
+      </div>
+      <div className="max-h-72 space-y-2 overflow-auto">
+        {[...rows.values()].map(item => (
+          <QuietButton
+            key={item.relativePath}
+            className="w-full justify-start text-left"
+            onClick={() => visit(item.relativePath)}
+          >
+            <span className="min-w-0">
+              <span className="block truncate">{item.name}</span>
+              {typed && <span className="block break-words text-xs text-muted">{item.relativePath}</span>}
+            </span>
+          </QuietButton>
+        ))}
+      </div>
+      {!browse.isPending && rows.size === 0 && (
+        <p className="text-sm text-muted">No matching folders. Try a shorter name or browse from the library root.</p>
       )}
-      {query.isError && <p role="alert">{errorMessage(query.error)}</p>}
+      {browse.data?.nextOffset !== null && browse.data?.nextOffset !== undefined && !typed && (
+        <QuietButton onClick={() => setOffset(browse.data!.nextOffset!)}>More folders</QuietButton>
+      )}
+      {(browse.error || matches.error) && <p role="alert">{errorMessage(browse.error || matches.error)}</p>}
     </div>
   )
 }

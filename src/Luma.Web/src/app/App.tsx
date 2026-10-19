@@ -21,15 +21,13 @@ import {
   ListChecks,
   LoaderCircle,
   Search,
-  SlidersHorizontal,
-  Settings,
   Tag,
   X,
 } from 'lucide-react'
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
-import { Input, IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
+import { IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
 import { Modal } from '../components/ui/Modal'
 import { SearchHeader, type SearchSuggestion } from '../components/ui/SearchHeader'
 import { Toast, useToast } from '../components/ui/Toast'
@@ -185,7 +183,6 @@ export function App() {
           : 'gallery'),
   )
   const [settingsAnchor, setSettingsAnchor] = useState<string | null>(null)
-  const [flickSearchOpen, setFlickSearchOpen] = useState(false)
   const configuration = useQuery({
     queryKey: ['ui-configuration'],
     queryFn: ({ signal }) => request<components['schemas']['UiConfigurationResponse']>('/api/ui-configuration', signal),
@@ -450,6 +447,7 @@ export function App() {
         }
       }
       if (event.state?.helpOrigin) setHelpOrigin(event.state.helpOrigin)
+      if (event.state?.settingsOrigin) setSettingsOrigin(event.state.settingsOrigin)
     }
     window.addEventListener('popstate', back)
     return () => window.removeEventListener('popstate', back)
@@ -565,6 +563,10 @@ export function App() {
   helpParams.set('view', 'help')
   helpParams.set('from', section === 'help' ? helpOrigin : section)
   function submitSearch() {
+    if (section === 'reels') {
+      apply({ ...filters, q: search.trim() || undefined, mediaType: 'video' }, 'reels')
+      return
+    }
     if (!search.trim()) {
       clearSearch()
       return
@@ -575,6 +577,13 @@ export function App() {
   // Suggestions are library-wide: a tag shows everything with exactly that tag, a folder opens it,
   // and a file opens that file over results for its name so the viewer can move on to similar names.
   function chooseSuggestion(suggestion: SearchSuggestion) {
+    if (section === 'reels') {
+      if (suggestion.kind === 'tag') apply({ mediaType: 'video', tag: [suggestion.label] }, 'reels')
+      else if (suggestion.kind === 'folder')
+        apply({ mediaType: 'video', libraryId: suggestion.libraryId ?? undefined, folderId: suggestion.id }, 'reels')
+      else apply({ mediaType: 'video', q: suggestion.label }, 'reels', suggestion.id)
+      return
+    }
     if (section === 'library') searchOrigin.current = 'library'
     if (suggestion.kind === 'tag') {
       apply({ tag: [suggestion.label] }, 'search')
@@ -592,6 +601,10 @@ export function App() {
       })
   }
   function clearSearch() {
+    if (section === 'reels') {
+      apply({ ...filters, q: undefined }, 'reels')
+      return
+    }
     if (section === 'library' || searchOrigin.current === 'library')
       apply({ ...libraryMemory.current, q: undefined }, 'library')
     else apply({}, 'search')
@@ -729,9 +742,7 @@ export function App() {
   const idleSearch = section === 'search' && !filters.q && !hasViewOptions
   const navItems: NavigationItem[] = [
     { id: 'library', label: 'Library', icon: Images },
-    { id: 'search', label: 'Search', icon: Search },
     { id: 'collections', label: 'Collections', icon: Bookmark },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ]
   const galleryFilters: Filters = filters
   const showAllMedia = section === 'search' || (!home && !filters.libraryId)
@@ -846,7 +857,7 @@ export function App() {
           Could not restore the open item: {errorMessage(restored.error)}
         </p>
       )}
-      {section !== 'reels' && section !== 'panels' && (
+      {section !== 'panels' && (
         <SearchHeader
           logo={<AppSwitcher active={experience} onSelect={switchExperience} applications={applications} />}
           value={search}
@@ -858,47 +869,17 @@ export function App() {
           onClear={clearSearch}
           searchRequested={searchFocusRequested}
           scope={`${section}:${queryString(filters)}`}
+          suggestionsUrl={section === 'reels' ? '/api/search/suggestions?mediaType=video' : undefined}
+          hideSearch={section === 'settings' || section === 'help'}
+          onSettings={section !== 'settings' && section !== 'help' ? () => navigateSection('settings') : undefined}
+          actions={
+            section === 'settings' ? (
+              <QuietButton onClick={() => switchExperience(settingsOrigin)}>
+                Back to {settingsOrigin === 'flick' ? 'Flick' : settingsOrigin === 'panels' ? 'Panels' : 'Gallery'}
+              </QuietButton>
+            ) : undefined
+          }
         />
-      )}
-      <Modal
-        open={flickSearchOpen}
-        onOpenChange={setFlickSearchOpen}
-        title="Search Flick"
-        description="Search video and animated media in Flick."
-        sheet
-      >
-        <form
-          className="space-y-3 p-5"
-          onSubmit={event => {
-            event.preventDefault()
-            setFlickSearchOpen(false)
-            apply({ ...filters, q: search.trim() || undefined }, 'reels')
-          }}
-        >
-          <Input
-            aria-label="Search Flick media"
-            placeholder="Names, folders and tags"
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-          />
-          <QuietButton type="submit">Search</QuietButton>
-        </form>
-      </Modal>
-      {section === 'reels' && (
-        <header className="relative z-30 flex shrink-0 items-center gap-3 border-b border-line bg-canvas px-4 py-2">
-          <AppSwitcher active="flick" onSelect={switchExperience} applications={applications} />
-          <div className="ml-auto flex gap-2">
-            <IconButton label="Search Flick" onClick={() => setFlickSearchOpen(true)}>
-              <Search className="size-5" />
-            </IconButton>
-            <IconButton label="Flick filters" onClick={() => setFilterOpen(true)}>
-              <SlidersHorizontal className="size-5" />
-            </IconButton>
-            <IconButton label="Settings" onClick={() => navigateSection('settings')}>
-              <Settings className="size-5" />
-            </IconButton>
-          </div>
-        </header>
       )}
       {filterRowVisible && section !== 'settings' && section !== 'help' && section !== 'panels' && (
         <ActiveFilters
@@ -968,21 +949,8 @@ export function App() {
             </Suspense>
           ) : section === 'settings' ? (
             <div className="overflow-auto scroll-py-2" data-scroll-restore>
-              <nav
-                aria-label="Settings sections"
-                className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-canvas p-3"
-              >
-                <QuietButton onClick={() => switchExperience(settingsOrigin)}>
-                  Back to {settingsOrigin === 'flick' ? 'Flick' : settingsOrigin === 'panels' ? 'Panels' : 'Gallery'}
-                </QuietButton>
-                {['general', 'gallery', 'flick', 'panels'].map(group => (
-                  <QuietLink key={group} href={`#settings-${group}`}>
-                    {group[0].toUpperCase() + group.slice(1)}
-                  </QuietLink>
-                ))}
-              </nav>
               <section id="settings-general" className="scroll-mt-20">
-                <h2 className="px-5 pt-5 text-xl font-semibold">General</h2>
+                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">General</h2>
                 <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
                 <ThemePicker value={theme} onChange={setTheme} />
                 <AppearanceSettings appearance={appearance} />
@@ -1021,7 +989,7 @@ export function App() {
                 </SettingsSection>
               </section>
               <section id="settings-gallery" className="scroll-mt-20">
-                <h2 className="px-5 pt-5 text-xl font-semibold">Gallery</h2>
+                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Gallery</h2>
                 <AlbumCoverSettings />
                 <SettingsSection
                   title="Random media URL"
@@ -1038,7 +1006,7 @@ export function App() {
                 <HiddenFolders />
               </section>
               <section id="settings-flick" className="scroll-mt-20">
-                <h2 className="px-5 pt-5 text-xl font-semibold">Flick</h2>
+                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Flick</h2>
                 <ReelsSortSettings />
                 <p className="px-5 pb-5 text-sm text-muted">
                   Playback, mute and auto-scroll controls are in the Flick menu. Flick uses your theme canvas and keeps
@@ -1046,7 +1014,7 @@ export function App() {
                 </p>
               </section>
               <section id="settings-panels" className="scroll-mt-20">
-                <h2 className="px-5 pt-5 text-xl font-semibold">Panels</h2>
+                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Panels</h2>
                 <SettingsSection
                   title="Comic locations and reader"
                   description="Choose comic locations within your configured libraries. Saved reading mode and fit override deployment defaults."

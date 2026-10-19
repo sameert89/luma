@@ -18,7 +18,6 @@ test('serves an installable manifest, icons, favicon and service worker', async 
 })
 
 test('folders can be hidden from every view and shown again from settings', async ({ page }) => {
-  const navigation = page.getByRole('navigation', { name: 'Primary navigation' })
   try {
     await page.goto('/?q=photo-0000020')
     await expect(page.getByTestId('media-cell')).toHaveCount(1)
@@ -30,7 +29,7 @@ test('folders can be hidden from every view and shown again from settings', asyn
     await page.goto('/?q=photo-0000020')
     await expect(page.getByText('No media to show')).toBeVisible()
 
-    await navigation.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
     const hidden = page.getByRole('region', { name: 'Hidden folders' })
     await hidden.getByRole('button', { name: 'Show Trips' }).click()
     await expect(hidden.getByText('No folders are hidden.')).toBeVisible()

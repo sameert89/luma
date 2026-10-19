@@ -1,9 +1,10 @@
+import { SearchHeader } from '../../components/ui/SearchHeader'
 import type { components } from '../../lib/api/generated'
 import { ComicLocations } from './ComicLocations'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { BookOpen, Search, SlidersHorizontal, Settings, Star } from 'lucide-react'
-import { Checkbox, Input, Select, IconButton, QuietButton } from '../../components/ui/Controls'
+import { BookOpen, Star } from 'lucide-react'
+import { Checkbox, Input, Select, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { errorMessage, request } from '../browse/api'
 import type { Comic, ComicList, ReadingStatistics } from './api'
@@ -23,8 +24,11 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
   const favouritesId = useId()
   const [params, setParams] = useState(initialParams)
   const [cursor, setCursor] = useState<number>()
-  const [searchOpen, setSearchOpen] = useState(!!params.get('q')),
-    [filtersOpen, setFiltersOpen] = useState(!!(params.get('state') || params.get('series') || params.get('favourite')))
+  const [search, setSearch] = useState(params.get('q') ?? '')
+  const [filtersOpen, setFiltersOpen] = useState(
+    !!(params.get('state') || params.get('series') || params.get('favourite')),
+  )
+  useEffect(() => setSearch(params.get('q') ?? ''), [params])
   const sources = useQuery({
     queryKey: ['comic-sources'],
     queryFn: ({ signal }) => request<components['schemas']['PanelSourceConfiguration']>('/api/panels/sources', signal),
@@ -93,20 +97,25 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
   if (comicId && reading.data) return <ComicReader key={reading.data.id} comic={reading.data} onExit={exit} />
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-line p-3">
-        {logo}
-        <div className="ml-auto flex gap-2">
-          <IconButton label="Search comics" onClick={() => setSearchOpen(value => !value)}>
-            <Search className="size-5" />
-          </IconButton>
-          <IconButton label="Comic filters" onClick={() => setFiltersOpen(value => !value)}>
-            <SlidersHorizontal className="size-5" />
-          </IconButton>
-          <IconButton label="Settings" onClick={onSettings}>
-            <Settings className="size-5" />
-          </IconButton>
-        </div>
-      </header>
+      <SearchHeader
+        logo={logo}
+        value={search}
+        onChange={setSearch}
+        onSearch={() => change('q', search.trim())}
+        onClear={() => {
+          setSearch('')
+          change('q', '')
+        }}
+        onSuggestion={suggestion => change('comic', String(suggestion.id))}
+        suggestionsUrl="/api/panels/suggestions"
+        searchLabel="Search comics"
+        placeholder="Search comic titles"
+        onHome={() => change('q', '')}
+        onFilters={() => setFiltersOpen(value => !value)}
+        onSettings={onSettings}
+        searchRequested={false}
+        scope={params.toString()}
+      />
       <div className="flex flex-wrap items-center gap-3 p-4">
         <h1 className="flex-1 text-xl font-semibold">Comic library</h1>
         <QuietButton onClick={() => setManage(true)}>Comic locations</QuietButton>
@@ -116,16 +125,6 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
           <h2 className="px-5 text-lg font-semibold">Choose where your comics live</h2>
           <ComicLocations onSaved={() => void sources.refetch()} />
         </section>
-      )}
-      {searchOpen && (
-        <div className="px-4 pb-3">
-          <Input
-            aria-label="Search comics"
-            placeholder="Search comic titles and authors"
-            value={params.get('q') ?? ''}
-            onChange={event => change('q', event.target.value)}
-          />
-        </div>
       )}
       {filtersOpen && (
         <div className="flex flex-wrap gap-3 px-4 pb-3">

@@ -29,36 +29,28 @@ test.beforeEach(async ({ page }) => {
     .toBeGreaterThan(0)
 })
 
-test('phone search has room for suggestions and closes without clearing the query', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile', 'Mobile search reveal')
-  const open = page.getByRole('button', { name: 'Open search' })
-  const filters = page.getByRole('button', { name: 'Filters', exact: true })
-  await open.click()
+test('phone search stays visible in Gallery and Collections but is hidden in Settings', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile', 'Mobile header layout')
   const search = page.getByRole('combobox', { name: 'Search media' })
-  await expect(search).toBeFocused()
-  await expect(filters).toHaveCount(0)
+  await expect(search).toBeVisible()
   await search.fill('holiday')
   await expect
     .poll(async () => (await search.boundingBox())?.width ?? 0)
     .toBeGreaterThan(page.viewportSize()!.width * 0.6)
-  await expect(page.getByRole('button', { name: 'Close search' })).toBeVisible()
-  await page.screenshot({ animations: 'disabled', path: 'test-results/search-mobile.png' })
-  await page.getByRole('button', { name: 'Close search' }).click()
-  await expect(open).toBeVisible()
-  await expect(filters).toBeVisible()
   await expect(page.getByRole('button', { name: /^Switch application,/ })).toBeVisible()
-  await expect(search).toBeHidden()
-  await open.click()
-  await expect(search).toHaveValue('holiday')
-  await page.getByRole('button', { name: 'Clear search' }).click()
-  await expect(search).toHaveValue('')
+  const nav = page.getByRole('navigation', { name: 'Primary navigation' })
+  await expect(nav.getByRole('button', { name: 'Search', exact: true })).toHaveCount(0)
+  await expect(nav.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0)
+  await nav.getByRole('button', { name: 'Collections', exact: true }).click()
+  await expect(search).toBeVisible()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await expect(page.getByRole('search')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toHaveCount(0)
 })
 
 test('previews distinct light and dark themes and scrolls settings clear of navigation', async ({ page }, testInfo) => {
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
   const settings = page.getByRole('region', { name: 'Theme settings' })
   for (const [name, theme] of [
     ['White', 'light'],
@@ -84,7 +76,7 @@ test('previews distinct light and dark themes and scrolls settings clear of navi
         animations: 'disabled',
         path: `test-results/gallery-${theme}-${testInfo.project.name}.png`,
       })
-      await navigation.getByRole('button', { name: 'Settings', exact: true }).click()
+      await page.getByRole('button', { name: 'Settings', exact: true }).click()
     }
   }
   const last = settings.getByRole('button', { name: 'Red & white', exact: true })
@@ -171,7 +163,7 @@ test('Collections favourites clear browse filters and keeps a persisted like acr
   await expect(saved).toBeVisible()
   await (await galleryAction(page, 'Refresh collection')).click()
   await expect(saved).toBeVisible()
-  await nav.getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await nav.getByRole('button', { name: 'Collections', exact: true }).click()
   await page.getByRole('button', { name: 'Open favourites', exact: true }).click()
   await expect(saved).toBeVisible()
@@ -388,7 +380,6 @@ test('keeps the virtualized gallery and retained summaries bounded', async ({ pa
 })
 
 test('searches and edits tags with keyboard-accessible controls', async ({ page }, testInfo) => {
-  if (testInfo.project.name === 'mobile') await page.getByRole('button', { name: 'Open search' }).click()
   const search = page.getByRole('combobox', { name: 'Search media' })
   await search.fill('holiday')
   await search.press('Enter')

@@ -126,7 +126,7 @@ function FileActions({
     <div className="space-y-4 p-5">
       {location.isError && (
         <p role="alert" className="text-danger">
-          {errorMessage(location.error)} Unlock file management in Settings.
+          {errorMessage(location.error)} Enable file management in Settings.
         </p>
       )}
       <p className="text-sm text-muted">

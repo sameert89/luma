@@ -25,7 +25,7 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
     >
       <h2 className="font-semibold">Upload into {destination || '/'}</h2>
       <p className="text-sm text-muted">
-        Choose or drop files. After refresh, unlock file management and reselect the same files or folder to resume.
+        Choose or drop files. After refresh, reselect the same files or folder to resume.
       </p>
       <label htmlFor={fileId} className="block text-sm">
         Files

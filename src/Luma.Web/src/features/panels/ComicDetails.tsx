@@ -61,7 +61,6 @@ function MetadataForm({ comic, onSaved }: { comic: Comic; onSaved: () => void })
         void save()
       }}
     >
-      <p className="text-sm text-muted">Unlock file management in Settings to save comic details.</p>
       <fieldset disabled={busy} className="space-y-4">
         <Field label="Title">
           <Input

@@ -167,7 +167,6 @@ test('double tapping a reel likes it without toggling playback', async ({ page }
 })
 
 test('Flick restores its own filters when switching applications', async ({ page }) => {
-  const navigation = page.getByRole('navigation', { name: 'Primary navigation' })
   await page.goto('/?libraryId=1&folderId=1')
   await switchExperience(page, 'Flick')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
@@ -181,7 +180,6 @@ test('Flick restores its own filters when switching applications', async ({ page
   await expect(page).toHaveURL(/order=asc/)
 
   await switchExperience(page, 'Gallery')
-  await navigation.getByRole('button', { name: 'Search', exact: true }).click()
   await page.getByRole('combobox', { name: 'Search media' }).fill('photo')
   await page.getByRole('combobox', { name: 'Search media' }).press('Enter')
   await expect(page).toHaveURL(/q=photo/)
