@@ -98,7 +98,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         var key = root.Key(prefix);
         await using var db = await database.OpenAsync(ct);
         // The library/path unique index bounds the subtree. Only immediate child names leave SQLite.
-        var rows = (await db.QueryAsync<ComicFolder>(new CommandDefinition("""
+        var rows = (await db.QueryAsync<string>(new CommandDefinition("""
             WITH visible AS (
             """ + ReadSql + """
               AND c.LibraryId=@libraryId AND c.PathKey>=@key AND c.PathKey<@end
@@ -106,12 +106,12 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
               SELECT substr(RelativePath,length(@prefix)+1,instr(substr(RelativePath,length(@prefix)+1),'/')-1) Name
               FROM visible WHERE instr(substr(RelativePath,length(@prefix)+1),'/')>0
             )
-            SELECT Name,@prefix||Name RelativePath FROM children WHERE @after IS NULL OR Name COLLATE BINARY>@after
+            SELECT Name FROM children WHERE @after IS NULL OR Name COLLATE BINARY>@after
             GROUP BY Name ORDER BY Name COLLATE BINARY LIMIT 61
             """, new { libraryId, prefix, key, end = key + "\U0010FFFF", after }, cancellationToken: ct))).ToList();
         var more = rows.Count > 60;
         if (more) rows.RemoveAt(60);
-        return new(rows, more ? rows[^1].Name : null);
+        return new(rows.Select(name => new ComicFolder(name, prefix + name)).ToArray(), more ? rows[^1] : null);
     }
     public async Task<IReadOnlyList<Luma.Server.Features.Media.TagSummary>> TagsAsync(long id, CancellationToken ct)
     {

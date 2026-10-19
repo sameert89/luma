@@ -60,3 +60,19 @@ it('offers to create a tag that does not exist yet, and reaches results with the
   await userEvent.click(create)
   await waitFor(() => expect(tagged(fetch)).toEqual([{ mediaIds: [7], addTagIds: [9], removeTagIds: [] }]))
 })
+
+it('uses comic suggestions and changes comic tags without touching gallery media tags', async () => {
+  const fetch = api()
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      <TagEditor mediaIds={[]} comicId={9} tags={[]} />
+    </QueryClientProvider>,
+  )
+  await userEvent.type(screen.getByRole('searchbox', { name: 'Find or create a tag' }), 'bea')
+  await userEvent.click(await screen.findByRole('button', { name: 'Beaches' }))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith('/api/panels/comics/9/tags', expect.objectContaining({ method: 'POST' })),
+  )
+  expect(fetch).toHaveBeenCalledWith('/api/panels/tags?prefix=bea&limit=8', expect.anything())
+  expect(tagged(fetch)).toEqual([])
+})

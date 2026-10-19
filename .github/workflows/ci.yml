@@ -26,8 +26,19 @@ jobs:
       - run: dotnet restore Luma.slnx --locked-mode
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
         if: runner.os == 'Linux'
-      - run: choco install ffmpeg --no-progress -y
+      - name: Install and verify FFmpeg
         if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            choco install ffmpeg --no-progress -y
+            if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+              ffmpeg -version
+              if ($LASTEXITCODE -eq 0) { exit 0 }
+            }
+            if ($attempt -lt 3) { Start-Sleep -Seconds 5 }
+          }
+          throw "FFmpeg is unavailable after three installation attempts."
       - run: dotnet format Luma.slnx --verify-no-changes --no-restore
       - run: dotnet build Luma.slnx -c Release --no-restore
       - run: dotnet test Luma.slnx -c Release --no-build

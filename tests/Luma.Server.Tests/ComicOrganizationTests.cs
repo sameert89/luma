@@ -59,13 +59,14 @@ public sealed class ComicOrganizationTests
         foreach (var path in new[] { "Base/Manga/DBZ/01.cbz", "Base/Manga/DBZ/02.cbz", "Base/Western/03.cbz", "Base/root.cbz" })
             await db.ExecuteAsync("""
                 INSERT INTO Comics(LibraryId,RelativePath,PathKey,Format,Title,Series,PageCount,SourceSize,SourceModifiedTicks,AddedAt)
-                VALUES(1,@path,@path,'zip',@path,'Dragon Ball',3,1,1,'2026-01-01')
-                """, new { path });
+                VALUES(1,@path,@key,'zip',@path,'Dragon Ball',3,1,1,'2026-01-01')
+                """, new { path, key = f.Root.Key(path) });
         var library = new ComicLibrary(f.Database, f.Options);
         var offline = f.Root.Path + ".offline";
         Directory.Move(f.Root.Path, offline);
         try
         {
+            Assert.Empty((await library.FoldersAsync(1, "Absent", null, default)).Items);
             Assert.Equal(new[] { "Manga", "Western" }, (await library.FoldersAsync(1, "Base", null, default)).Items.Select(x => x.Name));
             Assert.Equal("Base/Manga/DBZ", Assert.Single((await library.FoldersAsync(1, "Base/Manga", null, default)).Items).RelativePath);
             Assert.Single((await library.ListAsync(null, null, null, null, null, default, 1, "Base")).Items);
