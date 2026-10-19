@@ -14,9 +14,9 @@ public static class SearchSuggestions
     private const int MaximumFolders = 3;
 
     // Tags by prefix on their unique key; only tags that still label something are offered.
-    public const string TagQuery = """
+    public const string TagQuery = $"""
         SELECT t.Id,t.Name Label,NULL Detail FROM Tags t
-        WHERE t.NormalizedKey>=@key AND t.NormalizedKey<@end AND EXISTS(SELECT 1 FROM MediaTags mt WHERE mt.TagId=t.Id)
+        WHERE t.NormalizedKey>=@key AND t.NormalizedKey<@end AND EXISTS(SELECT 1 FROM MediaTags mt JOIN Media m ON m.Id=mt.MediaId JOIN Libraries l ON l.Id=m.LibraryId WHERE mt.TagId=t.Id AND l.Enabled=1 AND m.Availability='present' AND m.FolderId NOT IN ({HiddenFolders.Descendants}))
         ORDER BY t.NormalizedKey,t.Id LIMIT @count
         """;
     // Folders by their own name: a prefix seek on IX_Folders_Name, then (from three characters) names
@@ -67,7 +67,7 @@ public static class SearchSuggestions
         var typePredicate = mediaType is null ? "" : " AND m.MediaType='video'";
         var substring = text.EnumerateRunes().Count() >= 3;
         var fts = "NameKey:\"" + key.Replace("\"", "\"\"") + "\"";
-        var tags = (await db.QueryAsync<SuggestionRow>(new CommandDefinition(mediaType is null ? TagQuery : TagQuery.Replace("SELECT 1 FROM MediaTags mt WHERE mt.TagId=t.Id", "SELECT 1 FROM MediaTags mt JOIN Media m ON m.Id=mt.MediaId WHERE mt.TagId=t.Id AND m.MediaType='video'"), new { key, end, count = Math.Min(MaximumTags, limit) }, cancellationToken: ct))).ToList();
+        var tags = (await db.QueryAsync<SuggestionRow>(new CommandDefinition(mediaType is null ? TagQuery : TagQuery.Replace("WHERE mt.TagId=t.Id", "WHERE mt.TagId=t.Id AND m.MediaType='video'"), new { key, end, count = Math.Min(MaximumTags, limit) }, cancellationToken: ct))).ToList();
         var folderCount = Math.Min(MaximumFolders, limit - tags.Count);
         var folders = folderCount <= 0 ? [] : (await db.QueryAsync<FolderRow>(new CommandDefinition(VideoFolders(FolderPrefixQuery, mediaType), new { key, end, count = folderCount }, cancellationToken: ct))).ToList();
         if (substring && folders.Count < folderCount)

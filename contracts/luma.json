@@ -2853,6 +2853,28 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "libraryId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2862,6 +2884,157 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ComicList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/folders": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicFolders",
+        "parameters": [
+          {
+            "name": "libraryId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComicFolderPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/comics/{id}/tags": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicTags",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "UpdateComicTags",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComicTagUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/panels/tags": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "FindComicTags",
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagSummary"
+                  }
                 }
               }
             }
@@ -3885,6 +4058,40 @@
           }
         }
       },
+      "ComicFolder": {
+        "required": [
+          "name",
+          "relativePath"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "relativePath": {
+            "type": "string"
+          }
+        }
+      },
+      "ComicFolderPage": {
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComicFolder"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "ComicJobAccepted": {
         "required": [
           "id"
@@ -4045,6 +4252,29 @@
           "coverPage": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "ComicTagUpdate": {
+        "required": [
+          "addTagIds",
+          "removeTagIds"
+        ],
+        "type": "object",
+        "properties": {
+          "addTagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "removeTagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
           }
         }
       },
@@ -5204,6 +5434,10 @@
           "imageFolders": {
             "type": "boolean",
             "default": false
+          },
+          "excludeFromGallery": {
+            "type": "boolean",
+            "default": true
           }
         }
       },

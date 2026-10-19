@@ -768,6 +768,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panels/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicFolders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicTags"];
+        put?: never;
+        post: operations["UpdateComicTags"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FindComicTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panels/comics/{id}": {
         parameters: {
             query?: never;
@@ -1214,6 +1262,14 @@ export interface components {
             nextCursor: string | null;
             previousCursor: string | null;
         };
+        ComicFolder: {
+            name: string;
+            relativePath: string;
+        };
+        ComicFolderPage: {
+            items: components["schemas"]["ComicFolder"][];
+            nextCursor: string | null;
+        };
         ComicJobAccepted: {
             /** Format: int64 */
             id: number;
@@ -1268,6 +1324,10 @@ export interface components {
             coverUrl: string | null;
             /** Format: int32 */
             coverPage: number;
+        };
+        ComicTagUpdate: {
+            addTagIds: number[];
+            removeTagIds: number[];
         };
         CoverImage: {
             url: string;
@@ -1622,6 +1682,8 @@ export interface components {
             relativePath: string;
             /** @default false */
             imageFolders: boolean;
+            /** @default true */
+            excludeFromGallery: boolean;
         };
         PanelSourceUpdate: {
             locations: components["schemas"]["PanelSourceLocation"][];
@@ -3376,6 +3438,9 @@ export interface operations {
                 series?: string;
                 favourite?: boolean;
                 cursor?: number;
+                libraryId?: number;
+                path?: string;
+                tag?: string;
             };
             header?: never;
             path?: never;
@@ -3390,6 +3455,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComicList"];
+                };
+            };
+        };
+    };
+    GetComicFolders: {
+        parameters: {
+            query: {
+                libraryId: number;
+                path?: string;
+                after?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicFolderPage"];
+                };
+            };
+        };
+    };
+    GetComicTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSummary"][];
+                };
+            };
+        };
+    };
+    UpdateComicTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicTagUpdate"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FindComicTags: {
+        parameters: {
+            query?: {
+                prefix?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSummary"][];
                 };
             };
         };

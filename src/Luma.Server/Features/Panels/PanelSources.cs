@@ -6,7 +6,7 @@ using Luma.Server.Http;
 
 namespace Luma.Server.Features.Panels;
 
-public sealed record PanelSourceLocation(long LibraryId, string RelativePath = "", bool ImageFolders = false);
+public sealed record PanelSourceLocation(long LibraryId, string RelativePath = "", bool ImageFolders = false, bool ExcludeFromGallery = true);
 public sealed record PanelSourceConfiguration(bool Configured, IReadOnlyList<PanelSourceLocation> Locations);
 public sealed record PanelSourceUpdate(IReadOnlyList<PanelSourceLocation> Locations);
 public sealed class PanelSources(Database database, IndexingOptions options, IConfiguration configuration)
@@ -45,8 +45,8 @@ public sealed class PanelSources(Database database, IndexingOptions options, ICo
     {
         await using var db = await database.OpenAsync(ct);
         var configured = await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM ApplicationState WHERE Key='panelSourcesConfigured')", cancellationToken: ct));
-        var locations = (await db.QueryAsync<SourceRow>(new CommandDefinition("SELECT LibraryId,RelativePath,ImageFolders FROM PanelSources ORDER BY LibraryId,PathKey", cancellationToken: ct))).ToArray();
-        return new(configured, locations.Select(x => new PanelSourceLocation(x.LibraryId, x.RelativePath, x.ImageFolders)).ToArray());
+        var locations = (await db.QueryAsync<SourceRow>(new CommandDefinition("SELECT LibraryId,RelativePath,ImageFolders,ExcludeFromGallery FROM PanelSources ORDER BY LibraryId,PathKey", cancellationToken: ct))).ToArray();
+        return new(configured, locations.Select(x => new PanelSourceLocation(x.LibraryId, x.RelativePath, x.ImageFolders, x.ExcludeFromGallery)).ToArray());
     }
     public async Task InitializeAsync(CancellationToken ct)
     {
@@ -60,7 +60,7 @@ public sealed class PanelSources(Database database, IndexingOptions options, ICo
         {
             var root = options.Libraries.Find(x => x.Id == source.LibraryId) ?? throw ApiRequestException.Missing();
             var path = MutationPaths.Normalize(source.RelativePath, allowRoot: true);
-            return new { source.LibraryId, RelativePath = path, PathKey = root.Key(path), source.ImageFolders };
+            return new { source.LibraryId, RelativePath = path, PathKey = root.Key(path), source.ImageFolders, source.ExcludeFromGallery };
         }).DistinctBy(x => (x.LibraryId, x.PathKey)).ToArray();
         await using var db = await database.OpenAsync(ct);
         using var tx = db.BeginTransaction();
@@ -70,7 +70,7 @@ public sealed class PanelSources(Database database, IndexingOptions options, ICo
         await db.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET State='cancelled' WHERE State IN ('queued','running'); DELETE FROM PanelSources; INSERT INTO ApplicationState(Key,Value) VALUES('panelSourcesConfigured','1') ON CONFLICT(Key) DO NOTHING;", transaction: tx, cancellationToken: ct));
         foreach (var source in normalized)
         {
-            await db.ExecuteAsync(new CommandDefinition("INSERT INTO PanelSources(LibraryId,RelativePath,PathKey,ImageFolders) VALUES(@LibraryId,@RelativePath,@PathKey,@ImageFolders); INSERT INTO ComicJobs(LibraryId,Source,Recursive,ImageFolders,CreatedAt) VALUES(@LibraryId,@RelativePath,1,@ImageFolders,@now)", new { source.LibraryId, source.RelativePath, source.PathKey, source.ImageFolders, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+            await db.ExecuteAsync(new CommandDefinition("INSERT INTO PanelSources(LibraryId,RelativePath,PathKey,ImageFolders,ExcludeFromGallery) VALUES(@LibraryId,@RelativePath,@PathKey,@ImageFolders,@ExcludeFromGallery); INSERT INTO ComicJobs(LibraryId,Source,Recursive,ImageFolders,CreatedAt) VALUES(@LibraryId,@RelativePath,1,@ImageFolders,@now)", new { source.LibraryId, source.RelativePath, source.PathKey, source.ImageFolders, source.ExcludeFromGallery, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
         }
         tx.Commit();
     }
@@ -79,6 +79,7 @@ public sealed class PanelSources(Database database, IndexingOptions options, ICo
         public long LibraryId { get; set; }
         public string RelativePath { get; set; } = "";
         public bool ImageFolders { get; set; }
+        public bool ExcludeFromGallery { get; set; }
     }
 }
 

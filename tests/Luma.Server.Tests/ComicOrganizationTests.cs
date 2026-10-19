@@ -1,0 +1,89 @@
+using Dapper;
+using Luma.Server.Features.Libraries;
+using Luma.Server.Features.Media;
+using Luma.Server.Features.Panels;
+using Luma.Server.Features.Tags;
+using Microsoft.Extensions.Configuration;
+
+namespace Luma.Server.Tests;
+
+public sealed class ComicOrganizationTests
+{
+    [Fact]
+    public async Task Exclusion_preserves_existing_media_and_tags_and_stops_future_gallery_discovery()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "Comics"));
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "ComicsExtra"));
+        await f.CreateImageAsync("Comics/page.jpg");
+        await f.CreateImageAsync("ComicsExtra/photo.jpg");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var id = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='Comics/page.jpg'");
+        var tags = new TagService(f.Database);
+        var tag = (await tags.CreateAsync("Comic exclusive", default)).Tag;
+        await tags.BulkAsync(new([id], [tag.Id], []), default);
+        var sources = new PanelSources(f.Database, f.Options, new ConfigurationBuilder().Build());
+        await sources.SaveAsync([new(1, "Comics")], default);
+        var (predicate, parameters) = new MediaQuery().Normalize().Predicate();
+        Assert.Equal(1, await db.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM Media m WHERE {predicate}", parameters));
+        Assert.Empty(await tags.FindAsync("Comic", 20, default));
+        Assert.DoesNotContain(await SearchSuggestions.SuggestAsync(f.Database, "Comic", 20, default), x => x.Kind == "tag" && x.Id == tag.Id);
+        await f.CreateImageAsync("Comics/new.jpg");
+        await f.ScanAsync();
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Media WHERE RelativePath='Comics/new.jpg'"));
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE Id=@id", new { id }));
+        Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@id", new { id }));
+        await sources.SaveAsync([new(1, "Comics", ExcludeFromGallery: false)], default);
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM Media m WHERE {predicate}", parameters));
+        Assert.Equal(tag.Id, Assert.Single(await tags.FindAsync("Comic", 20, default)).Id);
+        Assert.Equal(id, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='Comics/page.jpg'"));
+    }
+
+    [Fact]
+    public async Task Multiple_locations_in_one_library_queue_without_duplicate_comic_identity()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var sources = new PanelSources(f.Database, f.Options, new ConfigurationBuilder().Build());
+        await sources.SaveAsync([new(1, "Manga"), new(1, "Western"), new(1, "Manga")], default);
+        await using var db = await f.Database.OpenAsync(default);
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ComicJobs WHERE State='queued'"));
+        Assert.Equal(2, (await sources.GetAsync(default)).Locations.Count);
+    }
+
+    [Fact]
+    public async Task Comic_hierarchy_series_search_and_tags_work_without_original_media()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        foreach (var path in new[] { "Base/Manga/DBZ/01.cbz", "Base/Manga/DBZ/02.cbz", "Base/Western/03.cbz", "Base/root.cbz" })
+            await db.ExecuteAsync("""
+                INSERT INTO Comics(LibraryId,RelativePath,PathKey,Format,Title,Series,PageCount,SourceSize,SourceModifiedTicks,AddedAt)
+                VALUES(1,@path,@path,'zip',@path,'Dragon Ball',3,1,1,'2026-01-01')
+                """, new { path });
+        var library = new ComicLibrary(f.Database, f.Options);
+        var offline = f.Root.Path + ".offline";
+        Directory.Move(f.Root.Path, offline);
+        try
+        {
+            Assert.Equal(new[] { "Manga", "Western" }, (await library.FoldersAsync(1, "Base", null, default)).Items.Select(x => x.Name));
+            Assert.Equal("Base/Manga/DBZ", Assert.Single((await library.FoldersAsync(1, "Base/Manga", null, default)).Items).RelativePath);
+            Assert.Single((await library.ListAsync(null, null, null, null, null, default, 1, "Base")).Items);
+            Assert.Equal(2, (await library.ListAsync(null, null, null, null, null, default, 1, "Base/Manga/DBZ")).Items.Count);
+            Assert.Equal(4, (await library.ListAsync("Dragon", null, null, null, null, default)).Items.Count);
+            var tags = new TagService(f.Database);
+            var tag = (await tags.CreateAsync("Shonen", default)).Tag;
+            var id = await db.ExecuteScalarAsync<long>("SELECT MIN(Id) FROM Comics");
+            await library.UpdateTagsAsync(id, new([tag.Id], []), default);
+            Assert.Equal(tag.Id, Assert.Single(await library.TagsAsync(id, default)).Id);
+            Assert.Empty(await tags.FindAsync("Shonen", 20, default));
+            Assert.Single((await library.ListAsync(null, null, null, null, null, default, tag: "Shonen")).Items);
+            var target = (await tags.CreateAsync("Action", default)).Tag;
+            await tags.RenameAsync(tag.Id, "Action", default);
+            Assert.Equal(target.Id, Assert.Single(await library.TagsAsync(id, default)).Id);
+            await tags.DeleteAsync(target.Id, default);
+            Assert.Empty(await library.TagsAsync(id, default));
+        }
+        finally { Directory.Move(offline, f.Root.Path); }
+    }
+}

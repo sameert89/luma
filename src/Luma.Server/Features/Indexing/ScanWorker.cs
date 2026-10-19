@@ -108,8 +108,13 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             ? await lookup.QuerySingleAsync<string>(new CommandDefinition("SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId", new { folderId, scan.LibraryId }, cancellationToken: ct)) : "";
         var directoryPath = relativeFolder.Length == 0 ? root.Path : SourcePaths.Resolve(root, relativeFolder);
         // Hidden folders are excluded from indexing: their entry is still seen, but not descended into.
-        var hidden = (await lookup.QueryAsync<string>(new CommandDefinition("SELECT PathKey FROM Folders WHERE LibraryId=@LibraryId AND Hidden=1",
+        var hidden = (await lookup.QueryAsync<string>(new CommandDefinition("SELECT PathKey FROM Folders WHERE LibraryId=@LibraryId AND Hidden=1 UNION SELECT PathKey FROM PanelSources WHERE LibraryId=@LibraryId AND ExcludeFromGallery=1",
             scan, cancellationToken: ct))).ToHashSet(StringComparer.Ordinal);
+        if (hidden.Any(path => path.Length == 0 || root.Key(relativeFolder) == path || root.Key(relativeFolder).StartsWith(path + "/", StringComparison.Ordinal)))
+        {
+            await lookup.ExecuteAsync(new CommandDefinition("UPDATE Scans SET State='completed',FinishedAt=@now WHERE Id=@Id AND State='running'", new { scan.Id, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
+            return;
+        }
         var channel = Channel.CreateBounded<DiscoveredEntry>(new BoundedChannelOptions(options.QueueCapacity)
         { SingleWriter = true, SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -148,10 +153,11 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 using (var batch = db.BeginTransaction())
                 {
                     var folders = new Dictionary<string, long>();
+                    var excludedPaths = (await db.QueryAsync<string>(new CommandDefinition("SELECT PathKey FROM PanelSources WHERE LibraryId=@LibraryId AND ExcludeFromGallery=1", new { scan.LibraryId }, batch, cancellationToken: ct))).ToArray();
                     var started = System.Diagnostics.Stopwatch.StartNew();
                     for (var count = 0; count < 32 && channel.Reader.TryRead(out var entry); count++)
                     {
-                        await PersistEntryAsync(db, batch, folders, scan, root, entry, ct);
+                        await PersistEntryAsync(db, batch, folders, scan, root, entry, ct, excludedPaths);
                         if (started.ElapsedMilliseconds >= 25) break;
                     }
                     await EnsureRunningAsync(db, batch, scan.Id, ct);
@@ -168,10 +174,10 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 UPDATE Scans SET State='completed',FinishedAt=@now WHERE Id=@Id AND State='running'
                 """, new { scan.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
             if (owned == 1)
-                await db.ExecuteAsync(new CommandDefinition("""
+                await db.ExecuteAsync(new CommandDefinition($"""
                     UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND LastSeenScanId<>@Id
                       AND (@FolderId IS NULL OR FolderId=@FolderId OR @Recursive AND FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId))
-                      AND FolderId NOT IN (SELECT a.DescendantId FROM Folders h JOIN FolderAncestry a ON a.AncestorId=h.Id WHERE h.LibraryId=@LibraryId AND h.Hidden=1);
+                      AND FolderId NOT IN ({Luma.Server.Features.Libraries.HiddenFolders.Descendants});
                     UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
                       (SELECT Id FROM Media WHERE LibraryId=@LibraryId AND Availability='missing');
                     UPDATE Libraries SET Availability='available' WHERE Id=@LibraryId;
@@ -262,6 +268,9 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             "SELECT RelativePath FROM Folders WHERE Id=@folderId AND LibraryId=@LibraryId AND (@force OR DirectIndexedAt IS NULL)",
             new { folderId, scan.LibraryId, force = requested.Force }, cancellationToken: ct));
         if (relative is null) return;
+        var excluded = await db.QueryAsync<string>(new CommandDefinition("SELECT PathKey FROM PanelSources WHERE LibraryId=@LibraryId AND ExcludeFromGallery=1", new { scan.LibraryId }, cancellationToken: ct));
+        var key = root.Key(relative);
+        if (excluded.Any(path => path.Length == 0 || key == path || key.StartsWith(path + "/", StringComparison.Ordinal))) return;
         try
         {
             var path = relative.Length == 0 ? root.Path : SourcePaths.Resolve(root, relative);
@@ -285,8 +294,9 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 using (var tx = db.BeginTransaction())
                 {
                     var folders = new Dictionary<string, long>();
+                    var excludedPaths = (await db.QueryAsync<string>(new CommandDefinition("SELECT PathKey FROM PanelSources WHERE LibraryId=@LibraryId AND ExcludeFromGallery=1", new { scan.LibraryId }, tx, cancellationToken: ct))).ToArray();
                     foreach (var entry in discovered)
-                        await PersistEntryAsync(db, tx, folders, scan, root, entry, ct, priority: true);
+                        await PersistEntryAsync(db, tx, folders, scan, root, entry, ct, excludedPaths, priority: true);
                     await EnsureRunningAsync(db, tx, scan.Id, ct);
                     tx.Commit();
                 }
@@ -303,8 +313,10 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         }
     }
 
-    private static async Task PersistEntryAsync(SqliteConnection db, SqliteTransaction tx, Dictionary<string, long> folders, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct, bool priority = false)
+    private static async Task PersistEntryAsync(SqliteConnection db, SqliteTransaction tx, Dictionary<string, long> folders, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct, string[] excludedPaths, bool priority = false)
     {
+        var entryKey = root.Key(entry.RelativePath);
+        if (excludedPaths.Any(path => path.Length == 0 || entryKey == path || entryKey.StartsWith(path + "/", StringComparison.Ordinal))) return;
         priority |= scan.Priority > 0;
         if (entry.Directory)
         {
