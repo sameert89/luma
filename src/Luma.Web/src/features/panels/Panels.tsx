@@ -1,32 +1,48 @@
+import { BackgroundJobsButton } from '../status/BackgroundJobs'
 import { SearchHeader } from '../../components/ui/SearchHeader'
 import type { components } from '../../lib/api/generated'
 import { ComicLocations } from './ComicLocations'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { BookOpen, Star, FolderPlus, FolderCog } from 'lucide-react'
+import { BookOpen, Star, FolderPlus, FolderCog, FolderOpen, ArrowUp, Info } from 'lucide-react'
 import { Checkbox, Input, Select, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
-import { errorMessage, request } from '../browse/api'
+import { errorMessage, request, type Library } from '../browse/api'
 import type { Comic, ComicList, ReadingStatistics } from './api'
 import { ComicReader } from './ComicReader'
 import { ComicDetails } from './ComicDetails'
 
 function initialParams() {
   const current = new URLSearchParams(window.location.search)
-  if (['comic', 'state', 'q', 'series', 'favourite'].some(key => current.has(key))) return current
+  if (['comic', 'state', 'q', 'series', 'favourite', 'libraryId', 'path', 'tag'].some(key => current.has(key)))
+    return current
   try {
     return new URLSearchParams(localStorage.getItem('luma-panels-query') ?? '')
   } catch {
     return current
   }
 }
-export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () => void }) {
+export function Panels({
+  logo,
+  onSettings,
+  showJobs = true,
+}: {
+  logo: ReactNode
+  onSettings: () => void
+  showJobs?: boolean
+}) {
+  const client = useQueryClient()
+  const libraries = useQuery({
+    queryKey: ['libraries'],
+    queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal),
+  })
   const favouritesId = useId()
   const [params, setParams] = useState(initialParams)
+  const [folderAfter, setFolderAfter] = useState<string>()
   const [cursor, setCursor] = useState<number>()
   const [search, setSearch] = useState(params.get('q') ?? '')
   const [filtersOpen, setFiltersOpen] = useState(
-    !!(params.get('state') || params.get('series') || params.get('favourite')),
+    !!(params.get('state') || params.get('series') || params.get('favourite') || params.get('tag')),
   )
   useEffect(() => setSearch(params.get('q') ?? ''), [params])
   const sources = useQuery({
@@ -39,24 +55,69 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
     refetchInterval: 3000,
   })
   const discovery =
-    tasks.data?.filter(task => task.kind === 'comic' && ['queued', 'running'].includes(task.state)) ?? []
+    tasks.data?.filter(task => task.kind === 'comics' && ['queued', 'running'].includes(task.state)) ?? []
   const discovering = discovery.length > 0
+  const comicCheckpoint = JSON.stringify(tasks.data?.filter(task => task.kind === 'comics'))
   useEffect(() => {
     void client.invalidateQueries({ queryKey: ['comics'] })
-  }, [tasks.dataUpdatedAt])
+    void client.invalidateQueries({ queryKey: ['comic-folders'] })
+  }, [comicCheckpoint, client])
   const configured = sources.data?.configured === true && (sources.data.locations?.length ?? 0) > 0
   const [manage, setManage] = useState(false)
   const [details, setDetails] = useState<number | null>(null)
-  const client = useQueryClient()
   const comicId = Number(params.get('comic'))
-  const library = useQuery({
-    queryKey: ['comics', params.get('q'), params.get('state'), params.get('series'), params.get('favourite'), cursor],
+  const libraryId = Number(params.get('libraryId')) || undefined
+  const path = params.get('path') ?? ''
+  const searching = !!(
+    params.get('q') ||
+    params.get('series') ||
+    params.get('state') ||
+    params.get('favourite') ||
+    params.get('tag')
+  )
+  const folders = useQuery({
+    queryKey: ['comic-folders', libraryId, path, folderAfter],
     queryFn: ({ signal }) =>
-      request<ComicList>(
-        `/api/panels/comics?${new URLSearchParams({ ...(params.get('q') ? { q: params.get('q')! } : {}), ...(params.get('state') ? { state: params.get('state')! } : {}), ...(params.get('series') ? { series: params.get('series')! } : {}), ...(params.get('favourite') === 'true' ? { favourite: 'true' } : {}), ...(cursor ? { cursor: String(cursor) } : {}) })}`,
+      request<components['schemas']['ComicFolderPage']>(
+        `/api/panels/folders?${new URLSearchParams({ libraryId: String(libraryId), path, ...(folderAfter ? { after: folderAfter } : {}) })}`,
         signal,
       ),
-    enabled: !comicId && configured,
+    enabled: !!libraryId && !searching,
+    refetchInterval: discovering ? 3000 : false,
+  })
+  function visit(id?: number, nextPath = '') {
+    const next = new URLSearchParams()
+    if (id) {
+      next.set('libraryId', String(id))
+      next.set('path', nextPath)
+    }
+    setCursor(undefined)
+    setFolderAfter(undefined)
+    window.history.pushState(
+      { ...window.history.state, section: 'panels' },
+      '',
+      `/panels${next.size ? `?${next}` : ''}`,
+    )
+    setParams(next)
+  }
+  const library = useQuery({
+    queryKey: [
+      'comics',
+      libraryId,
+      path,
+      params.get('tag'),
+      params.get('q'),
+      params.get('state'),
+      params.get('series'),
+      params.get('favourite'),
+      cursor,
+    ],
+    queryFn: ({ signal }) =>
+      request<ComicList>(
+        `/api/panels/comics?${new URLSearchParams({ ...(params.get('q') ? { q: params.get('q')! } : {}), ...(params.get('state') ? { state: params.get('state')! } : {}), ...(params.get('series') ? { series: params.get('series')! } : {}), ...(params.get('favourite') === 'true' ? { favourite: 'true' } : {}), ...(libraryId ? { libraryId: String(libraryId) } : {}), ...(!searching && libraryId ? { path } : {}), ...(params.get('tag') ? { tag: params.get('tag')! } : {}), ...(cursor ? { cursor: String(cursor) } : {}) })}`,
+        signal,
+      ),
+    enabled: !comicId && configured && (!!libraryId || searching),
     refetchInterval: discovering ? 3000 : false,
   })
   const reading = useQuery({
@@ -121,10 +182,11 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
         onSuggestion={suggestion => change('comic', String(suggestion.id))}
         suggestionsUrl="/api/panels/suggestions"
         searchLabel="Search comics"
-        placeholder="Search comic titles"
-        onHome={() => change('q', '')}
+        placeholder="Search comic titles or series"
+        onHome={() => visit()}
         onFilters={() => setFiltersOpen(value => !value)}
         onSettings={onSettings}
+        actions={showJobs ? <BackgroundJobsButton compact /> : undefined}
         searchRequested={false}
         scope={params.toString()}
       />
@@ -164,6 +226,13 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
             value={params.get('series') ?? ''}
             onChange={event => change('series', event.target.value)}
           />
+          <Input
+            aria-label="Comic tag filter"
+            className="max-w-xs"
+            placeholder="Comic tag"
+            value={params.get('tag') ?? ''}
+            onChange={event => change('tag', event.target.value)}
+          />
           <label htmlFor={favouritesId} className="flex items-center gap-2 text-sm">
             <Checkbox
               id={favouritesId}
@@ -185,6 +254,16 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
           Loading comics…
         </p>
       )}
+      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+        {libraryId && <QuietButton onClick={() => visit()}>Comic locations</QuietButton>}
+        {libraryId && path && (
+          <QuietButton onClick={() => visit(libraryId, path.split('/').slice(0, -1).join('/'))}>
+            <ArrowUp className="size-4" aria-hidden="true" />
+            Up
+          </QuietButton>
+        )}
+        {libraryId && <span className="break-words text-sm text-muted">{path || 'Library root'}</span>}
+      </div>
       {stats.data && (
         <p className="px-4 pb-3 text-sm text-muted">
           {stats.data.started} started · {stats.data.completed} completed · {Math.floor(stats.data.readingSeconds / 60)}{' '}
@@ -192,13 +271,38 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
         </p>
       )}
       {comicId > 0 && reading.isError && <QuietButton onClick={exit}>Back to bookshelf</QuietButton>}
-      {(library.error || reading.error) && (
+      {(library.error || reading.error || folders.error) && (
         <p role="alert" className="px-4 text-danger">
-          {errorMessage(library.error || reading.error)}
+          {errorMessage(library.error || reading.error || folders.error)}
         </p>
       )}
       <div className={`min-h-0 flex-1 overflow-auto p-4 ${!configured ? 'hidden' : ''}`}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {!libraryId &&
+            !searching &&
+            sources.data?.locations?.map(location => (
+              <QuietButton
+                key={`${location.libraryId}:${location.relativePath}`}
+                className="min-h-24 whitespace-normal"
+                onClick={() => visit(location.libraryId, location.relativePath)}
+              >
+                <FolderOpen className="size-6 shrink-0" aria-hidden="true" />
+                {location.relativePath ||
+                  libraries.data?.find(item => item.id === location.libraryId)?.name ||
+                  `Library ${location.libraryId}`}
+              </QuietButton>
+            ))}
+          {!searching &&
+            folders.data?.items.map(folder => (
+              <QuietButton
+                key={folder.relativePath}
+                className="min-h-24 whitespace-normal"
+                onClick={() => visit(libraryId, folder.relativePath)}
+              >
+                <FolderOpen className="size-6 shrink-0" aria-hidden="true" />
+                {folder.name}
+              </QuietButton>
+            ))}
           {library.data?.items.map(comic => (
             <article key={comic.id} className="rounded-xl border border-line bg-surface p-3 text-left">
               <button
@@ -228,13 +332,23 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
                 onClick={() => setDetails(comic.id)}
                 aria-label={`Edit details for ${comic.title}`}
               >
+                <Info className="size-4" aria-hidden="true" />
                 Details
               </QuietButton>
             </article>
           ))}
         </div>
-        {library.data?.items.length === 0 && !discovering && (
-          <p className="text-muted">No comics match. Add archives or explicitly classify an image folder as a comic.</p>
+        {library.data?.items.length === 0 &&
+          !discovering &&
+          !library.isFetching &&
+          !folders.isFetching &&
+          !folders.data?.items.length && (
+            <p className="text-muted">
+              No comics match. Add archives or explicitly classify an image folder as a comic.
+            </p>
+          )}
+        {folders.data?.nextCursor && (
+          <QuietButton onClick={() => setFolderAfter(folders.data!.nextCursor!)}>More folders</QuietButton>
         )}
         <div className="mt-4 flex gap-2">
           {cursor && <QuietButton onClick={() => setCursor(undefined)}>Newest comics</QuietButton>}
@@ -261,7 +375,14 @@ export function Panels({ logo, onSettings }: { logo: ReactNode; onSettings: () =
         description="Save recursive comic sources within your libraries. Image folders are included only with your explicit choice."
         sheet
       >
-        {manage && <ComicLocations onSaved={() => setManage(false)} />}
+        {manage && (
+          <ComicLocations
+            onSaved={() => {
+              setManage(false)
+              visit()
+            }}
+          />
+        )}
       </Modal>
     </div>
   )

@@ -62,12 +62,17 @@ it('restores favourites from a deep link and persists changes', async () => {
   expect(window.location.search).toBe('')
 })
 it('starts from the first page when the favourites filter changes', async () => {
+  window.history.replaceState({}, '', '/panels?libraryId=1&path=')
   const fetch = mount(60)
   await userEvent.click(await screen.findByRole('button', { name: 'More comics' }))
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?cursor=60', expect.anything()))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith('/api/panels/comics?libraryId=1&path=&cursor=60', expect.anything()),
+  )
   await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
   await userEvent.click(screen.getByRole('checkbox', { name: 'Favourites only' }))
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?favourite=true', expect.anything()))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith('/api/panels/comics?favourite=true&libraryId=1', expect.anything()),
+  )
   expect(screen.queryByRole('button', { name: 'Newest comics' })).not.toBeInTheDocument()
 })
 
@@ -85,8 +90,18 @@ it('first visit saves recursive comic locations without file-management unlock',
       '/api/panels/sources',
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ locations: [{ libraryId: 1, relativePath: 'Manga', imageFolders: false }] }),
+        body: JSON.stringify({
+          locations: [{ libraryId: 1, relativePath: 'Manga', imageFolders: false, excludeFromGallery: true }],
+        }),
       }),
     ),
   )
+})
+
+it('browses saved locations before listing their direct comics', async () => {
+  const fetch = mount()
+  await userEvent.click(await screen.findByRole('button', { name: 'Comics' }))
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/folders?libraryId=1&path=', expect.anything()))
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?libraryId=1&path=', expect.anything()))
+  expect(window.location.search).toBe('?libraryId=1&path=')
 })

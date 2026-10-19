@@ -11,11 +11,13 @@ const sameTag = (a: string, b: string) =>
 
 export function TagEditor({
   mediaIds,
+  comicId,
   tags = [],
   bulk = false,
   onChanged,
 }: {
   mediaIds: number[]
+  comicId?: number
   tags?: Tag[]
   bulk?: boolean
   onChanged?: () => void
@@ -28,9 +30,10 @@ export function TagEditor({
   const client = useQueryClient()
   // Results follow typing without a request per keystroke racing the next one.
   const typed = useDeferredValue(name.trim())
+  const tagUrl = comicId ? '/api/panels/tags' : '/api/tags'
   const suggestions = useQuery({
-    queryKey: ['tags', typed],
-    queryFn: ({ signal }) => request<Tag[]>(`/api/tags?prefix=${encodeURIComponent(typed)}&limit=8`, signal),
+    queryKey: ['tags', tagUrl, typed],
+    queryFn: ({ signal }) => request<Tag[]>(`${tagUrl}?prefix=${encodeURIComponent(typed)}&limit=8`, signal),
     enabled: typed.length > 0,
     gcTime: 0,
     placeholderData: keepPreviousData,
@@ -39,13 +42,13 @@ export function TagEditor({
     mutationFn: async ({ id, remove = false }: { id?: number; remove?: boolean }) => {
       if (id === undefined) {
         if (mode === 'remove') {
-          const choices = await request<Tag[]>(`/api/tags?prefix=${encodeURIComponent(name)}&limit=50`)
+          const choices = await request<Tag[]>(`${tagUrl}?prefix=${encodeURIComponent(name)}&limit=50`)
           id = choices.find(x => sameTag(x.name, name))?.id
           if (!id) throw new Error('Choose an existing tag to remove.')
           remove = true
         } else id = (await request<Tag>('/api/tags', undefined, 'POST', { name })).id
       }
-      await request('/api/media/tags', undefined, 'POST', {
+      await request(comicId ? `/api/panels/comics/${comicId}/tags` : '/api/media/tags', undefined, 'POST', {
         mediaIds,
         addTagIds: remove ? [] : [id],
         removeTagIds: remove ? [id] : [],
@@ -59,6 +62,7 @@ export function TagEditor({
         client.invalidateQueries({ queryKey: ['detail'] }),
         client.invalidateQueries({ queryKey: ['neighbors'] }),
         client.invalidateQueries({ queryKey: ['tags'] }),
+        client.invalidateQueries({ queryKey: ['comic-tags', comicId] }),
       ])
       onChanged?.()
     },

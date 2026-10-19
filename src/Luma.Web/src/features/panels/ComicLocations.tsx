@@ -37,7 +37,11 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
     setMessage('')
     try {
       await request('/api/panels/sources', undefined, 'PUT', { locations })
-      await Promise.all(['comic-sources', 'comics', 'tasks'].map(key => client.invalidateQueries({ queryKey: [key] })))
+      await Promise.all(
+        ['comic-sources', 'comics', 'tasks', 'media', 'folders', 'libraries', 'tags', 'collection-tags'].map(key =>
+          client.invalidateQueries({ queryKey: [key] }),
+        ),
+      )
       setMessage('Comic locations saved. Recursive discovery is queued; reading progress is preserved.')
       onSaved?.()
     } catch (error) {
@@ -99,6 +103,18 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
             />
             Treat folders containing images as comics
           </label>
+          <label htmlFor={`${checkboxId}-exclude-${index}`} className="flex items-center gap-2 text-sm">
+            <Checkbox
+              id={`${checkboxId}-exclude-${index}`}
+              checked={row.excludeFromGallery ?? true}
+              onChange={event => patch(index, { excludeFromGallery: event.target.checked })}
+            />
+            Exclude from Gallery
+          </label>
+          <p className="text-xs text-muted">
+            Hides this location and its subfolders from Gallery, tag collections and XMP exports. Existing indexed items
+            and tags are preserved. Uncheck to include comic images in Gallery.
+          </p>
         </fieldset>
       ))}
       <div className="flex flex-wrap gap-2">
@@ -107,7 +123,12 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
           onClick={() => {
             setLocations(rows => [
               ...rows,
-              { libraryId: libraries.data?.[0]?.id ?? 0, relativePath: '', imageFolders: false },
+              {
+                libraryId: libraries.data?.[0]?.id ?? 0,
+                relativePath: '',
+                imageFolders: false,
+                excludeFromGallery: true,
+              },
             ])
             setBrowsing(locations.length)
           }}

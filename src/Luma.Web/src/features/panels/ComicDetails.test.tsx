@@ -34,7 +34,9 @@ function mount(fail = false) {
               headers: { 'Content-Type': 'application/problem+json' },
             })
           : new Response(null, { status: 204 })
-        : new Response(JSON.stringify(comic), { headers: { 'Content-Type': 'application/json' } }),
+        : new Response(JSON.stringify(_url.endsWith('/tags') ? [] : comic), {
+            headers: { 'Content-Type': 'application/json' },
+          }),
     ),
   )
   vi.stubGlobal('fetch', fetch)

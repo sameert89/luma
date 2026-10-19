@@ -60,3 +60,93 @@ test('Flick search, settings return and boot warning work without covering playe
   await page.getByRole('button', { name: 'Filters', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Filters and sorting' })).toBeVisible()
 })
+
+test('Panels exposes discovery, browses folders and keeps reader tools in popups', async ({ page }) => {
+  const comic = {
+    id: 9,
+    libraryId: 1,
+    title: 'DBZ volume 1',
+    series: 'Dragon Ball',
+    author: '',
+    description: '',
+    format: 'zip',
+    pageCount: 10,
+    pageIndex: 2,
+    state: 'reading',
+    readingSeconds: 0,
+    direction: 'ltr',
+    settings: '{}',
+    lastReadAt: null,
+    favourite: false,
+    coverUrl: null,
+    coverPage: 0,
+  }
+  await page.route('**/api/panels/sources', route =>
+    route.fulfill({
+      json: {
+        configured: true,
+        locations: [{ libraryId: 1, relativePath: 'Base', imageFolders: false, excludeFromGallery: true }],
+      },
+    }),
+  )
+  await page.route('**/api/tasks', route =>
+    route.fulfill({
+      json: [
+        {
+          id: 'comic-1',
+          kind: 'comics',
+          state: 'running',
+          createdAt: '2026-10-19',
+          processed: 3,
+          failed: 0,
+          pending: 0,
+        },
+      ],
+    }),
+  )
+  await page.route('**/api/panels/folders?**', route => {
+    const path = new URL(route.request().url()).searchParams.get('path')
+    return route.fulfill({
+      json: {
+        items:
+          path === 'Base'
+            ? [{ name: 'Manga', relativePath: 'Base/Manga' }]
+            : path === 'Base/Manga'
+              ? [{ name: 'DBZ', relativePath: 'Base/Manga/DBZ' }]
+              : [],
+        nextCursor: null,
+      },
+    })
+  })
+  await page.route('**/api/panels/comics?**', route =>
+    route.fulfill({
+      json: {
+        items: new URL(route.request().url()).searchParams.get('path') === 'Base/Manga/DBZ' ? [comic] : [],
+        nextCursor: null,
+      },
+    }),
+  )
+  await page.route('**/api/panels/comics/9', route => route.fulfill({ json: comic }))
+  await page.route('**/api/panels/comics/9/progress', route => route.fulfill({ status: 204 }))
+  await page.goto('/panels')
+  await expect(page.getByText(/Discovering comics… 3 processed/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Background jobs, running' })).toBeVisible()
+  await page.getByRole('button', { name: 'Base', exact: true }).click()
+  await page.getByRole('button', { name: 'Manga', exact: true }).click()
+  await page.getByRole('button', { name: 'DBZ', exact: true }).click()
+  await page.getByRole('button', { name: 'Read DBZ volume 1' }).click()
+  await expect(page.getByRole('button', { name: 'Background jobs, running' })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: 'Page fit' })).toHaveCount(0)
+  const counter = page.getByRole('button', { name: 'Go to page', exact: true })
+  await expect(counter).toHaveText('3 / 10')
+  const bounds = await counter.boundingBox()
+  expect(bounds!.width).toBeLessThan(160)
+  await page.getByRole('button', { name: 'Reader settings' }).click()
+  await expect(page.getByRole('dialog', { name: 'Reader settings' })).toBeVisible()
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await counter.click()
+  await expect(page.getByRole('dialog', { name: 'Go to page' })).toBeVisible()
+  await page.getByRole('spinbutton', { name: 'Go to page' }).fill('8')
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  await expect(counter).toHaveText('8 / 10')
+})

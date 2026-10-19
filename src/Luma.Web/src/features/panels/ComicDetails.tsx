@@ -1,3 +1,5 @@
+import { TagEditor } from '../tags/TagEditor'
+import type { Tag } from '../browse/api'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useState } from 'react'
 import { Checkbox, Field, Input, QuietButton, Textarea } from '../../components/ui/Controls'
@@ -5,6 +7,10 @@ import { errorMessage, request } from '../browse/api'
 import type { Comic, ComicMetadataUpdate } from './api'
 
 export function ComicDetails({ id, onSaved }: { id: number; onSaved: () => void }) {
+  const tags = useQuery({
+    queryKey: ['comic-tags', id],
+    queryFn: ({ signal }) => request<Tag[]>(`/api/panels/comics/${id}/tags`, signal),
+  })
   const detail = useQuery({
     queryKey: ['comic', id],
     queryFn: ({ signal }) => request<Comic>(`/api/panels/comics/${id}`, signal),
@@ -24,7 +30,15 @@ export function ComicDetails({ id, onSaved }: { id: number; onSaved: () => void 
         Loading comic details…
       </p>
     )
-  return <MetadataForm comic={detail.data} onSaved={onSaved} />
+  return (
+    <>
+      <section className="border-b border-line p-5">
+        <TagEditor mediaIds={[]} comicId={id} tags={tags.data ?? []} />
+        {tags.error && <p role="alert">{errorMessage(tags.error)}</p>}
+      </section>
+      <MetadataForm comic={detail.data} onSaved={onSaved} />
+    </>
+  )
 }
 
 function MetadataForm({ comic, onSaved }: { comic: Comic; onSaved: () => void }) {

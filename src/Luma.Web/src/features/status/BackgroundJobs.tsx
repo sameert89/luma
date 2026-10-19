@@ -28,7 +28,7 @@ export function BackgroundJobsDialog({ open, onOpenChange }: { open: boolean; on
  * Opens Background jobs; the icon turns while any job runs. With a library open it also keeps the
  * gallery current as that library's latest scan finds media and prepares previews.
  */
-export function BackgroundJobsButton({ libraryId }: { libraryId?: number }) {
+export function BackgroundJobsButton({ libraryId, compact = false }: { libraryId?: number; compact?: boolean }) {
   const [open, setOpen] = useState(false)
   const starting = useIsMutating({ predicate: mutation => mutation.options.mutationKey?.[0] === 'background-task' })
   const tasks = useQuery({
@@ -52,8 +52,8 @@ export function BackgroundJobsButton({ libraryId }: { libraryId?: number }) {
   return (
     <>
       <IconButton
-        size="large"
-        className="bg-canvas shadow-lg"
+        size={compact ? 'default' : 'large'}
+        className={compact ? 'bg-canvas' : 'bg-canvas shadow-lg'}
         label={attention ? 'Background jobs, needs attention' : busy ? 'Background jobs, running' : 'Background jobs'}
         onClick={() => setOpen(true)}
       >
