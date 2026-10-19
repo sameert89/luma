@@ -1,21 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
+import { shuffleSeed } from '../browse/shuffleSeed'
 import { request, errorMessage } from '../browse/api'
 
 export function useReadingSession(id: number, page: number, direction: string, settings: object) {
   const latest = useRef({ page, direction, settings })
   latest.current = { page, direction, settings }
-  const flush = useRef<() => void>(() => {})
+  const flush = useRef<() => Promise<void>>(async () => {})
   const [error, setError] = useState('')
   useEffect(() => {
-    const sessionId = crypto.randomUUID()
+    const seed = shuffleSeed()
+    const sessionId = [
+      seed.slice(0, 8),
+      seed.slice(8, 12),
+      seed.slice(12, 16),
+      seed.slice(16, 20),
+      seed.slice(20),
+    ].join('-')
     let sequence = 0,
       activeSeconds = 0,
       interaction = performance.now(),
       sample = performance.now()
     let visible = !document.hidden,
-      sending = false,
       queued = false,
       disposed = false
+    let inFlight: Promise<void> | null = null
     let pending: {
       sessionId: string
       sequence: number
@@ -33,38 +41,45 @@ export function useReadingSession(id: number, page: number, direction: string, s
       if (visible) activeSeconds += Math.max(0, Math.min(now, interaction + 120000) - sample) / 1000
       sample = now
     }
-    async function save() {
-      measure()
-      if (sending) {
-        queued = true
-        return
-      }
-      if (!pending)
-        pending = {
-          sessionId,
-          sequence: ++sequence,
-          pageIndex: latest.current.page,
-          activeSeconds: Math.min(activeSeconds, 30),
-          direction: latest.current.direction,
-          settings: JSON.stringify(latest.current.settings),
-        }
-      sending = true
-      let succeeded = false
-      try {
-        await request(`/api/panels/comics/${id}/progress`, undefined, 'PUT', pending)
-        activeSeconds = Math.max(0, activeSeconds - pending.activeSeconds)
-        pending = null
-        succeeded = true
-        if (!disposed) setError('')
-      } catch (error) {
-        if (!disposed) setError(errorMessage(error))
-      } finally {
-        sending = false
-        // Drain changes received during a request. Failed requests keep their exact sequence and body for retry.
-        if (queued && succeeded) {
+    async function save(): Promise<void> {
+      queued = true
+      if (inFlight) return inFlight
+      inFlight = (async () => {
+        while (queued) {
           queued = false
-          void save()
+          measure()
+          if (!pending)
+            pending = {
+              sessionId,
+              sequence: ++sequence,
+              pageIndex: latest.current.page,
+              activeSeconds: Math.min(activeSeconds, 30),
+              direction: latest.current.direction,
+              settings: JSON.stringify(latest.current.settings),
+            }
+          const checkpoint = pending
+          try {
+            await request(`/api/panels/comics/${id}/progress`, undefined, 'PUT', checkpoint)
+            activeSeconds = Math.max(0, activeSeconds - checkpoint.activeSeconds)
+            pending = null
+            if (!disposed) setError('')
+            // Retry a dropped response with its original sequence before draining the latest page.
+            if (
+              checkpoint.pageIndex !== latest.current.page ||
+              checkpoint.direction !== latest.current.direction ||
+              checkpoint.settings !== JSON.stringify(latest.current.settings)
+            )
+              queued = true
+          } catch (error) {
+            if (!disposed) setError(errorMessage(error))
+            break
+          }
         }
+      })()
+      try {
+        await inFlight
+      } finally {
+        inFlight = null
       }
     }
     const visibility = () => {
@@ -83,14 +98,14 @@ export function useReadingSession(id: number, page: number, direction: string, s
     window.addEventListener('pagehide', pageHide)
     const timer = setInterval(measure, 1000),
       heartbeat = setInterval(() => void save(), 15000)
-    flush.current = () => void save()
+    flush.current = save
     void save()
     return () => {
       measure()
       visible = false
       disposed = true
       void save()
-      flush.current = () => {}
+      flush.current = async () => {}
       clearInterval(timer)
       clearInterval(heartbeat)
       document.removeEventListener('visibilitychange', visibility)
@@ -103,5 +118,5 @@ export function useReadingSession(id: number, page: number, direction: string, s
   useEffect(() => {
     flush.current()
   }, [page, direction, preferences])
-  return error
+  return { error, flush: () => flush.current() }
 }

@@ -54,7 +54,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
 {
     internal const string ReadSql = """
         SELECT c.*,COALESCE(p.PageIndex,0) PageIndex,COALESCE(p.State,'unread') State,
-          COALESCE(p.ReadingSeconds,0) ReadingSeconds,COALESCE(p.Direction,'ltr') Direction,COALESCE(p.Settings,'{}') Settings,p.LastReadAt
+          CAST(COALESCE(p.ReadingSeconds,0.0) AS REAL) ReadingSeconds,COALESCE(p.Direction,'ltr') Direction,COALESCE(p.Settings,'{}') Settings,p.LastReadAt
         FROM Comics c JOIN Libraries l ON l.Id=c.LibraryId LEFT JOIN ReadingProgress p ON p.ComicId=c.Id
         WHERE c.Availability='present' AND l.Enabled=1
           AND (NOT EXISTS(SELECT 1 FROM ApplicationState WHERE Key='panelSourcesConfigured')

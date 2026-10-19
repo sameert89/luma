@@ -122,6 +122,10 @@ export function Panels({
   })
   const reading = useQuery({
     queryKey: ['comic', comicId],
+    gcTime: 0,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     queryFn: ({ signal }) => request<Comic>(`/api/panels/comics/${comicId}`, signal),
     enabled: Number.isSafeInteger(comicId) && comicId > 0,
   })
@@ -167,7 +171,8 @@ export function Panels({
     change('comic', '')
     for (const key of ['comics', 'comic', 'reading-statistics']) void client.invalidateQueries({ queryKey: [key] })
   }
-  if (comicId && reading.data) return <ComicReader key={reading.data.id} comic={reading.data} onExit={exit} />
+  if (comicId && reading.data && reading.isFetchedAfterMount)
+    return <ComicReader key={reading.data.id} comic={reading.data} onExit={exit} />
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SearchHeader

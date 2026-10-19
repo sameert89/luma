@@ -10,6 +10,31 @@ namespace Luma.Server.Tests;
 public sealed class ComicOrganizationTests
 {
     [Fact]
+    public async Task Mixed_unread_and_read_comics_keep_real_reading_seconds_and_resume_pages()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("""
+            INSERT INTO Comics(Id,LibraryId,RelativePath,PathKey,Format,Title,PageCount,SourceSize,SourceModifiedTicks,AddedAt)
+            VALUES (101,1,'unread.cbz','unread.cbz','zip','Unread',10,1,1,'2026-01-01'),
+                   (102,1,'read.cbz','read.cbz','zip','Read',10,1,1,'2026-01-01');
+            INSERT INTO ReadingProgress(ComicId,PageIndex,State,ReadingSeconds) VALUES(102,6,'reading',1.5);
+            """);
+        var library = new ComicLibrary(f.Database, f.Options);
+        // Warm the shared deserializer with a real value, then read a mixed page including an unread zero.
+        Assert.Equal(1.5, (await library.GetAsync(102, default)).ReadingSeconds);
+        var rows = (await library.ListAsync(null, null, null, null, null, default)).Items;
+        Assert.Equal(0, rows.Single(x => x.Id == 101).ReadingSeconds);
+        Assert.Equal(6, rows.Single(x => x.Id == 102).PageIndex);
+        Assert.Equal(1.5, rows.Single(x => x.Id == 102).ReadingSeconds);
+        await db.ExecuteAsync("UPDATE ReadingProgress SET ReadingSeconds=0 WHERE ComicId=102");
+        Assert.Equal(0, (await library.ListAsync(null, null, null, null, null, default)).Items.Single(x => x.Id == 102).ReadingSeconds);
+        var progress = new ComicProgress(f.Database, library);
+        await progress.UpdateAsync(101, new(Guid.NewGuid().ToString(), 1, 4, 0), default);
+        Assert.Equal(4, (await library.GetAsync(101, default)).PageIndex);
+    }
+
+    [Fact]
     public async Task Exclusion_preserves_existing_media_and_tags_and_stops_future_gallery_discovery()
     {
         await using var f = await PipelineFixture.CreateAsync();

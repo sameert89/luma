@@ -35,7 +35,14 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     scroll = useRef<HTMLDivElement>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pinch = useRef<number | null>(null)
-  const error = useReadingSession(comic.id, page, direction, { mode, fit })
+  const [exiting, setExiting] = useState(false)
+  const { error, flush } = useReadingSession(comic.id, page, direction, { mode, fit })
+  async function exitReader() {
+    if (exiting) return
+    setExiting(true)
+    await flush()
+    onExit()
+  }
   const move = (delta: number) => {
     setPage(value => {
       const next = Math.max(0, Math.min(comic.pageCount - 1, value + delta))
@@ -63,7 +70,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
       if (event.key === 'Escape' && !controls && !jump) {
         if (document.fullscreenElement) void document.exitFullscreen()
-        else onExit()
+        else void exitReader()
       }
       if (event.key === 'ArrowRight') {
         event.preventDefault()
@@ -113,7 +120,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   return (
     <div ref={root} className="relative flex min-h-0 flex-1 flex-col bg-canvas text-ink" aria-label="Comic reader">
       <div className="flex shrink-0 items-center gap-2 border-b border-line p-3">
-        <IconButton label="Exit reader" onClick={onExit}>
+        <IconButton label="Exit reader" disabled={exiting} onClick={() => void exitReader()}>
           <ArrowLeft className="size-5" />
         </IconButton>
         <h1 className="min-w-0 flex-1 truncate font-semibold">{comic.title}</h1>

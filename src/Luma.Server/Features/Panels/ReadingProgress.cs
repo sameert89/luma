@@ -44,7 +44,7 @@ public sealed class ComicProgress(Database database, ComicLibrary library)
     public async Task<ReadingStatistics> StatisticsAsync(CancellationToken ct)
     {
         await using var db = await database.OpenAsync(ct);
-        return await db.QuerySingleAsync<ReadingStatistics>(new CommandDefinition("SELECT COUNT(*) Started,COALESCE(SUM(State='completed'),0) Completed,COALESCE(SUM(ReadingSeconds),0.0) ReadingSeconds,COALESCE(SUM(PageIndex+1),0) PagesRead FROM ReadingProgress", cancellationToken: ct));
+        return await db.QuerySingleAsync<ReadingStatistics>(new CommandDefinition("SELECT COUNT(*) Started,COALESCE(SUM(State='completed'),0) Completed,CAST(COALESCE(SUM(ReadingSeconds),0.0) AS REAL) ReadingSeconds,COALESCE(SUM(PageIndex+1),0) PagesRead FROM ReadingProgress", cancellationToken: ct));
     }
     private sealed class SessionRow { public long ComicId { get; set; } public long Sequence { get; set; } public string UpdatedAt { get; set; } = ""; }
 }

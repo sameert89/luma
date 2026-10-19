@@ -51,6 +51,21 @@ describe('reading checkpoints', () => {
     expect(send.mock.calls[1][3]).toEqual(checkpoint)
     expect(updates().at(-1)?.pageIndex).toBe(2)
   })
+  it('saves on HTTP hosts where randomUUID is unavailable', async () => {
+    const random = crypto.getRandomValues.bind(crypto)
+    vi.stubGlobal('crypto', { getRandomValues: random })
+    const reader = renderHook(() => useReadingSession(7, 4, 'ltr', {}))
+    await settle()
+    await act(async () => {
+      await reader.result.current.flush()
+    })
+    expect(send.mock.calls[0][3]).toMatchObject({
+      pageIndex: 4,
+      sessionId: expect.stringMatching(/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/),
+    })
+    reader.unmount()
+    vi.unstubAllGlobals()
+  })
   it('counts visible time, excludes hidden intervals and stops after inactivity', async () => {
     renderHook(() => useReadingSession(1, 0, 'ltr', {}))
     await settle()
