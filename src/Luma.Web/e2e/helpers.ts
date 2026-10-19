@@ -54,6 +54,10 @@ export async function switchExperience(page: Page, name: 'Gallery' | 'Flick' | '
 
 export async function openHeaderSearch(page: Page, name = 'Search media') {
   const field = page.getByRole('combobox', { name })
-  if (!(await field.isVisible())) await page.getByRole('button', { name: 'Open search', exact: true }).click()
+  await page.getByRole('combobox', { name, includeHidden: true }).waitFor({ state: 'attached' })
+  const opener = page.getByRole('button', { name: 'Open search', exact: true })
+  await field.or(opener).first().waitFor({ state: 'visible' })
+  if (await opener.isVisible()) await opener.click()
+  await field.waitFor({ state: 'visible' })
   return field
 }
