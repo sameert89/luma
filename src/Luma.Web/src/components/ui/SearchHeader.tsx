@@ -184,7 +184,6 @@ export function SearchHeader({
                         swallowNextClick()
                         choose(suggestion)
                       }}
-                      onMouseEnter={() => setActiveIndex(index)}
                     >
                       <Icon className="size-4 shrink-0 text-accent" aria-hidden="true" />
                       <span className="min-w-0 flex-1">

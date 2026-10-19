@@ -140,3 +140,12 @@ it('keeps search visible with its logo and actions on phones, and hides it on Se
   expect(screen.queryByRole('search')).toBeNull()
   expect(screen.queryByRole('button', { name: 'Filters' })).toBeNull()
 })
+
+it('does not turn a text search into a suggestion selection when the list appears under the mouse', async () => {
+  const { field, onSearch, onSuggestion } = renderHeader()
+  await userEvent.type(field, 'bea')
+  fireEvent.mouseEnter(await screen.findByRole('option', { name: /beach-sunset/ }))
+  await userEvent.keyboard('{Enter}')
+  expect(onSearch).toHaveBeenCalledOnce()
+  expect(onSuggestion).not.toHaveBeenCalled()
+})

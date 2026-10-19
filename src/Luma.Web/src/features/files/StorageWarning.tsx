@@ -31,16 +31,17 @@ export function StorageWarning({ onSettings }: { onSettings: () => void }) {
   const visible = !!report && warnings.length > 0 && dismissed !== bootId
   useEffect(() => {
     if (!visible) return
-    const timer = window.setTimeout(dismiss, 8000)
+    const timer = window.setTimeout(dismiss, 6000)
     return () => window.clearTimeout(timer)
   }, [visible, dismiss])
   return (
     <Toast
+      passThrough
       toast={
         visible
           ? {
               id: 1,
-              text: 'Read-only media. File changes are unavailable; browsing and playback still work.',
+              text: 'Read-only media. Browsing still works.',
               tone: 'info',
             }
           : null
