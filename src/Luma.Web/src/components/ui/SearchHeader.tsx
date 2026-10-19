@@ -98,27 +98,30 @@ export function SearchHeader({
     setActiveIndex(-1)
     onSuggestion?.(suggestion)
   }
+  const editing = mobile && open && !hideSearch
   return (
-    <header className="relative z-30 flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-canvas px-4 py-3 sm:px-6">
-      {logo ?? (
-        <a
-          href="/"
-          className="shrink-0 text-xl font-semibold tracking-tight"
-          aria-label="Luma home"
-          onClick={event => {
-            event.preventDefault()
-            onHome()
-          }}
-        >
-          luma<span className="text-accent">.</span>
-        </a>
-      )}
+    <header className="relative z-30 flex shrink-0 items-center gap-3 border-b border-line bg-canvas px-4 py-3 sm:px-6">
+      <div hidden={editing} className={editing ? 'hidden' : 'shrink-0'}>
+        {logo ?? (
+          <a
+            href="/"
+            className="shrink-0 text-xl font-semibold tracking-tight"
+            aria-label="Luma home"
+            onClick={event => {
+              event.preventDefault()
+              onHome()
+            }}
+          >
+            luma<span className="text-accent">.</span>
+          </a>
+        )}
+      </div>
       {!hideSearch && (
         <form
           id={formId}
           role="search"
           hidden={mobile && !open}
-          className={`${mobile && !open ? 'hidden' : 'flex'} order-last w-full min-w-0 items-center gap-2 sm:order-none sm:ml-auto sm:w-auto sm:max-w-xl sm:flex-1`}
+          className={`${mobile && !open ? 'hidden' : 'flex'} min-w-0 flex-1 items-center gap-2 sm:ml-auto sm:max-w-xl`}
           onSubmit={event => {
             event.preventDefault()
             if (expanded && activeIndex >= 0) {
@@ -129,7 +132,7 @@ export function SearchHeader({
             onSearch()
           }}
         >
-          <div className="relative min-w-0 flex-1">
+          <div className="min-w-0 flex-1 sm:relative">
             <div className="overflow-hidden">
               {/* A combobox: typing keeps focus in the field while Up/Down pick a suggestion. */}
               <Input
@@ -182,7 +185,7 @@ export function SearchHeader({
                 id={listId}
                 role="listbox"
                 aria-label="Search suggestions"
-                className="absolute inset-x-0 top-full mt-2 overflow-hidden rounded-xl border border-line bg-canvas py-1"
+                className="absolute inset-x-4 top-full mt-2 max-h-80 overflow-y-auto overscroll-contain rounded-xl border border-line bg-canvas py-1 sm:inset-x-0"
               >
                 {items.map((suggestion, index) => {
                   const kind = kinds[suggestion.kind] ?? kinds.file
@@ -243,7 +246,7 @@ export function SearchHeader({
           )}
         </form>
       )}
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div className="ml-auto flex min-h-11 shrink-0 items-center gap-2">
         {!hideSearch && (
           <IconButton
             ref={toggle}
@@ -265,17 +268,17 @@ export function SearchHeader({
             {mobile && open ? <X className="size-5" /> : <Search className="size-5" />}
           </IconButton>
         )}
-        {!hideSearch && onFilters && (
+        {!hideSearch && !editing && onFilters && (
           <IconButton label="Filters" onClick={onFilters}>
             <SlidersHorizontal className="size-5" />
           </IconButton>
         )}
-        {onSettings && (
+        {onSettings && !editing && (
           <IconButton label="Settings" onClick={onSettings}>
             <Settings className="size-5" />
           </IconButton>
         )}
-        {actions}
+        {!editing && actions}
       </div>
     </header>
   )

@@ -48,6 +48,9 @@ test('phone search is collapsed until clicked, groups actions on the right, and 
   expect(c.x - b.x).toBeLessThan(60)
   await open.click()
   await expect(page.getByRole('combobox', { name: 'Search media' })).toBeFocused()
+  expect((await header.boundingBox())!.height).toBe(initialHeight)
+  await expect(filters).toBeHidden()
+  await expect(settings).toBeHidden()
   await page.getByRole('button', { name: 'Close search', exact: true }).click()
   await expect(page.getByRole('combobox', { name: 'Search media' })).toBeHidden()
   expect((await header.boundingBox())!.height).toBe(initialHeight)
@@ -57,12 +60,34 @@ test('phone search is collapsed until clicked, groups actions on the right, and 
   await expect
     .poll(async () => (await search.boundingBox())?.width ?? 0)
     .toBeGreaterThan(page.viewportSize()!.width * 0.6)
-  await expect(page.getByRole('button', { name: /^Switch application,/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Switch application,/ })).toBeHidden()
+  await page.route('**/api/search/suggestions?**', route =>
+    route.fulfill({
+      json: [
+        {
+          kind: 'file',
+          id: 1,
+          label: 'A long holiday filename that should have room in the suggestions',
+          detail: 'Photos / holiday',
+        },
+      ],
+    }),
+  )
+  await search.fill('holiday width')
+  const suggestions = page.getByRole('listbox', { name: 'Search suggestions' })
+  await expect(suggestions).toBeVisible()
+  const listBounds = (await suggestions.boundingBox())!
+  expect(listBounds.width).toBeGreaterThan(page.viewportSize()!.width * 0.9)
+  expect(listBounds.x).toBeGreaterThanOrEqual(0)
+  expect(listBounds.x + listBounds.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+  await page.getByRole('button', { name: 'Close search', exact: true }).click()
   const nav = page.getByRole('navigation', { name: 'Primary navigation' })
   await expect(nav.getByRole('button', { name: 'Search', exact: true })).toHaveCount(0)
   await expect(nav.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0)
   await nav.getByRole('button', { name: 'Collections', exact: true }).click()
+  await openHeaderSearch(page)
   await expect(search).toBeVisible()
+  await page.getByRole('button', { name: 'Close search', exact: true }).click()
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await expect(page.getByRole('search')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveCount(0)
