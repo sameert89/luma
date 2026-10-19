@@ -1,5 +1,5 @@
 import type { ComponentProps, CSSProperties, ReactNode } from 'react'
-import { Check } from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 
 export function Checkbox({ className = '', ...props }: Omit<ComponentProps<'input'>, 'type'>) {
   return (
@@ -73,10 +73,16 @@ export function Select({
   ...props
 }: ComponentProps<'select'> & { shape?: 'field' | 'pill' }) {
   return (
-    <select
-      className={`min-h-11 w-full ${shape === 'pill' ? 'rounded-full' : 'rounded-xl'} border border-line bg-canvas px-3 text-sm text-ink focus-visible:border-accent ${className}`}
-      {...props}
-    />
+    <span className={`relative inline-grid min-w-0 ${className.includes('w-auto') ? 'w-auto' : 'w-full'}`}>
+      <select
+        className={`min-h-11 w-full appearance-none ${shape === 'pill' ? 'rounded-full' : 'rounded-xl'} border border-line bg-canvas pl-3 pr-10 text-sm text-ink focus-visible:border-accent ${className}`}
+        {...props}
+      />
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+      />
+    </span>
   )
 }
 export function Field({ label, children }: { label: string; children: ReactNode }) {

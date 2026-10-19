@@ -54,3 +54,32 @@ describe('comic reader', () => {
     expect(screen.getByRole('button', { name: 'Exit reader' })).toBeVisible()
   })
 })
+
+it('keeps the pinch scale after React applies batched updates and does not swipe after pinching', () => {
+  render(<ComicReader comic={comic} onExit={() => {}} />)
+  const stage = screen.getByRole('group', { name: 'Comic page gestures' })
+  stage.setPointerCapture = () => {}
+  fireEvent.pointerDown(stage, { pointerId: 1, clientX: 100, clientY: 100 })
+  fireEvent.pointerDown(stage, { pointerId: 2, clientX: 200, clientY: 100 })
+  fireEvent.pointerMove(stage, { pointerId: 2, clientX: 300, clientY: 100 })
+  expect(screen.getByRole('img').style.transform).toContain('scale(2)')
+  fireEvent.pointerUp(stage, { pointerId: 2, clientX: 300, clientY: 100 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 100, clientY: 100 })
+  expect(screen.getByRole('button', { name: 'Go to page' })).toHaveTextContent('22 / 5000')
+})
+it('waits for the final progress save before leaving the reader', async () => {
+  let finish!: () => void
+  vi.mocked(useReadingSession).mockReturnValueOnce({
+    error: '',
+    flush: () =>
+      new Promise<void>(resolve => {
+        finish = resolve
+      }),
+  })
+  const exit = vi.fn()
+  render(<ComicReader comic={comic} onExit={exit} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Exit reader' }))
+  expect(exit).not.toHaveBeenCalled()
+  finish()
+  await vi.waitFor(() => expect(exit).toHaveBeenCalledOnce())
+})

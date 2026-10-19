@@ -34,7 +34,10 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   const root = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
-  const pinch = useRef<number | null>(null)
+  const pinch = useRef<{ distance: number; zoom: number } | null>(null)
+  const pinched = useRef(false)
+  const restoring = useRef(false)
+  const resumeTarget = useRef(page)
   const [exiting, setExiting] = useState(false)
   const { error, flush } = useReadingSession(comic.id, page, direction, { mode, fit })
   async function exitReader() {
@@ -56,11 +59,16 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   const virtual = useVirtualizer({
     count: comic.pageCount,
     getScrollElement: () => scroll.current,
-    estimateSize: () => 1000,
+    estimateSize: () => Math.max(1, (scroll.current?.clientWidth ?? window.innerWidth) * zoom * 1.5),
+    enabled: mode === 'continuous',
     overscan: 1,
   })
   useEffect(() => {
-    if (mode === 'continuous') virtual.scrollToIndex(page, { align: 'start' })
+    if (mode === 'continuous') {
+      restoring.current = true
+      resumeTarget.current = page
+      virtual.scrollToIndex(page, { align: 'start' })
+    }
     // Resume the current page when entering continuous mode.
   }, [mode])
   const pageUrl = (index: number) =>
@@ -101,8 +109,15 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     }
   }, [comic.id, comic.pageCount, page])
   function down(event: React.PointerEvent) {
+    restoring.current = false
+    if (pointers.current.size === 0) pinched.current = false
     event.currentTarget.setPointerCapture(event.pointerId)
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()]
+      pinch.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), zoom }
+      pinched.current = true
+    }
   }
   function pointerMove(event: React.PointerEvent) {
     const previous = pointers.current.get(event.pointerId)
@@ -111,11 +126,17 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()]
       const distance = Math.hypot(a.x - b.x, a.y - b.y)
-      if (pinch.current) setZoom(value => Math.max(1, Math.min(8, (value * distance) / pinch.current!)))
-      pinch.current = distance
-    } else if (zoom > 1)
+      const initial = pinch.current
+      if (initial && initial.distance > 0)
+        setZoom(Math.max(1, Math.min(8, (initial.zoom * distance) / initial.distance)))
+    } else if (mode === 'continuous') {
+      event.currentTarget.scrollTop += previous.y - event.clientY
+      event.currentTarget.scrollLeft += previous.x - event.clientX
+    } else if (zoom > 1) {
       setPan(value => ({ x: value.x + event.clientX - previous.x, y: value.y + event.clientY - previous.y }))
+    } else if (fit === 'width' || fit === 'original') event.currentTarget.scrollTop += previous.y - event.clientY
   }
+
   const start = useRef<{ x: number; y: number } | null>(null)
   return (
     <div ref={root} className="relative flex min-h-0 flex-1 flex-col bg-canvas text-ink" aria-label="Comic reader">
@@ -140,7 +161,11 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
             aria-label="Reading mode"
             className="w-auto"
             value={mode}
-            onChange={event => setMode(event.target.value)}
+            onChange={event => {
+              setMode(event.target.value)
+              setZoom(1)
+              setPan({ x: 0, y: 0 })
+            }}
           >
             <option value="single">Single page</option>
             <option value="continuous">Continuous scroll</option>
@@ -192,7 +217,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
           role="group"
           aria-label="Comic page gestures"
           className={`relative flex min-h-0 flex-1 ${fit === 'width' || fit === 'original' ? 'items-start overflow-auto' : 'items-center overflow-hidden'} justify-center`}
-          style={{ touchAction: zoom === 1 && (fit === 'width' || fit === 'original') ? 'pan-y' : 'none' }}
+          style={{ touchAction: 'none' }}
           onPointerDown={event => {
             start.current = { x: event.clientX, y: event.clientY }
             down(event)
@@ -202,7 +227,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
             const origin = start.current
             pointers.current.delete(event.pointerId)
             pinch.current = null
-            if (zoom === 1 && origin && Math.abs(event.clientX - origin.x) > 60)
+            if (!pinched.current && zoom === 1 && origin && Math.abs(event.clientX - origin.x) > 60)
               move((event.clientX > origin.x ? -1 : 1) * (direction === 'rtl' ? -1 : 1))
             start.current = null
           }}
@@ -234,26 +259,49 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
         <div
           ref={scroll}
           className="min-h-0 flex-1 overflow-auto"
+          style={{ touchAction: 'none' }}
+          onPointerDown={down}
+          onPointerMove={pointerMove}
+          onPointerUp={event => {
+            pointers.current.delete(event.pointerId)
+            pinch.current = null
+          }}
+          onPointerCancel={() => {
+            pointers.current.clear()
+            pinch.current = null
+          }}
+          onWheel={() => {
+            restoring.current = false
+          }}
           onScroll={() => {
             const visible = virtual.getVirtualItems().find(item => item.end > (scroll.current?.scrollTop ?? 0))
-            if (visible) setPage(visible.index)
+            if (visible && !restoring.current) setPage(visible.index)
           }}
         >
-          <div className="relative w-full" style={{ height: virtual.getTotalSize() }}>
+          <div className="relative w-full" style={{ height: virtual.getTotalSize(), width: `${zoom * 100}%` }}>
             {virtual.getVirtualItems().map(item => (
               <div
                 key={item.key}
                 data-index={item.index}
                 ref={virtual.measureElement}
-                className="absolute left-0 top-0 w-full pb-2"
+                className="absolute left-0 top-0 w-full"
                 style={{ transform: `translateY(${item.start}px)` }}
               >
                 <img
                   src={pageUrl(item.index)}
                   alt={`${comic.title}, page ${item.index + 1}`}
-                  className="h-auto w-full"
+                  className="block h-auto w-full"
+                  style={{ aspectRatio: 'auto 2 / 3' }}
                   loading="lazy"
-                  onLoad={() => virtual.measure()}
+                  onLoad={event => {
+                    virtual.measureElement(event.currentTarget.parentElement!)
+                    if (restoring.current && item.index === resumeTarget.current) {
+                      virtual.scrollToIndex(resumeTarget.current, { align: 'start' })
+                      requestAnimationFrame(() => {
+                        restoring.current = false
+                      })
+                    }
+                  }}
                 />
               </div>
             ))}

@@ -1,3 +1,5 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createElement, useState, type PropsWithChildren } from 'react'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useReadingSession } from './useReadingSession'
@@ -6,6 +8,10 @@ vi.mock('../browse/api', () => ({ request: vi.fn(), errorMessage: (error: Error)
 const send = vi.mocked(request)
 const updates = () =>
   send.mock.calls.map(call => call[3] as { pageIndex: number; sequence: number; activeSeconds: number })
+function ReadingTestProvider({ children }: PropsWithChildren) {
+  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } }))
+  return createElement(QueryClientProvider, { client }, children)
+}
 async function settle() {
   await act(async () => {
     await Promise.resolve()
@@ -32,6 +38,7 @@ describe('reading checkpoints', () => {
         }),
     )
     const reader = renderHook(({ page }) => useReadingSession(1, page, 'rtl', { mode: 'single' }), {
+      wrapper: ReadingTestProvider,
       initialProps: { page: 0 },
     })
     reader.rerender({ page: 7 })
@@ -43,7 +50,10 @@ describe('reading checkpoints', () => {
   })
   it('retries the same checkpoint after a dropped response, then saves the current page', async () => {
     send.mockRejectedValueOnce(new Error('offline'))
-    const reader = renderHook(({ page }) => useReadingSession(1, page, 'ltr', {}), { initialProps: { page: 0 } })
+    const reader = renderHook(({ page }) => useReadingSession(1, page, 'ltr', {}), {
+      wrapper: ReadingTestProvider,
+      initialProps: { page: 0 },
+    })
     await settle()
     const checkpoint = send.mock.calls[0][3]
     reader.rerender({ page: 2 })
@@ -54,7 +64,7 @@ describe('reading checkpoints', () => {
   it('saves on HTTP hosts where randomUUID is unavailable', async () => {
     const random = crypto.getRandomValues.bind(crypto)
     vi.stubGlobal('crypto', { getRandomValues: random })
-    const reader = renderHook(() => useReadingSession(7, 4, 'ltr', {}))
+    const reader = renderHook(() => useReadingSession(7, 4, 'ltr', {}), { wrapper: ReadingTestProvider })
     await settle()
     await act(async () => {
       await reader.result.current.flush()
@@ -67,7 +77,7 @@ describe('reading checkpoints', () => {
     vi.unstubAllGlobals()
   })
   it('counts visible time, excludes hidden intervals and stops after inactivity', async () => {
-    renderHook(() => useReadingSession(1, 0, 'ltr', {}))
+    renderHook(() => useReadingSession(1, 0, 'ltr', {}), { wrapper: ReadingTestProvider })
     await settle()
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000)

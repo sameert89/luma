@@ -1,8 +1,11 @@
+import { useQueryClient } from '@tanstack/react-query'
+import type { Comic } from './api'
 import { useEffect, useRef, useState } from 'react'
 import { shuffleSeed } from '../browse/shuffleSeed'
 import { request, errorMessage } from '../browse/api'
 
 export function useReadingSession(id: number, page: number, direction: string, settings: object) {
+  const client = useQueryClient()
   const latest = useRef({ page, direction, settings })
   latest.current = { page, direction, settings }
   const flush = useRef<() => Promise<void>>(async () => {})
@@ -62,6 +65,19 @@ export function useReadingSession(id: number, page: number, direction: string, s
             await request(`/api/panels/comics/${id}/progress`, undefined, 'PUT', checkpoint)
             activeSeconds = Math.max(0, activeSeconds - checkpoint.activeSeconds)
             pending = null
+            client.setQueryData<Comic>(['comic', id], previous =>
+              previous
+                ? {
+                    ...previous,
+                    pageIndex: checkpoint.pageIndex,
+                    direction: checkpoint.direction,
+                    settings: checkpoint.settings,
+                    state: checkpoint.pageIndex === previous.pageCount - 1 ? 'completed' : 'reading',
+                  }
+                : previous,
+            )
+            for (const key of ['comics', 'continue-reading', 'reading-statistics'])
+              void client.invalidateQueries({ queryKey: [key] })
             if (!disposed) setError('')
             // Retry a dropped response with its original sequence before draining the latest page.
             if (
@@ -113,7 +129,7 @@ export function useReadingSession(id: number, page: number, direction: string, s
       for (const event of ['pointerdown', 'keydown', 'wheel', 'scroll'])
         window.removeEventListener(event, activity, true)
     }
-  }, [id])
+  }, [id, client])
   const preferences = JSON.stringify(settings)
   useEffect(() => {
     flush.current()
