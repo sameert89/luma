@@ -1,10 +1,12 @@
+import { ComicFolderCard } from './ComicFolderCard'
+import { ComicCard } from './ComicCard'
 import { BackgroundJobsButton } from '../status/BackgroundJobs'
 import { SearchHeader } from '../../components/ui/SearchHeader'
 import type { components } from '../../lib/api/generated'
 import { ComicLocations } from './ComicLocations'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { BookOpen, Star, FolderPlus, FolderCog, FolderOpen, ArrowUp, Info } from 'lucide-react'
+import { BookOpen, FolderPlus, FolderCog, ArrowUp, LoaderCircle } from 'lucide-react'
 import { Checkbox, Input, Select, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { errorMessage, request, type Library } from '../browse/api'
@@ -61,6 +63,7 @@ export function Panels({
   useEffect(() => {
     void client.invalidateQueries({ queryKey: ['comics'] })
     void client.invalidateQueries({ queryKey: ['comic-folders'] })
+    void client.invalidateQueries({ queryKey: ['comic-sources'] })
   }, [comicCheckpoint, client])
   const configured = sources.data?.configured === true && (sources.data.locations?.length ?? 0) > 0
   const [manage, setManage] = useState(false)
@@ -129,6 +132,19 @@ export function Panels({
     queryFn: ({ signal }) => request<Comic>(`/api/panels/comics/${comicId}`, signal),
     enabled: Number.isSafeInteger(comicId) && comicId > 0,
   })
+  const continuing = useQuery({
+    queryKey: ['continue-reading'],
+    queryFn: ({ signal }) => request<Comic[]>('/api/panels/continue-reading', signal),
+    enabled: !comicId && configured,
+  })
+  const initialLoading =
+    sources.isPending ||
+    (comicId > 0
+      ? reading.isFetching && !reading.isFetchedAfterMount
+      : configured &&
+        (!!libraryId || searching) &&
+        ((library.data === undefined && library.isFetching) ||
+          (!searching && folders.data === undefined && folders.isFetching)))
   const stats = useQuery({
     queryKey: ['reading-statistics'],
     queryFn: ({ signal }) => request<ReadingStatistics>('/api/panels/statistics', signal),
@@ -169,7 +185,8 @@ export function Panels({
   }
   function exit() {
     change('comic', '')
-    for (const key of ['comics', 'comic', 'reading-statistics']) void client.invalidateQueries({ queryKey: [key] })
+    for (const key of ['comics', 'comic', 'reading-statistics', 'continue-reading'])
+      void client.invalidateQueries({ queryKey: [key] })
   }
   if (comicId && reading.data && reading.isFetchedAfterMount)
     return <ComicReader key={reading.data.id} comic={reading.data} onExit={exit} />
@@ -197,10 +214,12 @@ export function Panels({
       />
       <div className="flex flex-wrap items-center gap-3 p-4">
         <h1 className="flex-1 text-xl font-semibold">Comic library</h1>
-        <QuietButton onClick={() => setManage(true)}>
-          <FolderCog className="size-4" aria-hidden="true" />
-          Comic locations
-        </QuietButton>
+        {configured && (
+          <QuietButton onClick={() => setManage(true)}>
+            <FolderCog className="size-4" aria-hidden="true" />
+            Comic locations
+          </QuietButton>
+        )}
       </div>
       {!configured && !sources.isPending && (
         <section aria-label="Set up comic library" className="space-y-4 p-5">
@@ -248,19 +267,13 @@ export function Panels({
           </label>
         </div>
       )}
-      {discovering && (
-        <p role="status" className="px-4 pb-3 text-sm text-accent">
-          Discovering comics… {discovery.reduce((sum, task) => sum + task.processed, 0)} processed. Follow progress in
-          Background jobs.
-        </p>
-      )}
-      {library.isFetching && !discovering && configured && (
-        <p role="status" className="px-4 text-sm text-muted">
-          Loading comics…
-        </p>
-      )}
       <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-        {libraryId && <QuietButton onClick={() => visit()}>Comic locations</QuietButton>}
+        {libraryId && (
+          <QuietButton onClick={() => visit()}>
+            <BookOpen className="size-4" aria-hidden="true" />
+            Bookshelf
+          </QuietButton>
+        )}
         {libraryId && path && (
           <QuietButton onClick={() => visit(libraryId, path.split('/').slice(0, -1).join('/'))}>
             <ArrowUp className="size-4" aria-hidden="true" />
@@ -281,68 +294,74 @@ export function Panels({
           {errorMessage(library.error || reading.error || folders.error)}
         </p>
       )}
-      <div className={`min-h-0 flex-1 overflow-auto p-4 ${!configured ? 'hidden' : ''}`}>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {!libraryId &&
-            !searching &&
-            sources.data?.locations?.map(location => (
-              <QuietButton
-                key={`${location.libraryId}:${location.relativePath}`}
-                className="min-h-24 whitespace-normal"
-                onClick={() => visit(location.libraryId, location.relativePath)}
-              >
-                <FolderOpen className="size-6 shrink-0" aria-hidden="true" />
-                {location.relativePath ||
-                  libraries.data?.find(item => item.id === location.libraryId)?.name ||
-                  `Library ${location.libraryId}`}
-              </QuietButton>
-            ))}
-          {!searching &&
-            folders.data?.items.map(folder => (
-              <QuietButton
-                key={folder.relativePath}
-                className="min-h-24 whitespace-normal"
-                onClick={() => visit(libraryId, folder.relativePath)}
-              >
-                <FolderOpen className="size-6 shrink-0" aria-hidden="true" />
-                {folder.name}
-              </QuietButton>
-            ))}
-          {library.data?.items.map(comic => (
-            <article key={comic.id} className="rounded-xl border border-line bg-surface p-3 text-left">
-              <button
-                type="button"
-                className="w-full text-left"
-                aria-label={`Read ${comic.title}`}
-                onClick={() => change('comic', String(comic.id))}
-              >
-                <div className="aspect-book overflow-hidden rounded-lg bg-canvas">
-                  {comic.coverUrl ? (
-                    <img src={comic.coverUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                  ) : (
-                    <BookOpen className="mx-auto my-8 size-12 text-muted" aria-hidden="true" />
-                  )}
+      <div className={`min-h-0 flex-1 overflow-auto p-4 ${!configured && !sources.isPending ? 'hidden' : ''}`}>
+        {initialLoading ? (
+          <div role="status" className="grid h-full min-h-48 place-items-center text-muted">
+            <span className="flex items-center gap-2">
+              <LoaderCircle className="size-5 motion-safe:animate-spin" aria-hidden="true" />
+              Loading comics…
+            </span>
+          </div>
+        ) : (
+          <>
+            {!libraryId && !searching && !!continuing.data?.length && (
+              <section aria-label="Continue reading" className="mb-6">
+                <h2 className="mb-3 text-lg font-semibold">Continue reading</h2>
+                <div className="flex gap-3 overflow-x-auto pb-3">
+                  {continuing.data.slice(0, 5).map(comic => (
+                    <div key={comic.id} className="w-32 shrink-0 sm:w-40">
+                      <ComicCard comic={comic} onOpen={() => change('comic', String(comic.id))} />
+                    </div>
+                  ))}
                 </div>
-                <h2 className="mt-2 truncate font-semibold">{comic.title}</h2>
-                {comic.favourite && <Star className="size-4 text-accent" aria-label="Favourite" />}
-                <p className="text-sm text-muted">
-                  {comic.series || comic.format.toUpperCase()} · {comic.pageCount} pages
-                </p>
-                <p className="text-xs text-muted">
-                  {comic.state} · page {comic.pageIndex + 1}
-                </p>
-              </button>
-              <QuietButton
-                className="mt-2"
-                onClick={() => setDetails(comic.id)}
-                aria-label={`Edit details for ${comic.title}`}
-              >
-                <Info className="size-4" aria-hidden="true" />
-                Details
-              </QuietButton>
-            </article>
-          ))}
-        </div>
+              </section>
+            )}
+            <section
+              aria-label="Comic folders"
+              className="grid grid-cols-[repeat(auto-fill,minmax(9rem,24rem))] gap-3 pb-4"
+            >
+              {!libraryId &&
+                !searching &&
+                sources.data?.locations?.map(location => (
+                  <ComicFolderCard
+                    key={`${location.libraryId}:${location.relativePath}`}
+                    name={
+                      location.relativePath ||
+                      libraries.data?.find(item => item.id === location.libraryId)?.name ||
+                      `Library ${location.libraryId}`
+                    }
+                    covers={location.coverUrls}
+                    onOpen={() => visit(location.libraryId, location.relativePath)}
+                  />
+                ))}
+              {!searching &&
+                folders.data?.items.map(folder => (
+                  <ComicFolderCard
+                    key={folder.relativePath}
+                    name={folder.name}
+                    covers={folder.coverUrls}
+                    onOpen={() => visit(libraryId, folder.relativePath)}
+                  />
+                ))}
+            </section>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              {library.data?.items.map(comic => (
+                <ComicCard
+                  key={comic.id}
+                  comic={comic}
+                  onOpen={() => change('comic', String(comic.id))}
+                  onDetails={() => setDetails(comic.id)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+        {discovering && (
+          <p role="status" className="py-4 text-center text-sm text-accent">
+            Discovering comics… {discovery.reduce((sum, task) => sum + task.processed, 0)} processed. Follow progress in
+            Background jobs.
+          </p>
+        )}
         {library.data?.items.length === 0 &&
           !discovering &&
           !library.isFetching &&

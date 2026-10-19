@@ -2677,6 +2677,29 @@
         }
       }
     },
+    "/api/panels/continue-reading": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetContinueReading",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComicSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/panels/sources": {
       "get": {
         "tags": [
@@ -4070,6 +4093,13 @@
           },
           "relativePath": {
             "type": "string"
+          },
+          "coverUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
           }
         }
       },
@@ -5438,6 +5468,13 @@
           "excludeFromGallery": {
             "type": "boolean",
             "default": true
+          },
+          "coverUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
           }
         }
       },

@@ -1566,3 +1566,11 @@ it('returns to Flick and its query after opening its Settings section', async ()
   expect(location.pathname).toBe('/flick')
   expect(new URLSearchParams(location.search).get('q')).toBe('clips')
 })
+
+it('places Gallery background jobs in the header action group', async () => {
+  emptyApi()
+  renderApp('/')
+  const jobs = (await screen.findAllByRole('button', { name: /^Background jobs/ }))[0]
+  expect(jobs.closest('header')).not.toBeNull()
+  expect(jobs.parentElement).toBe(screen.getByRole('button', { name: 'Settings', exact: true }).parentElement)
+})

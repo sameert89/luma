@@ -22,6 +22,7 @@ public sealed class ComicRow
     public long SourceModifiedTicks { get; set; }
     public int Revision { get; set; }
     public bool Favourite { get; set; }
+    public bool HasCover { get; set; }
     public int PageIndex { get; set; }
     public string State { get; set; } = "unread";
     public double ReadingSeconds { get; set; }
@@ -32,7 +33,7 @@ public sealed class ComicRow
 public sealed record ComicSummary(long Id, long LibraryId, string Title, string Series, string Author, string Description,
     string Format, int PageCount, int PageIndex, string State, double ReadingSeconds, string Direction, string Settings, string? LastReadAt, bool Favourite, string? CoverUrl, int CoverPage);
 public sealed record ComicList(IReadOnlyList<ComicSummary> Items, long? NextCursor);
-public sealed record ComicFolder(string Name, string RelativePath);
+public sealed record ComicFolder(string Name, string RelativePath, IReadOnlyList<string>? CoverUrls = null);
 public sealed record ComicFolderPage(IReadOnlyList<ComicFolder> Items, string? NextCursor);
 public sealed record ComicTagUpdate(long[] AddTagIds, long[] RemoveTagIds);
 public sealed record ComicJobAccepted(long Id);
@@ -53,7 +54,7 @@ public sealed class ComicJob
 public sealed class ComicLibrary(Database database, IndexingOptions options)
 {
     internal const string ReadSql = """
-        SELECT c.*,COALESCE(p.PageIndex,0) PageIndex,COALESCE(p.State,'unread') State,
+        SELECT EXISTS(SELECT 1 FROM ComicCache cc WHERE cc.ComicId=c.Id AND cc.Revision=c.Revision AND cc.Variant='cover') HasCover,c.*,COALESCE(p.PageIndex,0) PageIndex,COALESCE(p.State,'unread') State,
           CAST(COALESCE(p.ReadingSeconds,0.0) AS REAL) ReadingSeconds,COALESCE(p.Direction,'ltr') Direction,COALESCE(p.Settings,'{}') Settings,p.LastReadAt
         FROM Comics c JOIN Libraries l ON l.Id=c.LibraryId LEFT JOIN ReadingProgress p ON p.ComicId=c.Id
         WHERE c.Availability='present' AND l.Enabled=1
@@ -86,9 +87,13 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
             """, new { q, state, series, favourite, cursor, libraryId, path, prefix = string.IsNullOrEmpty(path) ? "" : path + "/", tag = tag is null ? null : Luma.Server.Features.Tags.TagText.Normalize(tag).Key }, cancellationToken: ct))).ToList();
         var more = rows.Count > 60;
         if (more) rows.RemoveAt(rows.Count - 1);
-        // Cache presence is a SQLite lookup, never a stat of source or generated files.
-        var covered = (await db.QueryAsync<long>(new CommandDefinition("SELECT cc.ComicId FROM ComicCache cc JOIN Comics c ON c.Id=cc.ComicId AND c.Revision=cc.Revision WHERE cc.Variant='cover' AND cc.ComicId IN @ids", new { ids = rows.Select(x => x.Id).ToArray() }, cancellationToken: ct))).ToHashSet();
-        return new(rows.Select(row => Summary(row, covered.Contains(row.Id))).ToArray(), more ? rows[^1].Id : null);
+        return new(rows.Select(row => Summary(row)).ToArray(), more ? rows[^1].Id : null);
+    }
+    public async Task<IReadOnlyList<ComicSummary>> ContinueAsync(CancellationToken ct)
+    {
+        await using var db = await database.OpenAsync(ct);
+        var rows = await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + " AND p.State='reading' ORDER BY p.LastReadAt DESC,c.Id DESC LIMIT 5", cancellationToken: ct));
+        return rows.Select(row => Summary(row)).ToArray();
     }
     public async Task<ComicFolderPage> FoldersAsync(long libraryId, string path, string? after, CancellationToken ct)
     {
@@ -111,7 +116,8 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
             """, new { libraryId, prefix, key, end = key + "\U0010FFFF", after }, cancellationToken: ct))).ToList();
         var more = rows.Count > 60;
         if (more) rows.RemoveAt(60);
-        return new(rows.Select(name => new ComicFolder(name, prefix + name)).ToArray(), more ? rows[^1] : null);
+        var covers = await ComicShelfCovers.LoadAsync(db, options, rows.Select(name => new ComicCoverScope(libraryId, prefix + name)), ct);
+        return new(rows.Select(name => new ComicFolder(name, prefix + name, covers.GetValueOrDefault((libraryId, prefix + name), []))).ToArray(), more ? rows[^1] : null);
     }
     public async Task<IReadOnlyList<Luma.Server.Features.Media.TagSummary>> TagsAsync(long id, CancellationToken ct)
     {
@@ -136,7 +142,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         await using var db = await database.OpenAsync(ct);
         return await db.QuerySingleOrDefaultAsync<ComicRow>(new CommandDefinition(ReadSql + " AND c.Id=@id", new { id }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
     }
-    internal static ComicSummary Summary(ComicRow row, bool cover = true) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, cover ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null, row.CoverPage);
+    internal static ComicSummary Summary(ComicRow row, bool? cover = null) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, (cover ?? row.HasCover) ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null, row.CoverPage);
     public async Task<ComicJobAccepted> QueueAsync(ComicRegistration request, CancellationToken ct)
     {
         var root = options.Libraries.Find(x => x.Id == request.LibraryId) ?? throw ApiRequestException.Missing();

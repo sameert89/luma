@@ -6,7 +6,7 @@ using Luma.Server.Http;
 
 namespace Luma.Server.Features.Panels;
 
-public sealed record PanelSourceLocation(long LibraryId, string RelativePath = "", bool ImageFolders = false, bool ExcludeFromGallery = true);
+public sealed record PanelSourceLocation(long LibraryId, string RelativePath = "", bool ImageFolders = false, bool ExcludeFromGallery = true, IReadOnlyList<string>? CoverUrls = null);
 public sealed record PanelSourceConfiguration(bool Configured, IReadOnlyList<PanelSourceLocation> Locations);
 public sealed record PanelSourceUpdate(IReadOnlyList<PanelSourceLocation> Locations);
 public sealed class PanelSources(Database database, IndexingOptions options, IConfiguration configuration)
@@ -47,7 +47,8 @@ public sealed class PanelSources(Database database, IndexingOptions options, ICo
         await using var db = await database.OpenAsync(ct);
         var configured = await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM ApplicationState WHERE Key='panelSourcesConfigured')", cancellationToken: ct));
         var locations = (await db.QueryAsync<SourceRow>(new CommandDefinition("SELECT LibraryId,RelativePath,ImageFolders,ExcludeFromGallery FROM PanelSources ORDER BY LibraryId,PathKey", cancellationToken: ct))).ToArray();
-        return new(configured, locations.Select(x => new PanelSourceLocation(x.LibraryId, x.RelativePath, x.ImageFolders, x.ExcludeFromGallery)).ToArray());
+        var covers = await ComicShelfCovers.LoadAsync(db, options, locations.Select(x => new ComicCoverScope(x.LibraryId, x.RelativePath)), ct);
+        return new(configured, locations.Select(x => new PanelSourceLocation(x.LibraryId, x.RelativePath, x.ImageFolders, x.ExcludeFromGallery, covers.GetValueOrDefault((x.LibraryId, x.RelativePath), []))).ToArray());
     }
     public async Task InitializeAsync(CancellationToken ct)
     {

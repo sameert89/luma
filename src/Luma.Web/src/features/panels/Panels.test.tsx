@@ -1,5 +1,6 @@
+import type { Comic } from './api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { Panels } from './Panels'
@@ -8,25 +9,27 @@ beforeEach(() => {
   localStorage.removeItem('luma-panels-query')
   window.history.replaceState({}, '', '/panels')
 })
-function mount(nextCursor: number | null = null, configured = true) {
+function mount(nextCursor: number | null = null, configured = true, resume: Comic[] = []) {
   const fetch = vi.fn().mockImplementation((url: string) =>
     Promise.resolve(
       new Response(
         JSON.stringify(
-          url.includes('/suggestions') || url === '/api/tasks'
-            ? []
-            : url.includes('/source-folders')
-              ? { items: [{ name: 'Manga', relativePath: 'Manga' }], nextOffset: null }
-              : url === '/api/libraries'
-                ? [{ id: 1, name: 'Comics', rootFolderId: 1 }]
-                : url.includes('/sources')
-                  ? {
-                      configured,
-                      locations: configured ? [{ libraryId: 1, relativePath: '', imageFolders: false }] : [],
-                    }
-                  : url.includes('/statistics')
-                    ? {}
-                    : { items: [], nextCursor },
+          url === '/api/panels/continue-reading'
+            ? resume
+            : url.includes('/suggestions') || url === '/api/tasks'
+              ? []
+              : url.includes('/source-folders')
+                ? { items: [{ name: 'Manga', relativePath: 'Manga' }], nextOffset: null }
+                : url === '/api/libraries'
+                  ? [{ id: 1, name: 'Comics', rootFolderId: 1 }]
+                  : url.includes('/sources')
+                    ? {
+                        configured,
+                        locations: configured ? [{ libraryId: 1, relativePath: '', imageFolders: false }] : [],
+                      }
+                    : url.includes('/statistics')
+                      ? {}
+                      : { items: [], nextCursor },
         ),
         {
           headers: { 'Content-Type': 'application/json' },
@@ -100,8 +103,36 @@ it('first visit saves recursive comic locations without file-management unlock',
 
 it('browses saved locations before listing their direct comics', async () => {
   const fetch = mount()
-  await userEvent.click(await screen.findByRole('button', { name: 'Comics' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Open Comics' }))
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/folders?libraryId=1&path=', expect.anything()))
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?libraryId=1&path=', expect.anything()))
   expect(window.location.search).toBe('?libraryId=1&path=')
+})
+
+it('shows at most five continued books with saved page indicators and one location-management action', async () => {
+  const comics: Comic[] = Array.from({ length: 6 }, (_, index) => ({
+    id: index + 1,
+    libraryId: 1,
+    title: `Recent ${index + 1}`,
+    series: 'Series',
+    author: '',
+    description: '',
+    format: 'zip',
+    pageCount: 10,
+    pageIndex: 3,
+    state: 'reading',
+    readingSeconds: 4,
+    direction: 'ltr',
+    settings: '{}',
+    lastReadAt: '2026-10-19',
+    favourite: false,
+    coverUrl: null,
+    coverPage: 0,
+  }))
+  mount(null, true, comics)
+  const row = await screen.findByRole('region', { name: 'Continue reading' })
+  expect(within(row).getAllByRole('button', { name: /^Read Recent/ })).toHaveLength(5)
+  expect(within(row).getByRole('progressbar', { name: 'Reading progress for Recent 1' })).toHaveAttribute('value', '4')
+  expect(screen.getAllByRole('button', { name: 'Comic locations', exact: true })).toHaveLength(1)
+  expect(screen.queryByText('Loading comics…')).not.toBeInTheDocument()
 })

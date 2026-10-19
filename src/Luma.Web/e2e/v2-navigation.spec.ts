@@ -60,6 +60,8 @@ test('Flick search, settings return and boot warning work without covering playe
   await page.getByRole('combobox', { name: 'Search media' }).fill('clip')
   await page.getByRole('combobox', { name: 'Search media' }).press('Enter')
   await expect(page).toHaveURL(/q=clip/)
+  const closeSearch = page.getByRole('button', { name: 'Close search', exact: true })
+  if (await closeSearch.isVisible()) await closeSearch.click()
   await page.getByRole('button', { name: 'Filters', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Filters and sorting' })).toBeVisible()
 })
@@ -88,8 +90,23 @@ test('Panels exposes discovery, browses folders and keeps reader tools in popups
     route.fulfill({
       json: {
         configured: true,
-        locations: [{ libraryId: 1, relativePath: 'Base', imageFolders: false, excludeFromGallery: true }],
+        locations: [
+          {
+            libraryId: 1,
+            relativePath: 'Base',
+            imageFolders: false,
+            excludeFromGallery: true,
+            coverUrls: ['/comic-cover-1.svg', '/comic-cover-2.svg', '/comic-cover-3.svg'],
+          },
+        ],
       },
+    }),
+  )
+  await page.route('**/api/panels/continue-reading', route => route.fulfill({ json: [comic] }))
+  await page.route('**/comic-cover-*.svg', route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600"/>',
     }),
   )
   await page.route('**/api/tasks', route =>
@@ -134,9 +151,20 @@ test('Panels exposes discovery, browses folders and keeps reader tools in popups
   await page.goto('/panels')
   await expect(page.getByText(/Discovering comics… 3 processed/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Background jobs, running' })).toBeVisible()
-  await page.getByRole('button', { name: 'Base', exact: true }).click()
-  await page.getByRole('button', { name: 'Manga', exact: true }).click()
-  await page.getByRole('button', { name: 'DBZ', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Continue reading' })).toBeVisible()
+  await expect(page.getByRole('progressbar', { name: 'Reading progress for DBZ volume 1' })).toHaveAttribute(
+    'value',
+    '3',
+  )
+  await expect(page.getByRole('button', { name: 'Open Base', exact: true }).locator('[data-cover]')).toHaveAttribute(
+    'data-cover',
+    'mosaic-3',
+  )
+  await page.getByRole('button', { name: 'Open Base', exact: true }).click()
+  await page.getByRole('button', { name: 'Open Manga', exact: true }).click()
+  await page.getByRole('button', { name: 'Open DBZ', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Comic locations', exact: true })).toHaveCount(1)
+  await expect(page.getByText('Loading comics…', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Read DBZ volume 1' }).click()
   await expect(page.getByRole('button', { name: 'Background jobs, running' })).toHaveCount(0)
   await expect(page.getByRole('combobox', { name: 'Page fit' })).toHaveCount(0)

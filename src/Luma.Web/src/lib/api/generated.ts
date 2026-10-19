@@ -704,6 +704,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panels/continue-reading": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetContinueReading"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panels/sources": {
         parameters: {
             query?: never;
@@ -1265,6 +1281,7 @@ export interface components {
         ComicFolder: {
             name: string;
             relativePath: string;
+            coverUrls?: string[] | null;
         };
         ComicFolderPage: {
             items: components["schemas"]["ComicFolder"][];
@@ -1684,6 +1701,7 @@ export interface components {
             imageFolders: boolean;
             /** @default true */
             excludeFromGallery: boolean;
+            coverUrls?: string[] | null;
         };
         PanelSourceUpdate: {
             locations: components["schemas"]["PanelSourceLocation"][];
@@ -3337,6 +3355,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetContinueReading: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicSummary"][];
+                };
             };
         };
     };

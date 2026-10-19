@@ -877,6 +877,8 @@ export function App() {
               <QuietButton onClick={() => switchExperience(settingsOrigin)}>
                 Back to {settingsOrigin === 'flick' ? 'Flick' : settingsOrigin === 'panels' ? 'Panels' : 'Gallery'}
               </QuietButton>
+            ) : showBackgroundJobs && section !== 'reels' && section !== 'help' ? (
+              <BackgroundJobsButton compact libraryId={home ? undefined : filters.libraryId} />
             ) : undefined
           }
         />
@@ -1277,11 +1279,6 @@ export function App() {
       </div>
       {section !== 'reels' && section !== 'panels' && (
         <BottomNavigation items={navItems} active={section} onChange={id => navigateSection(id as Section)} />
-      )}
-      {showBackgroundJobs && !active && section !== 'reels' && section !== 'panels' && (
-        <div className="fixed bottom-20 right-4 z-30 sm:right-6 md:bottom-6">
-          <BackgroundJobsButton libraryId={home ? undefined : filters.libraryId} />
-        </div>
       )}
       <Toast toast={toast} onDismiss={dismissToast} />
       <UpdateNotice />

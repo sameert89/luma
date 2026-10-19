@@ -36,7 +36,14 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
     setBusy(true)
     setMessage('')
     try {
-      await request('/api/panels/sources', undefined, 'PUT', { locations })
+      await request('/api/panels/sources', undefined, 'PUT', {
+        locations: locations.map(({ libraryId, relativePath, imageFolders, excludeFromGallery }) => ({
+          libraryId,
+          relativePath,
+          imageFolders,
+          excludeFromGallery,
+        })),
+      })
       await Promise.all(
         ['comic-sources', 'comics', 'tasks', 'media', 'folders', 'libraries', 'tags', 'collection-tags'].map(key =>
           client.invalidateQueries({ queryKey: [key] }),
