@@ -26,6 +26,7 @@ test('folders can be hidden from every view and shown again from settings', asyn
     await page.getByRole('button', { name: 'Hide folder' }).click()
     await page.getByRole('dialog', { name: 'Hide folder' }).getByRole('button', { name: 'Hide folder' }).click()
     await expect(page.getByRole('button', { name: 'Open Trips' })).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => history.state?.lumaModal)).toBeFalsy()
     await page.goto('/?q=photo-0000020')
     await expect(page.getByText('No media to show')).toBeVisible()
 

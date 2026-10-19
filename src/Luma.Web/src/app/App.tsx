@@ -663,6 +663,8 @@ export function App() {
     }
   }
   function openViewer(item: Media, slideshow = false) {
+    // A closing menu can finish its Back traversal before React commits this selection.
+    activeRef.current = item
     triggerId.current = item.id
     viewerScrollTop.current = rememberScroll()
     setSlideshowStart(slideshow)

@@ -878,6 +878,49 @@ describe('browsing shell', () => {
     expect(window.location.search).toContain('folderId=2')
     expect(window.location.search).not.toContain('mediaType=motion')
   })
+  it('keeps a newly selected viewer when a menu Back event lands before React renders', async () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(1000)
+    const photo = {
+      id: 7,
+      libraryId: 1,
+      folderId: 1,
+      fileName: 'race.jpg',
+      mediaType: 'image',
+      extension: '.jpg',
+      sizeBytes: 10,
+      modifiedAt: '2026-01-01T00:00:00Z',
+      preference: 'neutral',
+      tags: [],
+      thumbnail: { status: 'ready', url: '/thumb.jpg' },
+      preview: { status: 'ready', url: '/preview.jpg' },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        const data =
+          url === '/api/tasks' || url.includes('/suggestions')
+            ? []
+            : url === '/api/libraries'
+              ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+              : url.startsWith('/api/indexing')
+                ? { libraries: [{ id: 1, availability: 'available' }] }
+                : url.includes('/neighbors?')
+                  ? { previous: null, next: null }
+                  : /\/api\/media\/\d+$/.test(url)
+                    ? photo
+                    : { items: [photo], nextCursor: null, previousCursor: null }
+        return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      }),
+    )
+    renderApp('/?q=race')
+    const tile = await screen.findByRole('button', { name: 'Open race.jpg' })
+    act(() => {
+      tile.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { section: 'gallery', filters: {} } }))
+    })
+    expect(await screen.findByRole('dialog', { name: 'race.jpg' })).toBeVisible()
+  })
   it('starts a slideshow from the gallery and hands a video over to reels in the same folder', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
     const clip = {
