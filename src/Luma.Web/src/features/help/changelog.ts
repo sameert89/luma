@@ -6,6 +6,19 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.5',
+    date: '2026-10-19',
+    headline: 'Reliable comic reading and Gallery-style shelves',
+    changes: [
+      'Comic lists no longer fail when unread and previously read books have different SQLite number types. Saved progress is fetched before reopening a book, and Exit reader finishes the latest checkpoint first. Progress also works on HTTP LAN hosts.',
+      'Panels starts with up to five recent unfinished books in a horizontally scrollable Continue reading row. Comic cards show their saved page progress.',
+      'Comic folders reuse Gallery’s rectangular smart covers and cover-style setting. Covers are selected in bounded SQLite queries from generated cache entries.',
+      'Pinch zoom keeps its scale, and continuous pages flow together without artificial padding or resetting every page measurement after each load.',
+      'Gallery background jobs moves to the header, matching Panels. Panels keeps one Comic locations action and shows initial loading in the center without flashing during background refreshes. Dropdown arrows have an inset.',
+      'Phone search expands in the same header row, temporarily replacing the logo and other actions. Suggestions span the header width; Close search restores the normal header. No database migration is added.',
+    ],
+  },
+  {
     version: '2.0.0-beta.4',
     date: '2026-10-19',
     headline: 'Restore phone search reveal',

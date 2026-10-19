@@ -12,7 +12,7 @@ Baseline: `0ba2838`, .NET 10 / Dapper / SQLite WAL, React 19 / TanStack Query an
 | Discovery  | `ScanWorker`, `DirtyFolders`, `AutomaticLibraryRefresh`    | Keep discovery out of browse requests. Coordinate mutation with scan claims; enqueue relevant discovery after publication even in manual refresh mode.                                                                   |
 | Tasks      | `Scans`, `ProcessingJobs`, `MetadataJobs`, `TaskEndpoints` | Existing tasks are a projection of durable domain tables, not a generic queue. Add operation/upload projections to this same endpoint and controls; bounded domain workers are consistent with the existing design.      |
 | Security   | `Program`, common `ApiRequestException`                    | No existing user authentication. File writes require the server-wide file-management switch and an explicitly writable root; reject cross-origin writes. This is a single-user application without token authentication. |
-| Shell      | `app/App.tsx`, `BottomNavigation`, `BackgroundJobsButton`  | Existing URL/history and PWA restoration live in App. Preserve them, introduce logo switcher and experience-local route/query memory, retain floating task indicator everywhere.                                         |
+| Shell      | `app/App.tsx`, `BottomNavigation`, `BackgroundJobsButton`  | Existing URL/history and PWA restoration live in App. Preserve them, introduce logo switcher and experience-local route/query memory, place tasks in Gallery/Panels headers while keeping playback/reader controls clear.                                         |
 | Feed       | `browse/Reels`, `reelsSort`, `FilterForm`                  | Retain player, motion (video + GIF) behavior, and reusable query contract. Independent Flick query state supersedes the previous shared-state architectural contract.                                                    |
 | Comics     | No existing subsystem                                      | Separate indexed comic tables and bounded page providers. Explicit directory classification; on-demand archive pages and cached covers; never scan archives while listing.                                               |
 | Appearance | `app/themes`, `styles.css`, `ThemePicker`                  | Extend existing tokens/preferences. Reduced motion and client appearance preferences remain separate from server write authority.                                                                                        |
@@ -197,3 +197,26 @@ Phone search starts collapsed across all experiences. The right-hand action grou
 contains Search, Filters and Settings; Search reveals the full-width field below
 the action row, and Close search removes that row. Inline suggestions and desktop
 search remain available. No schema migration is added; schema 33 remains current.
+
+## Beta.5 reader and shelf corrections
+
+Comic reading seconds are explicitly cast to SQLite REAL in shared list/detail
+and statistics queries, avoiding Dapper reader-type reuse across mixed unread
+and read rows. Reader opening waits for a fresh checkpoint; explicit exit drains
+saves, including queued updates after a retried response. LAN HTTP sessions use
+getRandomValues rather than requiring randomUUID. Successful saves update the
+reader query and invalidate bookshelf/Continue reading/statistics caches.
+
+Continue reading is bounded to five unfinished books ordered by LastReadAt.
+Source/folder covers use one bounded SQLite statement per page, up to five
+current cached covers per subtree; listing never opens originals. Folder cards
+reuse Gallery AlbumCover and the shared smart/cropped preference. Native cached
+image dimensions refine the initial portrait cover layout after images load.
+Initial shelf loading is centered; background refresh does not display a loading
+banner over existing books. Header jobs are shared by Gallery and Panels.
+
+Pinch zoom uses an immutable distance/scale baseline. Continuous rows have no
+added page padding, use natural image heights and measure only the loaded row.
+Restoring a saved scroll position suppresses transient page-zero checkpoints.
+Phone search expands on the same row; full header-width suggestions stay clear
+of the collapsed logo/action group. No schema migration is added (schema 33).

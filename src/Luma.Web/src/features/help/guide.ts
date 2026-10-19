@@ -125,7 +125,7 @@ export const guideSections: GuideSection[] = [
             icons: [Settings],
             name: 'Revisit and change locations',
             where: 'Panels bookshelf → Comic locations',
-            what: 'Next time Panels opens saved locations. Open a location to browse its immediate subfolders and books, such as Base → Manga → DBZ. Up and Comic locations move back through the tree. Comic locations lets you add, replace, remove or rescan sources. Books outside the selected locations are hidden; stored metadata and reading progress are preserved for re-adding a location. Search suggests comic titles; Enter searches titles, authors and series across the current library, or all locations from the start page. Filters include series, reading status, favourites and comic tag. Details includes the shared tag editor; comic-only tags do not appear in Gallery collections or suggestions.',
+            what: 'The Panels start page shows up to five recently read unfinished books in a horizontally scrollable Continue reading row with page indicators, followed by your saved locations. Folder cards reuse Gallery smart covers and follow the album-cover style in Settings. Open a location to browse its immediate subfolders and books, such as Base → Manga → DBZ. Up and Comic locations move back through the tree. Comic locations lets you add, replace, remove or rescan sources. Books outside the selected locations are hidden; stored metadata and reading progress are preserved for re-adding a location. Search suggests comic titles; Enter searches titles, authors and series across the current library, or all locations from the start page. Filters include series, reading status, favourites and comic tag. Details includes the shared tag editor; comic-only tags do not appear in Gallery collections or suggestions.',
           },
         ],
       },
@@ -170,7 +170,7 @@ export const guideSections: GuideSection[] = [
             label: 'Panels',
             name: 'Comic library and reader',
             where: 'Luma logo → Panels',
-            what: 'Search comic titles or series, filter by series, comic tag, reading status or favourites, and open a comic to resume reading. On first visit, Comic locations lets you select libraries and folders for recursive discovery. Saved locations open as a bookshelf on later visits; change or rescan them from Comic locations independently of file management. Details edits title, series, author, description, favourite and cover page. The Reader settings icon opens a popup for single or continuous pages, reading direction, fit, zoom and fullscreen. The compact page counter opens Go to page with a number field and slider; previous/next arrows, swipe and keyboard navigation stay available. Progress is saved automatically.',
+            what: 'Search comic titles or series, filter by series, comic tag, reading status or favourites, and open a comic to resume reading. On first visit, Comic locations lets you select libraries and folders for recursive discovery. Saved locations open as a bookshelf on later visits; change or rescan them from Comic locations independently of file management. Details edits title, series, author, description, favourite and cover page. The Reader settings icon opens a popup for single or continuous pages, reading direction, fit, zoom and fullscreen. Pinch zoom and drag to pan in the reader; continuous pages touch without artificial gaps and remain virtualized for large books. The compact page counter opens Go to page with a number field and slider; previous/next arrows, swipe and keyboard navigation stay available. Page changes save automatically; Exit reader waits for the latest checkpoint. Reopening fetches saved progress before rendering the reader, including on HTTP LAN hosts.',
           },
           {
             label: 'Manage files',
@@ -258,7 +258,7 @@ export const guideSections: GuideSection[] = [
           {
             icons: [RefreshCw],
             name: 'Background jobs',
-            where: 'Bottom-right of library screens',
+            where: 'Top-right header in Gallery and Panels',
             what: 'Opens the list of indexing, import and export jobs. The icon spins while any job runs.',
           },
           {
@@ -448,7 +448,7 @@ export const guideSections: GuideSection[] = [
             icons: [Search, X],
             name: 'Open search / Close search',
             where: 'Header on phones',
-            what: 'Phone search starts collapsed. Search, Filters and Settings are grouped on the right. Tap Open search to reveal and focus the input below those actions; Close search tucks the row away again without clearing your query. Suggestions appear below the input while typing. Desktop search stays visible.',
+            what: 'Phone search starts collapsed. Search, Filters and Settings are grouped on the right. Tap Open search to replace the logo and actions with an input on the same header row; Close search restores the normal header without clearing your query. Suggestions open below the header at its full content width, so they are not squeezed by the other buttons. Desktop search stays visible.',
           },
           {
             icons: [X],
@@ -857,7 +857,7 @@ export const guideSections: GuideSection[] = [
           {
             icons: [RefreshCw],
             name: 'Background jobs',
-            where: 'Bottom-right of library screens',
+            where: 'Top-right header in Gallery and Panels',
             what: 'Opens the jobs list. Start a rescan from a folder or library card’s Folder actions menu.',
           },
         ],

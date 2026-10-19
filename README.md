@@ -237,8 +237,15 @@ share stable library/path identities; any containing exclusion takes precedence.
 
 Panels browses locations and subfolders in order, supports title/series search and
 comic tags in **Details**, and shows live discovery progress plus **Background
-jobs** in its header. The reader's settings icon and compact page counter open
-separate popups for display preferences and page jumping.
+jobs** in its header. Gallery uses the same header placement. Panels starts with
+a horizontal Continue reading row (up to five unfinished books), shows saved
+page indicators, and uses Gallery’s rectangular smart covers for folders. The
+reader's settings icon and compact page counter open
+separate popups for display preferences and page jumping. Pinch zoom retains its
+scale; continuous pages flow without added gaps. Progress is saved on page
+changes and flushed before exiting, then fetched before the next reader opens.
+Phone search expands within its original header row and suggestions use the
+header width. Beta.5 adds no database migration.
 
 **Beta.3 upgrades SQLite to schema 33.** Back up the database before upgrading.
 To return to beta.2 or an earlier release, restore its matching pre-upgrade

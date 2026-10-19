@@ -133,6 +133,6 @@ it('shows at most five continued books with saved page indicators and one locati
   const row = await screen.findByRole('region', { name: 'Continue reading' })
   expect(within(row).getAllByRole('button', { name: /^Read Recent/ })).toHaveLength(5)
   expect(within(row).getByRole('progressbar', { name: 'Reading progress for Recent 1' })).toHaveAttribute('value', '4')
-  expect(screen.getAllByRole('button', { name: 'Comic locations', exact: true })).toHaveLength(1)
+  expect(screen.getAllByRole('button', { name: 'Comic locations' })).toHaveLength(1)
   expect(screen.queryByText('Loading comics…')).not.toBeInTheDocument()
 })

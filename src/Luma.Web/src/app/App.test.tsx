@@ -1572,5 +1572,5 @@ it('places Gallery background jobs in the header action group', async () => {
   renderApp('/')
   const jobs = (await screen.findAllByRole('button', { name: /^Background jobs/ }))[0]
   expect(jobs.closest('header')).not.toBeNull()
-  expect(jobs.parentElement).toBe(screen.getByRole('button', { name: 'Settings', exact: true }).parentElement)
+  expect(jobs.parentElement).toBe(screen.getByRole('button', { name: 'Settings' }).parentElement)
 })
