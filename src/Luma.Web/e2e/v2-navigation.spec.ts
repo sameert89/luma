@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { switchExperience } from './helpers'
+import { openHeaderSearch, switchExperience } from './helpers'
 
 test('applications retain independent queries and an empty Flick always has an exit', async ({ page }) => {
   await page.route('**/api/media**', route =>
@@ -18,10 +18,12 @@ test('applications retain independent queries and an empty Flick always has an e
   await expect(page).toHaveURL(/q=photos/)
   await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible()
   await switchExperience(page, 'Panels')
+  await openHeaderSearch(page, 'Search comics')
   await page.getByRole('combobox', { name: 'Search comics' }).fill('moon')
   await page.getByRole('combobox', { name: 'Search comics' }).press('Enter')
   await expect(page).toHaveURL(/\/panels\?q=moon/)
   await page.reload()
+  await openHeaderSearch(page, 'Search comics')
   await expect(page.getByRole('combobox', { name: 'Search comics' })).toHaveValue('moon')
   await switchExperience(page, 'Gallery')
   await expect(page).toHaveURL(/q=photos/)
@@ -54,6 +56,7 @@ test('Flick search, settings return and boot warning work without covering playe
   await page.getByRole('button', { name: 'Back to Flick', exact: true }).click()
   await expect(page).toHaveURL(/\/flick/)
   await expect(warning).toHaveCount(0)
+  await openHeaderSearch(page, 'Search media')
   await page.getByRole('combobox', { name: 'Search media' }).fill('clip')
   await page.getByRole('combobox', { name: 'Search media' }).press('Enter')
   await expect(page).toHaveURL(/q=clip/)

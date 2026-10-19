@@ -1,4 +1,4 @@
-import { switchExperience, openFixtureDatabase } from './helpers'
+import { openHeaderSearch, switchExperience, openFixtureDatabase } from './helpers'
 import { test, expect, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { copyFile, mkdir, utimes } from 'node:fs/promises'
@@ -180,6 +180,7 @@ test('Flick restores its own filters when switching applications', async ({ page
   await expect(page).toHaveURL(/order=asc/)
 
   await switchExperience(page, 'Gallery')
+  await openHeaderSearch(page, 'Search media')
   await page.getByRole('combobox', { name: 'Search media' }).fill('photo')
   await page.getByRole('combobox', { name: 'Search media' }).press('Enter')
   await expect(page).toHaveURL(/q=photo/)

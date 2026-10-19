@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { galleryAction, viewerAction, openFixtureDatabase } from './helpers'
+import { openHeaderSearch, galleryAction, viewerAction, openFixtureDatabase } from './helpers'
 import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -29,9 +29,29 @@ test.beforeEach(async ({ page }) => {
     .toBeGreaterThan(0)
 })
 
-test('phone search stays visible in Gallery and Collections but is hidden in Settings', async ({ page }, testInfo) => {
+test('phone search is collapsed until clicked, groups actions on the right, and stays out of Settings', async ({
+  page,
+}, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile', 'Mobile header layout')
-  const search = page.getByRole('combobox', { name: 'Search media' })
+  await expect(page.getByRole('combobox', { name: 'Search media' })).toBeHidden()
+  const header = page.locator('header').first()
+  const initialHeight = (await header.boundingBox())!.height
+  const open = page.getByRole('button', { name: 'Open search', exact: true })
+  const filters = page.getByRole('button', { name: 'Filters', exact: true })
+  const settings = page.getByRole('button', { name: 'Settings', exact: true })
+  const a = (await open.boundingBox())!,
+    b = (await filters.boundingBox())!,
+    c = (await settings.boundingBox())!
+  expect(a.y).toBe(b.y)
+  expect(b.y).toBe(c.y)
+  expect(b.x - a.x).toBeLessThan(60)
+  expect(c.x - b.x).toBeLessThan(60)
+  await open.click()
+  await expect(page.getByRole('combobox', { name: 'Search media' })).toBeFocused()
+  await page.getByRole('button', { name: 'Close search', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Search media' })).toBeHidden()
+  expect((await header.boundingBox())!.height).toBe(initialHeight)
+  const search = await openHeaderSearch(page)
   await expect(search).toBeVisible()
   await search.fill('holiday')
   await expect
@@ -380,7 +400,7 @@ test('keeps the virtualized gallery and retained summaries bounded', async ({ pa
 })
 
 test('searches and edits tags with keyboard-accessible controls', async ({ page }, testInfo) => {
-  const search = page.getByRole('combobox', { name: 'Search media' })
+  const search = await openHeaderSearch(page)
   await search.fill('holiday')
   await search.press('Enter')
   await expect(page).toHaveURL(/q=holiday/)

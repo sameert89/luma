@@ -269,7 +269,7 @@ describe('browsing shell', () => {
     expect(input).not.toHaveFocus()
     expect(input.closest('form')).not.toHaveAttribute('inert')
     await visitGallery()
-    await userEvent.click(input)
+    await userEvent.click(screen.getByRole('button', { name: 'Open search' }))
     await waitFor(() => expect(input).toHaveFocus())
   })
 

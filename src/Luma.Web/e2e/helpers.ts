@@ -51,3 +51,9 @@ export async function switchExperience(page: Page, name: 'Gallery' | 'Flick' | '
   await page.getByRole('button', { name: /^Switch application,/ }).click()
   await page.getByRole('dialog', { name: 'Luma applications' }).getByRole('button', { name, exact: true }).click()
 }
+
+export async function openHeaderSearch(page: Page, name = 'Search media') {
+  const field = page.getByRole('combobox', { name })
+  if (!(await field.isVisible())) await page.getByRole('button', { name: 'Open search', exact: true }).click()
+  return field
+}

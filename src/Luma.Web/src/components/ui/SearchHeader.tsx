@@ -51,6 +51,17 @@ export function SearchHeader({
   placeholder?: string
   actions?: ReactNode
 }) {
+  const [open, setOpen] = useState(false)
+  const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 639px)').matches ?? false)
+  const formId = useId()
+  const toggle = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const query = window.matchMedia?.('(max-width: 639px)')
+    if (!query) return
+    const update = () => setMobile(query.matches)
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
   // Suggestions show while the field is focused and edited; choosing, submitting or Escape hides them.
   const [listOpen, setListOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -71,7 +82,10 @@ export function SearchHeader({
   const items = listOpen && typed ? (suggestions.data ?? []) : []
   const expanded = items.length > 0
   useEffect(() => {
-    if (searchRequested && !hideSearch) requestAnimationFrame(() => input.current?.focus())
+    if (searchRequested && !hideSearch) {
+      setOpen(true)
+      requestAnimationFrame(() => input.current?.focus())
+    }
   }, [searchRequested, hideSearch])
   useEffect(() => {
     setActiveIndex(-1)
@@ -101,8 +115,10 @@ export function SearchHeader({
       )}
       {!hideSearch && (
         <form
+          id={formId}
           role="search"
-          className="contents sm:ml-auto"
+          hidden={mobile && !open}
+          className={`${mobile && !open ? 'hidden' : 'flex'} order-last w-full min-w-0 items-center gap-2 sm:order-none sm:ml-auto sm:w-auto sm:max-w-xl sm:flex-1`}
           onSubmit={event => {
             event.preventDefault()
             if (expanded && activeIndex >= 0) {
@@ -113,7 +129,7 @@ export function SearchHeader({
             onSearch()
           }}
         >
-          <div className="relative order-last w-full min-w-0 sm:order-none sm:ml-auto sm:w-auto sm:max-w-xl sm:flex-1">
+          <div className="relative min-w-0 flex-1">
             <div className="overflow-hidden">
               {/* A combobox: typing keeps focus in the field while Up/Down pick a suggestion. */}
               <Input
@@ -147,9 +163,13 @@ export function SearchHeader({
                   } else if (event.key === 'ArrowUp' && expanded) {
                     event.preventDefault()
                     setActiveIndex(index => (index <= 0 ? items.length - 1 : index - 1))
-                  } else if (event.key === 'Escape' && expanded) {
+                  } else if (event.key === 'Escape') {
                     event.preventDefault()
                     setListOpen(false)
+                    if (!expanded && mobile) {
+                      setOpen(false)
+                      toggle.current?.focus()
+                    }
                   }
                 }}
               />
@@ -221,12 +241,30 @@ export function SearchHeader({
               <X className="size-5" />
             </IconButton>
           )}
-          <IconButton label="Search" type="submit">
-            <Search className="size-5" />
-          </IconButton>
         </form>
       )}
       <div className="ml-auto flex shrink-0 items-center gap-2">
+        {!hideSearch && (
+          <IconButton
+            ref={toggle}
+            label={mobile ? (open ? 'Close search' : 'Open search') : 'Search'}
+            type={mobile ? 'button' : 'submit'}
+            form={mobile ? undefined : formId}
+            aria-expanded={mobile ? open : undefined}
+            aria-controls={mobile ? formId : undefined}
+            onClick={
+              mobile
+                ? () => {
+                    setOpen(!open)
+                    setListOpen(false)
+                    if (!open) requestAnimationFrame(() => input.current?.focus())
+                  }
+                : undefined
+            }
+          >
+            {mobile && open ? <X className="size-5" /> : <Search className="size-5" />}
+          </IconButton>
+        )}
         {!hideSearch && onFilters && (
           <IconButton label="Filters" onClick={onFilters}>
             <SlidersHorizontal className="size-5" />

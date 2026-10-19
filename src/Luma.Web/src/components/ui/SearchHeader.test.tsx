@@ -114,7 +114,11 @@ it('does not press what the suggestion list was covering', async () => {
   expect(clearAllFilters).toHaveBeenCalledTimes(1)
 })
 
-it('keeps search visible with its logo and actions on phones, and hides it on Settings', async () => {
+it('reveals phone search only on request, keeps actions together, and hides it on Settings', async () => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+  )
   const client = new QueryClient()
   const ui = (hidden: boolean) => (
     <QueryClientProvider client={client}>
@@ -133,7 +137,14 @@ it('keeps search visible with its logo and actions on phones, and hides it on Se
     </QueryClientProvider>
   )
   const { rerender } = render(ui(false))
+  expect(screen.queryByRole('textbox', { name: 'Search media' })).toBeNull()
+  const opener = screen.getByRole('button', { name: 'Open search' })
+  expect(opener.parentElement).toBe(screen.getByRole('button', { name: 'Filters' }).parentElement)
+  expect(opener.parentElement).toBe(screen.getByRole('button', { name: 'Settings' }).parentElement)
+  await userEvent.click(opener)
   expect(screen.getByRole('textbox', { name: 'Search media' })).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Close search' }))
+  expect(screen.queryByRole('textbox', { name: 'Search media' })).toBeNull()
   expect(screen.getByRole('button', { name: 'Switch application' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Filters' })).toBeVisible()
   rerender(ui(true))
