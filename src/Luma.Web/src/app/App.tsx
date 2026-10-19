@@ -849,7 +849,7 @@ export function App() {
       <StorageWarning
         onSettings={() => {
           navigateSection('settings')
-          setSettingsAnchor('general')
+          setSettingsAnchor('files')
         }}
       />
       {restored.isError && (
@@ -949,13 +949,15 @@ export function App() {
             </Suspense>
           ) : section === 'settings' ? (
             <div className="overflow-auto scroll-py-2" data-scroll-restore>
-              <section id="settings-general" className="scroll-mt-20">
+              <section id="settings-general" className="scroll-mt-4">
                 <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">General</h2>
                 <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
                 <ThemePicker value={theme} onChange={setTheme} />
                 <AppearanceSettings appearance={appearance} />
                 <LibrarySettings />
-                <FileAccess />
+                <div id="settings-files" className="scroll-mt-4">
+                  <FileAccess />
+                </div>
                 <ApplicationSettings />
                 <SettingsSection title="Help" description="See what each button, gesture and keyboard shortcut does.">
                   <QuietLink
@@ -988,7 +990,7 @@ export function App() {
                   </div>
                 </SettingsSection>
               </section>
-              <section id="settings-gallery" className="scroll-mt-20">
+              <section id="settings-gallery" className="scroll-mt-4">
                 <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Gallery</h2>
                 <AlbumCoverSettings />
                 <SettingsSection
@@ -1005,7 +1007,7 @@ export function App() {
                 </SettingsSection>
                 <HiddenFolders />
               </section>
-              <section id="settings-flick" className="scroll-mt-20">
+              <section id="settings-flick" className="scroll-mt-4">
                 <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Flick</h2>
                 <ReelsSortSettings />
                 <p className="px-5 pb-5 text-sm text-muted">
@@ -1013,7 +1015,7 @@ export function App() {
                   its own search and filters.
                 </p>
               </section>
-              <section id="settings-panels" className="scroll-mt-20">
+              <section id="settings-panels" className="scroll-mt-4">
                 <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Panels</h2>
                 <SettingsSection
                   title="Comic locations and reader"

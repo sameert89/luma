@@ -50,7 +50,7 @@ test('Flick search, settings return and boot warning work without covering playe
   await expect(warning).toBeVisible()
   await warning.getByRole('button', { name: 'Details' }).click()
   await expect(page).toHaveURL(/settings.*from=flick/)
-  await expect(page.getByRole('heading', { name: 'General', exact: true })).toBeInViewport()
+  await expect(page.getByRole('checkbox', { name: 'Enable file management', exact: true })).toBeInViewport()
   await page.getByRole('button', { name: 'Back to Flick', exact: true }).click()
   await expect(page).toHaveURL(/\/flick/)
   await expect(warning).toHaveCount(0)
