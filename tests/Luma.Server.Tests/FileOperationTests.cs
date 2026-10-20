@@ -422,6 +422,8 @@ public sealed class FileOperationTests
         var (operations, _) = Services(f);
         var accepted = await operations.QueueAsync(new(1, "copy", "source.jpg", "target.jpg", ReplaceExisting: true), default);
         var queued = await operations.GetAsync(accepted.Id, default);
+        var child = await Assert.ThrowsAsync<ApiRequestException>(() => operations.CancelAsync(queued.ReplacementId!, default));
+        Assert.Equal("dependent_operation", child.Code);
         await operations.CancelAsync(accepted.Id, default);
         Assert.Equal("cancelled", (await operations.GetAsync(queued.ReplacementId!, default)).State);
         Assert.Equal("new bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "source.jpg")));
@@ -436,6 +438,45 @@ public sealed class FileOperationTests
         var (operations, _) = Services(f);
         await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "album/nested", "album", ReplaceExisting: true), default));
         Assert.True(Directory.Exists(Path.Combine(f.Root.Path, "album", "nested")));
+    }
+
+    [Fact]
+    public async Task Folder_replacement_keeps_the_recycled_tree_restorable_with_original_ids()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "source"));
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "target"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "source", "new.jpg"), "new bytes");
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "target", "old.jpg"), "old bytes");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var oldId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='target/old.jpg'");
+        var (operations, worker) = Services(f);
+        var result = await RunAsync(operations, worker, f, new(1, "move", "source", "target", ReplaceExisting: true));
+        Assert.Equal("completed", result.State);
+        Assert.Equal("new bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "target", "new.jpg")));
+        Assert.False(File.Exists(Path.Combine(f.Root.Path, "target", "old.jpg")));
+        var restored = await RunAsync(operations, worker, f, new(1, "restore", "target", "previous", result.ReplacementId));
+        Assert.Equal("completed", restored.State);
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "previous", "old.jpg")));
+        Assert.Equal(oldId, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE PathKey=@key", new { key = f.Root.Key("previous/old.jpg") }));
+    }
+
+    [Fact]
+    public async Task Replacement_resolves_existing_case_aliases_using_the_library_key_policy()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        f.Root.CaseSensitive = false;
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Libraries SET CaseSensitive=0");
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "source.jpg"), "new bytes");
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "Target.jpg"), "old bytes");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var result = await RunAsync(operations, worker, f, new(1, "copy", "source.jpg", "target.JPG", ReplaceExisting: true));
+        Assert.Equal("completed", result.State);
+        Assert.Equal("new bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "target.JPG")));
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", result.ReplacementId!, "content")));
     }
 
 }

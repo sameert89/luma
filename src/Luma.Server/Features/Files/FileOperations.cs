@@ -240,6 +240,8 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
     {
         await using var db = await OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
+        if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"SELECT EXISTS(SELECT 1 FROM FileOperations WHERE ReplacementId=@id AND State IN ({ActiveStates}))", new { id }, tx, cancellationToken: ct)))
+            throw new ApiRequestException(409, "dependent_operation", "Cancel the replacement operation instead of its recycle step.");
         var replacement = await db.ExecuteScalarAsync<string?>(new CommandDefinition("SELECT ReplacementId FROM FileOperations WHERE Id=@id AND State='queued'", new { id }, tx, cancellationToken: ct));
         if (await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='cancelled',FinishedAt=@now WHERE Id=@id AND State='queued'", new { id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct)) == 0)
             throw new ApiRequestException(409, "operation_started", "Only an operation that has not started can be cancelled.");

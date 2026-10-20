@@ -204,3 +204,88 @@ test('Flick menu deletion advances, falls back and empties without reopening que
   expect(posts.map(post => post.mediaId)).toEqual([10, 15, 5])
   await expect.poll(() => page.evaluate(() => !!history.state?.lumaModal)).toBe(false)
 })
+
+for (const choice of ['Replace', 'Skip'] as const) {
+  test(`upload conflict ${choice.toLowerCase()} applies to the batch after closing the upload window`, async ({ page }) => {
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const requests: Record<string, unknown>[] = []
+    await page.route('**/api/files/capabilities', route =>
+      route.fulfill({ json: { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] } }),
+    )
+    await page.route('**/api/files/location?folderId=*', route =>
+      route.fulfill({ json: { libraryId: 1, relativePath: '' } }),
+    )
+    await page.route('**/api/files/uploads', async route => {
+      const body = route.request().postDataJSON()
+      requests.push(body)
+      if (!body.replaceExisting) {
+        await gate
+        return route.fulfill({ status: 409, contentType: 'application/problem+json', json: { code: 'destination_exists', title: 'Already exists', traceId: 'test' } })
+      }
+      return route.fulfill({ json: { id: body.requestId, state: 'waitingForClient', committedOffset: 0 } })
+    })
+    await page.route('**/api/files/uploads/*/finalize*', route =>
+      route.fulfill({ json: { id: 'session', state: 'finalizing', committedOffset: 0, operationId: 'publication' } }),
+    )
+    await page.route('**/api/files/operations/publication', route =>
+      route.fulfill({ json: { id: 'publication', state: 'completed' } }),
+    )
+    await page.goto('/?libraryId=1&folderId=1')
+    await page.getByRole('button', { name: 'File management', exact: true }).click()
+    await page.getByRole('button', { name: 'Upload', exact: true }).click()
+    const upload = page.getByRole('dialog', { name: 'Upload', exact: true })
+    await upload.getByLabel('Choose upload files', { exact: true }).setInputFiles([
+      { name: 'existing-a.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(0) },
+      { name: 'existing-b.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(0) },
+    ])
+    await expect.poll(() => requests.length).toBe(2)
+    await upload.getByRole('button', { name: 'Close', exact: true }).click()
+    await expect(upload).toBeHidden()
+    release()
+    const conflict = page.getByRole('dialog', { name: 'An item already exists', exact: true })
+    await expect(conflict).toBeVisible()
+    await conflict.getByRole('checkbox', { name: 'Apply to all remaining conflicts in this batch' }).check()
+    await conflict.getByRole('button', { name: choice, exact: true }).click()
+    await expect(conflict).toBeHidden()
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('luma-upload-sessions-v1') ?? '[]').length)).toBe(0)
+    expect(requests.filter(request => request.replaceExisting).length).toBe(choice === 'Replace' ? 2 : 0)
+    await expect.poll(() => page.evaluate(() => !!history.state?.lumaModal)).toBe(false)
+  })
+}
+
+for (const [kind, choice] of [['Cut', 'Replace'], ['Copy', 'Skip']] as const) {
+  test(`paste from ${kind.toLowerCase()} supports ${choice.toLowerCase()} for all destination conflicts`, async ({ page }) => {
+    const requests: Record<string, unknown>[] = []
+    await page.route('**/api/files/capabilities', route =>
+      route.fulfill({ json: { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] } }),
+    )
+    await page.route('**/api/files/location?folderId=*', route =>
+      route.fulfill({ json: { libraryId: 1, relativePath: '' } }),
+    )
+    await page.route('**/api/files/clipboard', route =>
+      route.fulfill({ json: route.request().postDataJSON().mediaIds.map((mediaId: number, index: number) => ({ libraryId: 1, mediaId, folderId: null, relativePath: `source/photo-${index}.jpg` })) }),
+    )
+    await page.route('**/api/files/operations', route => {
+      const body = route.request().postDataJSON()
+      requests.push(body)
+      return body.replaceExisting
+        ? route.fulfill({ status: 202, json: { id: 'queued' } })
+        : route.fulfill({ status: 409, contentType: 'application/problem+json', json: { code: 'destination_exists', title: 'Already exists', traceId: 'test' } })
+    })
+    await page.goto('/?libraryId=1&folderId=1')
+    await page.getByRole('button', { name: 'File management', exact: true }).click()
+    await page.getByRole('button', { name: 'Select media', exact: true }).click()
+    const cells = page.getByTestId('media-cell')
+    await cells.nth(0).getByRole('checkbox').check()
+    await cells.nth(1).getByRole('checkbox').check()
+    await page.getByRole('button', { name: kind, exact: true }).click()
+    await page.getByRole('button', { name: 'Paste (2)', exact: true }).click()
+    const conflict = page.getByRole('dialog', { name: 'An item already exists', exact: true })
+    await conflict.getByRole('checkbox', { name: 'Apply to all remaining conflicts in this batch' }).check()
+    await conflict.getByRole('button', { name: choice, exact: true }).click()
+    await expect(conflict).toBeHidden()
+    await expect(page.getByRole('status').filter({ hasText: choice === 'Replace' ? '2 operations queued' : '2 skipped' })).toBeVisible()
+    expect(requests.filter(request => request.replaceExisting).length).toBe(choice === 'Replace' ? 2 : 0)
+  })
+}
