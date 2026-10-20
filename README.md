@@ -8,7 +8,7 @@ Luma is a lightweight, self-hosted photo and video browser built for large media
 - Photo and video viewing, slideshows, and the vertical Flick feed
 - Panels comic bookshelves with saved recursive sources and reading progress
 - Opt-in plain SRT captions from matching sidecars or embedded SubRip tracks
-- Optional uploads, folders, same-library moves and recycling when file management is enabled
+- Optional uploads, folders, same-library cut/copy/paste and queued recycling when file management is enabled
 - Keyword, path, date, media-type, size, orientation, preference, and tag filters
 - Cursor-paginated results, virtualized galleries, stable sorting, grouping, and shuffle
 - Tags, favourites, dislikes, custom album covers, hidden folders, and bulk editing
@@ -85,6 +85,14 @@ An equivalent server configuration looks like this:
 ```
 
 Library IDs must remain stable positive integers. Library roots must be distinct and non-overlapping. Keep the database and cache outside every media root. Worker concurrency is intentionally bounded; increase it cautiously on faster hosts. Full configuration and operational behavior are documented in [indexing](docs/INDEXING.md), [media cache](docs/MEDIA-CACHE.md), and [deployment](docs/DEPLOYMENT.md).
+
+## File management
+
+Enable file management in Settings and configure writable libraries as described in the [guide](docs/DEPLOYMENT.md). Inside a library, click the file-management icon beside Select to reveal the toolbar. Select media or folders, choose Cut or Copy, browse to a destination folder, and Paste. Paste operates within the same library and never overwrites an existing item. Ctrl/Cmd+X, C and V work while the toolbar is open, outside text fields and dialogs.
+
+Delete queues recycling by default; permanent deletion requires an explicit choice. New folder only asks for a name. Follow all operations in Background jobs while continuing to browse. Luma updates its index for controlled moves/deletes without scheduling a full folder scan; copy/upload publication indexes only the new path.
+
+Upload opens file/folder pickers and a drop zone, including nested folder drops. Uploads continue after the dialog closes. Recycle bin and Help are at the top of Settings, and About is at the end. Read-only libraries disable file actions.
 
 ## Data and backup model
 

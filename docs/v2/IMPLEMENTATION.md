@@ -220,3 +220,11 @@ added page padding, use natural image heights and measure only the loaded row.
 Restoring a saved scroll position suppresses transient page-zero checkpoints.
 Phone search expands on the same row; full header-width suggestions stay clear
 of the collapsed logo/action group. No schema migration is added (schema 33).
+
+### beta.6 file-management workflow
+
+The Gallery file-management icon toggles an inline toolbar beside the existing selection workflow. A tab-local clipboard keeps indexed source paths while browsing to a destination; paste uses same-library queued operations with no overwrite. Selection supports media and folders. Recycle bin and Help move to Settings entry points; About is last. Upload uses a dedicated dialog with pickers and bounded recursive drop collection.
+
+Independent mutation intents may queue together (500 active operations per library), while overlapping sources/destinations, scans, active uploads and unresolved evidence are rejected. The existing single mutation worker preserves serialization. Prefix snapshots use indexed path ranges instead of substring predicates. Copy builds a flushed private payload before renaming it into complete staging, so an interrupted partial copy can be discarded and rebuilt without touching the source or publishing partial bytes. Copy preserves database tags, gives copied media fresh IDs and queues preview work. Cross-library operations remain unsupported.
+
+New copy/upload publication uses the existing bounded entry persistence pipeline for only the new path; it does not enqueue a scan of siblings or reconcile unrelated records as missing. Controlled mutations update parent folder timestamps. Watcher reconciliation suppresses notifications only when current filesystem state matches completed journal work, while unrelated external changes still queue normal discovery. No schema migration is added.

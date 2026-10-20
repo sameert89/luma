@@ -226,3 +226,11 @@ with `media_not_writable` (409). A successful recheck restores availability.
 The last check resets on server restart. Existing operation recovery and journals
 are retained; a mount changing after a successful check can still fail an active
 operation through the existing recovery flow.
+
+## File selection and queued mutations (beta.6)
+
+`POST /api/files/clipboard` accepts `{mediaIds: number[], folderIds: number[]}` with 1–500 total IDs and returns indexed `{libraryId, relativePath, mediaId, folderId}` entries. Selecting a folder subsumes selected descendants. Library roots are not clipboard entries. This endpoint requires file management to be enabled and applies the existing same-origin checks; it reads SQLite only.
+
+`POST /api/files/operations` additionally accepts kind `copy`, with the same source/destination rules as `move`. Both return 202 once the intent is journaled; clients must not wait for completion before sending independent work. Queue capacity is 500 active intents per library. Conflicting source/destination subtrees return `path_busy`; active discovery/uploads or unresolved evidence return `library_busy`. Same-library copy/move never overwrites physical or retained indexed destinations. `mkdir`, recycle, delete, restore and purge retain their existing contracts. Follow `/api/tasks` or the operation-status endpoint for completion, cancellation or recovery evidence.
+
+Copy publishes only after a flushed private payload becomes complete staging. Partial-copy recovery rebuilds private payload from a verified source. New media receive new IDs and copied database tags; source IDs and bytes are retained. Copy/upload indexing touches only the published path. Moves, recycling and deletion reconcile existing IDs without rescanning sibling files.

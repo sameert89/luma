@@ -173,22 +173,22 @@ export const guideSections: GuideSection[] = [
             what: 'Search comic titles or series, filter by series, comic tag, reading status or favourites, and open a comic to resume reading. On first visit, Comic locations lets you select libraries and folders for recursive discovery. Saved locations open as a bookshelf on later visits; change or rescan them from Comic locations independently of file management. Details edits title, series, author, description, favourite and cover page. The Reader settings icon opens a popup for single or continuous pages, reading direction, fit, zoom and fullscreen. Pinch zoom and drag to pan in the reader; continuous pages touch without artificial gaps and remain virtualized for large books. The compact page counter opens Go to page with a number field and slider; previous/next arrows, swipe and keyboard navigation stay available. Page changes save automatically; Exit reader waits for the latest checkpoint. Reopening fetches saved progress before rendering the reader, including on HTTP LAN hosts.',
           },
           {
-            label: 'Manage files',
+            label: 'File management',
             name: 'File and folder changes',
             where: 'Gallery, inside a configured writable library',
-            what: 'Create folders, move items within the same library, or delete the current folder or selected media. Deletion recycles by default; permanent deletion requires explicit confirmation and cannot be undone. Library roots cannot be deleted. File management requires the Settings switch and a writable media mount; read-only browsing remains available.',
+            what: 'Use the file-management icon beside Select to reveal or hide Cut, Copy, Paste, Delete, New folder and Upload. Select media or folder checkboxes, choose Cut or Copy, browse into a destination folder, then Paste. The clipboard survives folder navigation; cut clears after successful queueing, while copy remains available. Ctrl/Cmd+X, C and V and Delete work while file management is open, outside text fields and dialogs. Paste stays within the source library and never overwrites collisions. New folder asks for a name in the current folder. Delete recycles by default and queues immediately after confirmation; progress and failures appear in Background jobs. Permanent deletion must be explicitly selected. Read-only libraries disable the file-management icon.',
           },
           {
             label: 'Upload files / Upload folder',
             name: 'Resumable uploads',
-            where: 'Gallery → Manage files',
-            what: 'Choose files or a folder to upload into the current folder. Pause, resume or cancel from the upload queue. After refreshing, enable file management and reselect the matching file to resume its saved offset. Existing destinations are not overwritten, and completed uploads appear after indexing.',
+            where: 'Gallery → File management → Upload',
+            what: 'The upload dialog has Choose files, Choose folder and a drag-and-drop area. Dropped folders keep their hierarchy. Uploads continue after closing the dialog; follow progress in Background jobs. Reselect matching files after a browser refresh to resume saved offsets. Existing destinations are never overwritten. Publication indexes only new files, without rescanning thousands of siblings.',
           },
           {
             label: 'Recycle bin',
             name: 'Restore or permanently remove recycled items',
-            where: 'Gallery, inside a writable library',
-            what: 'Shows original paths and deletion dates. Restore returns an item to its original path; use an alternative relative path if that location is occupied. Restore never overwrites another file. Permanently delete asks for confirmation. Automatic retention cleanup is not available yet; recycled files consume media-volume space. The recycle bin is not a backup.',
+            where: 'Top of Settings → Recycle bin',
+            what: 'Choose a writable library. Shows original paths and deletion dates. Restore returns an item to its original path; use an alternative relative path if that location is occupied. Restore never overwrites another file. Permanently delete asks for confirmation. Automatic retention cleanup is not available yet; recycled files consume media-volume space. The recycle bin is not a backup.',
           },
           {
             label: 'Needs attention',

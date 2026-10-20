@@ -6,6 +6,18 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.6',
+    date: '2026-10-20',
+    headline: 'Browse, cut, copy and paste',
+    changes: [
+      'The file-management icon beside Select reveals a compact toolbar. Select photos, videos or folders, cut or copy, browse to the destination and paste. No destination path typing is needed. Keyboard shortcuts work too.',
+      'Delete and new-folder actions submit background jobs and return immediately. Independent operations queue together instead of waiting for each file to finish. Paste never overwrites existing destinations.',
+      'Completed file changes no longer cause redundant watcher scans. Copied and uploaded files are indexed directly, without rescanning their siblings.',
+      'Upload opens a dedicated dialog with file/folder pickers and drag-and-drop. Transfers continue after closing it.',
+      'Recycle bin and Help are at the top of Settings; About is at the end. Read-only libraries disable file management.',
+    ],
+  },
+  {
     version: '2.0.0-beta.5',
     date: '2026-10-19',
     headline: 'Reliable comic reading and Gallery-style shelves',
