@@ -88,7 +88,7 @@ Library IDs must remain stable positive integers. Library roots must be distinct
 
 ## File management
 
-Enable file management in Settings and configure writable libraries as described in the [guide](docs/DEPLOYMENT.md). Inside a library, click the file-management icon beside Select to reveal the toolbar. Select media or folders, choose Cut or Copy, browse to a destination folder, and Paste. Paste operates within the same library and never overwrites an existing item. Ctrl/Cmd+X, C and V work while the toolbar is open, outside text fields and dialogs.
+Enable file management in Settings and configure writable libraries as described in the [guide](docs/DEPLOYMENT.md). In Gallery folders, search or tag results, click the file-management icon beside Select to reveal the toolbar. Select media or folders, choose Cut or Copy, browse to a destination folder, and Paste. Rename changes one selected file or folder in place; the viewer menu also offers Rename and Delete. Viewer deletion advances to the next item, or the previous at the end. Open a destination folder for Paste, Upload and New folder. Paste operates within the same library and never overwrites an existing item. Ctrl/Cmd+X, C and V work while the toolbar is open, outside text fields and dialogs.
 
 Delete queues recycling by default; permanent deletion requires an explicit choice. New folder only asks for a name. Follow all operations in Background jobs while continuing to browse. Luma updates its index for controlled moves/deletes without scheduling a full folder scan; copy/upload publication indexes only the new path.
 

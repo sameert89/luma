@@ -6,6 +6,16 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.8',
+    date: '2026-10-20',
+    headline: 'Keep viewing after deletion, and rename in place',
+    changes: [
+      'Deleting from the Gallery viewer keeps the player open and advances to the next item, or the previous one at the end. Items already queued for deletion are skipped. The viewer closes only when no items remain.',
+      'Rename is available for a single selected file or folder in the file toolbar and for the current item in the expanded viewer menu. Enter a name to queue the change in its current folder.',
+      'File management stays available in search and tag-filtered results. Cut, Copy, Rename and Delete work on the selected items; open a destination folder for Paste, Upload or New folder.',
+    ],
+  },
+  {
     version: '2.0.0-beta.7',
     date: '2026-10-20',
     headline: 'Viewer deletion and returning to the last photo',

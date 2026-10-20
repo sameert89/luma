@@ -235,3 +235,10 @@ New copy/upload publication uses the existing bounded entry persistence pipeline
 The expanded Gallery viewer menu exposes queued recycling/permanent deletion under the existing server-wide and per-library write capabilities. Confirmation captures a stable target, pauses slideshow advancement and finishes its modal history entry before the parent viewer closes. Gallery restoration waits for the viewer's own history cleanup, then reveals/focuses the last visited item instead of resetting to the opening pixel offset. Unchanged viewers retain their original offset; nested folder slideshows do not force their recursive items into a direct-only Gallery query.
 
 For targets outside the retained cache, MediaNeighbors returns a signed pageCursor immediately before the current item. Gallery fetches at most two 60-item pages around it, preserves all filters/sort/seed, and resumes ordinary bidirectional keyset paging. Source directories are never accessed for this restoration. The Windows Watch on Flick assertion now awaits the asynchronous Gallery restoration it verifies.
+
+
+### beta.8 viewer continuation, rename and filtered file management
+
+Queued viewer deletion advances in the same mounted player to the next item, then the previous one when at the end. Session-local links skip already queued removals while filesystem work catches up. Closing is reserved for an exhausted result list. Rename uses the existing journaled move endpoint with a same-parent destination and collision protections, for one selected file/folder or the current viewer item. Completed file tasks refresh active details and neighbors as well as Gallery.
+
+The file toolbar is available in folder, search and tag-result views. Selection resolution provides each source library ID before queueing deletion and rejects read-only selections before submitting mutations. Destination-dependent actions stay disabled without an open folder. No database or API schema changes are added.
