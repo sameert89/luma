@@ -1,11 +1,21 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Check, Film, Heart, Images, LoaderCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CachedImage } from '../../components/ui/CachedImage'
 import { Checkbox, QuietButton } from '../../components/ui/Controls'
 import { tagTone } from '../../components/ui/TagTone'
-import { errorMessage, isGif, mediaPage, type Filters, type Media } from './api'
+import {
+  errorMessage,
+  isGif,
+  mediaPage,
+  queryString,
+  request,
+  type Filters,
+  type Media,
+  type MediaPage,
+  type Neighbors,
+} from './api'
 import { useFolderIndexing } from './useFolderIndexing'
 import { usePreviewPriority } from './usePreviewPriority'
 import { pullThreshold, usePullToRefresh } from './usePullToRefresh'
@@ -24,6 +34,8 @@ export function Gallery({
   scopeError,
   restoreScrollTop = 0,
   onScrollPosition,
+  revealMediaId,
+  onRevealComplete,
   onPullRefresh,
 }: {
   filters: Filters
@@ -37,8 +49,11 @@ export function Gallery({
   scopeError?: Error | null
   restoreScrollTop?: number
   onScrollPosition?: (value: number) => void
+  revealMediaId?: number | null
+  onRevealComplete?: () => void
   onPullRefresh?: () => Promise<unknown> | void
 }) {
+  const client = useQueryClient()
   const pull = usePullToRefresh(scrollerRef, onPullRefresh)
   const indexing = useFolderIndexing(filters.folderId)
   const query = useInfiniteQuery({
@@ -53,12 +68,14 @@ export function Gallery({
     gcTime: 5 * 60_000,
     retry: 1,
     refetchInterval: state =>
-      indexing.waiting ||
-      state.state.data?.pages.some(page =>
-        page.items.some(item => !['ready', 'failed'].includes(item.thumbnail.status)),
-      )
-        ? 3000
-        : false,
+      revealMediaId
+        ? false
+        : indexing.waiting ||
+            state.state.data?.pages.some(page =>
+              page.items.some(item => !['ready', 'failed'].includes(item.thumbnail.status)),
+            )
+          ? 3000
+          : false,
   })
   // Tag grouping lists an item under each of its tags, so a cell is identified by its group and item,
   // not by the item alone: pages that overlap still collapse, repeats under other headers stay.
@@ -142,12 +159,12 @@ export function Gallery({
   // Keep priority bounded to the rendered viewport and overscan, rather than all loaded pages.
   usePreviewPriority(visible.flatMap(row => gridRows[row.index].items))
   useEffect(() => {
-    if (items.length && last >= rows - 3 && query.hasNextPage && !query.isFetching) void load(false)
-  }, [last, rows, query.hasNextPage, query.isFetching, items.length, load])
+    if (!revealMediaId && items.length && last >= rows - 3 && query.hasNextPage && !query.isFetching) void load(false)
+  }, [last, rows, query.hasNextPage, query.isFetching, items.length, load, revealMediaId])
   const restored = useRef(false)
   const restoringScroll = useRef(restoreScrollTop > 0)
   useLayoutEffect(() => {
-    if (restored.current || query.isPending || !scrollerRef.current) return
+    if (revealMediaId || restored.current || query.isPending || !scrollerRef.current) return
     const element = scrollerRef.current
     element.scrollTop = restoreScrollTop
     restored.current = true
@@ -158,7 +175,69 @@ export function Gallery({
       restoringScroll.current = false
     })
     return () => cancelAnimationFrame(frame)
-  }, [query.isPending, restoreScrollTop, scrollerRef])
+  }, [query.isPending, restoreScrollTop, scrollerRef, revealMediaId])
+  const revealFound = !!revealMediaId && items.some(item => item.id === revealMediaId)
+  const [revealError, setRevealError] = useState('')
+  useEffect(() => {
+    if (!revealMediaId || revealFound) return
+    const controller = new AbortController()
+    let disposed = false
+    setRevealError('')
+    async function seek() {
+      // The viewer may have moved outside the retained five-page window. Seek directly at
+      // that item using the signed neighbor cursor; never walk every intervening page.
+      const neighbors =
+        client.getQueryData<Neighbors>(['neighbors', filters, revealMediaId]) ??
+        (await request<Neighbors>(`/api/media/${revealMediaId}/neighbors?${queryString(filters)}`, controller.signal))
+      const cursor = neighbors.pageCursor ?? undefined
+      const page = await mediaPage(filters, cursor, controller.signal)
+      if (disposed) return
+      if (!page.items.some(item => item.id === revealMediaId))
+        throw new Error('The last viewed item is no longer in these results.')
+      await client.cancelQueries({ queryKey: ['media', filters], exact: true })
+      if (disposed) return
+      const before = page.previousCursor ? await mediaPage(filters, page.previousCursor, controller.signal) : null
+      if (disposed) return
+      anchor.current = null
+      client.setQueryData<InfiniteData<MediaPage, string | undefined>>(['media', filters], {
+        pages: before ? [before, page] : [page],
+        pageParams: before ? [page.previousCursor ?? undefined, cursor] : [cursor],
+      })
+    }
+    void seek().catch(error => {
+      if (!disposed) {
+        setRevealError(errorMessage(error))
+        onRevealComplete?.()
+      }
+    })
+    return () => {
+      disposed = true
+      controller.abort()
+    }
+  }, [client, filters, revealMediaId, revealFound, onRevealComplete])
+  useLayoutEffect(() => {
+    if (!revealMediaId || !revealFound || !scrollerRef.current) return
+    const element = scrollerRef.current
+    const row = gridRows.find(row => row.items.some(item => item.id === revealMediaId))
+    if (!row) return
+    restored.current = true
+    restoringScroll.current = true
+    const height = element.clientHeight || element.getBoundingClientRect().height
+    const top = leadingHeight + row.offset
+    if (top < element.scrollTop || top + rowHeight > element.scrollTop + height)
+      element.scrollTop = Math.max(0, top - Math.max(0, height - rowHeight) / 2)
+    onScrollPosition?.(element.scrollTop)
+    const frame = requestAnimationFrame(() => {
+      const focused = document.activeElement
+      if (focused === document.body || focused === element || (focused instanceof Node && element.contains(focused)))
+        element
+          .querySelector<HTMLButtonElement>(`button[data-media-id="${revealMediaId}"]`)
+          ?.focus({ preventScroll: true })
+      restoringScroll.current = false
+      onRevealComplete?.()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [revealMediaId, revealFound, gridRows, leadingHeight, rowHeight, scrollerRef, onScrollPosition, onRevealComplete])
   // One indicator at a time. Checking the folder is the most specific thing that can be
   // happening; otherwise the collection's first load speaks for an empty screen. A background
   // refetch says nothing at all: its spinner used to flash over the grid every few seconds.
@@ -181,7 +260,8 @@ export function Gallery({
       data-scroll-restore
       onScroll={event => {
         if (!restoringScroll.current) onScrollPosition?.(event.currentTarget.scrollTop)
-        if (event.currentTarget.scrollTop < rowHeight && query.hasPreviousPage && !query.isFetching) void load(true)
+        if (!revealMediaId && event.currentTarget.scrollTop < rowHeight && query.hasPreviousPage && !query.isFetching)
+          void load(true)
       }}
     >
       {/* The pull indicator floats over the collection instead of pushing it down: a disc that
@@ -217,6 +297,17 @@ export function Gallery({
           <p role="status" className="flex items-center gap-2 pb-3 text-sm text-muted">
             <LoaderCircle className="size-4 motion-safe:animate-spin" />
             Checking this folder and preparing previews…
+          </p>
+        )}
+        {revealMediaId && !revealFound && (
+          <p role="status" className="flex items-center gap-2 py-4 text-sm text-muted">
+            <LoaderCircle className="size-4 motion-safe:animate-spin" />
+            Finding the last viewed item…
+          </p>
+        )}
+        {revealError && (
+          <p role="alert" className="pb-3 text-sm text-danger">
+            {revealError}
           </p>
         )}
         {scopeError && (

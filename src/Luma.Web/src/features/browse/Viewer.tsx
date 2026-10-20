@@ -1,3 +1,4 @@
+import { DeleteMediaAction } from '../files/DeleteMediaAction'
 import { readSetting } from '../../app/uiDefaults'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -64,6 +65,8 @@ export function Viewer({
   onClose,
   onWatchReels,
   restoreFocus,
+  onDeleteQueued,
+  onExitComplete,
 }: {
   active: Media
   filters: Filters
@@ -72,7 +75,10 @@ export function Viewer({
   onClose: () => void
   onWatchReels?: (item: Media) => void
   restoreFocus: () => void
+  onDeleteQueued?: (fallback: Media | null) => void
+  onExitComplete?: () => void
 }) {
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [slideshow, setSlideshow] = useState(startSlideshow)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -126,6 +132,7 @@ export function Viewer({
     }
   }, [autoplayNext])
   function videoEnded() {
+    if (deleteOpen) return
     if (slideshow) {
       if (next) navigate(next, 'next')
       else setSlideshow(false)
@@ -137,13 +144,13 @@ export function Viewer({
   // Photos and GIFs advance on a timer; videos advance when they end (see onEnded).
   // The last item ends the slideshow rather than wrapping to a different place.
   useEffect(() => {
-    if (!slideshow || detailsOpen || item.mediaType === 'video' || !neighbors.isSuccess) return
+    if (!slideshow || detailsOpen || deleteOpen || item.mediaType === 'video' || !neighbors.isSuccess) return
     const timer = window.setTimeout(() => {
       if (next) navigate(next, 'next')
       else setSlideshow(false)
     }, slideSeconds * 1000)
     return () => window.clearTimeout(timer)
-  }, [slideshow, detailsOpen, item.id, item.mediaType, next, neighbors.isSuccess, slideSeconds, navigate])
+  }, [slideshow, detailsOpen, deleteOpen, item.id, item.mediaType, next, neighbors.isSuccess, slideSeconds, navigate])
   // Decode the next slide ahead of time so each advance is instant.
   const nextSlide = slideshow && next && next.mediaType !== 'video' ? imageUrl(next) : null
   useEffect(() => {
@@ -214,6 +221,9 @@ export function Viewer({
         open={open}
         onOpenChange={setOpen}
         onClosed={onClose}
+        onHistoryClosed={() => {
+          if (!open) onExitComplete?.()
+        }}
         title={item.fileName}
         description="Media viewer. Use Left and Right arrows to navigate, I for details, and Escape to close."
         wide
@@ -292,6 +302,18 @@ export function Viewer({
             <IconButton label="View options" className={actionButton} onClick={() => setOptionsOpen(true)}>
               <Settings2 className="size-4" />
             </IconButton>
+            <DeleteMediaAction
+              item={item}
+              className={actionButton}
+              onOpenChange={open => {
+                setDeleteOpen(open)
+                if (open) setSlideshow(false)
+              }}
+              onQueued={() => {
+                onDeleteQueued?.(next ?? previous ?? null)
+                setOpen(false)
+              }}
+            />
             <IconButton label="Media details" className={actionButton} onClick={() => setDetailsOpen(true)}>
               <Info className="size-4" />
             </IconButton>

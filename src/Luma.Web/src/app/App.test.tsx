@@ -806,7 +806,7 @@ describe('browsing shell', () => {
       expect(await screen.findByRole('region', { name: 'Flick' })).toBeVisible()
       act(() => window.history.back())
       expect(await screen.findByRole('dialog', { name: 'clip.mp4' })).toBeVisible()
-      expect(screen.getByTestId('gallery-scroll').scrollTop).toBe(360)
+      await waitFor(() => expect(screen.getByTestId('gallery-scroll').scrollTop).toBe(360))
     } finally {
       rect.mockRestore()
       vi.restoreAllMocks()
@@ -1616,4 +1616,77 @@ it('places Gallery background jobs in the header action group', async () => {
   const jobs = (await screen.findAllByRole('button', { name: /^Background jobs/ }))[0]
   expect(jobs.closest('header')).not.toBeNull()
   expect(jobs.parentElement).toBe(screen.getByRole('button', { name: 'Settings' }).parentElement)
+})
+
+it('closing after viewer navigation reveals the current item instead of restoring the opening position', async () => {
+  const items = Array.from({ length: 60 }, (_, index) => ({
+    id: index + 1,
+    libraryId: 1,
+    folderId: 1,
+    fileName: `photo-${index + 1}.jpg`,
+    mediaType: 'image',
+    extension: '.jpg',
+    availability: 'present',
+    preference: 'neutral',
+    sizeBytes: 1,
+    modifiedAt: '2026-01-01',
+    effectiveDate: '2026-01-01',
+    thumbnail: { status: 'ready', url: `/thumb/${index + 1}` },
+    preview: { status: 'ready', url: `/preview/${index + 1}` },
+    tags: [],
+  }))
+  const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+    width: 800,
+    height: 600,
+    top: 0,
+    left: 0,
+    right: 800,
+    bottom: 600,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect)
+  const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.dataset.testid === 'gallery-scroll' ? 600 : 0
+    },
+  })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Response(null, { status: 204 })
+      const match = url.match(/\/api\/media\/(\d+)/)
+      const id = match ? Number(match[1]) : null
+      const data = url.includes('/neighbors?')
+        ? { previous: id === 1 ? null : items[0], next: id === 1 ? items[44] : null }
+        : id
+          ? items[id - 1]
+          : url === '/api/files/capabilities'
+            ? { accessConfigured: false, libraries: [] }
+            : url.startsWith('/api/media?')
+              ? { items, nextCursor: null, previousCursor: null }
+              : url === '/api/libraries'
+                ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+                : url === '/api/tasks' || url.includes('/suggestions')
+                  ? []
+                  : { libraries: [] }
+      return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } })
+    }),
+  )
+  try {
+    renderApp('/?q=photo')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open photo-1.jpg' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Viewer menu' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next item' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Next item' }))
+    await screen.findByRole('dialog', { name: 'photo-45.jpg' })
+    await userEvent.click(screen.getByRole('button', { name: 'Close viewer' }))
+    await waitFor(() => expect(screen.getByTestId('gallery-scroll').scrollTop).toBeGreaterThan(0))
+    await waitFor(() => expect(window.history.state?.lumaModal).toBeFalsy())
+  } finally {
+    rect.mockRestore()
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height)
+  }
 })

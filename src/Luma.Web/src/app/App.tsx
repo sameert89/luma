@@ -24,11 +24,11 @@ import {
   Tag,
   X,
 } from 'lucide-react'
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
 import { Checkbox, IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
-import { Modal } from '../components/ui/Modal'
+import { Modal, isModalHistoryClosing } from '../components/ui/Modal'
 import { SearchHeader, type SearchSuggestion } from '../components/ui/SearchHeader'
 import { Toast, useToast } from '../components/ui/Toast'
 import { ThemePicker } from '../components/ui/ThemePicker'
@@ -271,6 +271,7 @@ export function App() {
   useEffect(() => {
     if (restored.data && !restoredOnce.current) {
       restoredOnce.current = true
+      triggerId.current = restored.data.id
       setActive(restored.data)
     }
   }, [restored.data])
@@ -294,6 +295,9 @@ export function App() {
   const libraryMemory = useRef<Filters>(filters.q ? {} : filters)
   const searchOrigin = useRef<'library' | 'search'>('search')
   const triggerId = useRef<number | null>(null)
+  const viewerStartId = useRef<number | null>(null)
+  const [revealMediaId, setRevealMediaId] = useState<number | null>(null)
+  const finishReveal = useCallback(() => setRevealMediaId(null), [])
   const viewerScrollTop = useRef(0)
   const client = useQueryClient()
   const libraries = useQuery({
@@ -402,7 +406,7 @@ export function App() {
     function back(event: PopStateEvent) {
       // Modal owns this traversal. Handling it here as page navigation would reopen a
       // viewer whose URL still contains its media marker while the close is settling.
-      if (event.state?.lumaModal || activeRef.current) return
+      if (event.state?.lumaModal || activeRef.current || isModalHistoryClosing()) return
       const value = event.state?.filters ?? readFilters()
       const target: Section = event.state?.section ?? readSection()
       const urlId = Number(new URLSearchParams(window.location.search).get('media'))
@@ -669,6 +673,8 @@ export function App() {
     // A closing menu can finish its Back traversal before React commits this selection.
     activeRef.current = item
     triggerId.current = item.id
+    viewerStartId.current = item.id
+    setRevealMediaId(null)
     viewerScrollTop.current = rememberScroll()
     setSlideshowStart(slideshow)
     setActive(item)
@@ -732,7 +738,19 @@ export function App() {
     setSection('reels')
   }
   function restoreViewerPosition() {
-    if (scroll.current) scroll.current.scrollTop = viewerScrollTop.current
+    const focused = document.activeElement
+    // History disposal can finish after the person has already focused another control.
+    // Return focus only while it is still in the closing dialog or its Gallery surface.
+    if (
+      focused instanceof HTMLElement &&
+      focused !== document.body &&
+      focused !== scroll.current &&
+      !focused.closest('[role="dialog"]') &&
+      !scroll.current?.contains(focused)
+    )
+      return
+    if (scroll.current && (triggerId.current === viewerStartId.current || slideshowFilters))
+      scroll.current.scrollTop = viewerScrollTop.current
     const button = document.querySelector<HTMLButtonElement>(`button[data-media-id="${triggerId.current}"]`)
     if (button) button.focus({ preventScroll: true })
     else scroll.current?.focus({ preventScroll: true })
@@ -1301,6 +1319,8 @@ export function App() {
                       }
                       scopeError={section === 'library' ? folders.error : null}
                       restoreScrollTop={restoreScrollTop}
+                      revealMediaId={revealMediaId}
+                      onRevealComplete={finishReveal}
                       onScrollPosition={recordScroll}
                       onPullRefresh={refreshView}
                     />
@@ -1368,13 +1388,40 @@ export function App() {
           active={active}
           filters={slideshowFilters ?? galleryFilters}
           startSlideshow={slideshowStart}
-          onChange={setActive}
+          onChange={item => {
+            activeRef.current = item
+            triggerId.current = item.id
+            setActive(item)
+          }}
+          onDeleteQueued={fallback => {
+            triggerId.current = fallback?.id ?? null
+            showToast('Deletion queued. Follow progress in Background jobs.')
+          }}
           onWatchReels={watchOnReels}
           onClose={() => {
+            activeRef.current = null
             setActive(null)
             setSlideshowStart(false)
             setSlideshowFilters(null)
-            requestAnimationFrame(restoreViewerPosition)
+          }}
+          onExitComplete={() => {
+            if (activeRef.current) return
+            if (section !== 'reels') {
+              const params = new URLSearchParams(window.location.search)
+              params.delete('media')
+              const state = { ...window.history.state }
+              delete state.mediaId
+              delete state.returnToViewer
+              window.history.replaceState(state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
+            }
+            if (
+              section !== 'reels' &&
+              !slideshowFilters &&
+              triggerId.current &&
+              triggerId.current !== viewerStartId.current
+            )
+              setRevealMediaId(triggerId.current)
+            else requestAnimationFrame(restoreViewerPosition)
           }}
           restoreFocus={restoreViewerPosition}
         />
