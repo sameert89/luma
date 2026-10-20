@@ -11,11 +11,16 @@ beforeEach(() => {
   setClipboard(null)
   vi.mocked(request)
     .mockReset()
-    .mockImplementation(async (path, _signal, method) => {
+    .mockImplementation(async (path, _signal, method, body) => {
       if (path.includes('capabilities'))
         return { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] }
       if (path.includes('clipboard'))
-        return [{ libraryId: 1, relativePath: 'photos/one.jpg', mediaId: 3, folderId: null }]
+        return (body as { mediaIds: number[] }).mediaIds.map(mediaId => ({
+          libraryId: 1,
+          relativePath: 'photos/one.jpg',
+          mediaId,
+          folderId: null,
+        }))
       if (path.includes('location'))
         return { libraryId: 1, relativePath: path.endsWith('=5') ? 'destination' : 'photos' }
       if (method === 'POST') return { id: 'queued' }
@@ -42,7 +47,7 @@ test('deletion queues every selected file without polling and closes the dialog'
   await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
   await screen.findByText('2 operations queued. Follow progress in Background jobs.')
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  const posts = vi.mocked(request).mock.calls.filter(call => call[2] === 'POST')
+  const posts = vi.mocked(request).mock.calls.filter(call => call[0] === '/api/files/items')
   expect(posts.map(call => call[3])).toEqual([
     { libraryId: 1, mediaId: 3, kind: 'recycle' },
     { libraryId: 1, mediaId: 4, kind: 'recycle' },
@@ -102,4 +107,41 @@ test('new folder asks for a name only and queues creation in the current folder'
     kind: 'mkdir',
     source: 'photos/Holiday',
   })
+})
+
+test('search results support selected-item actions without a destination folder', async () => {
+  const user = userEvent.setup()
+  setup({ libraryId: undefined, folderId: undefined, selected: new Set([3]) })
+  expect(await screen.findByRole('group', { name: 'File actions' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'New folder' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Rename' })).toBeEnabled()
+  await user.click(screen.getByRole('button', { name: 'Delete' }))
+  await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith('/api/files/items', undefined, 'POST', {
+      libraryId: 1,
+      mediaId: 3,
+      kind: 'recycle',
+    }),
+  )
+  expect(vi.mocked(request).mock.calls.some(call => call[0].includes('folderId=undefined'))).toBe(false)
+})
+
+test('a mixed-library selection is checked before queueing deletion', async () => {
+  const user = userEvent.setup()
+  const original = vi.mocked(request).getMockImplementation()!
+  vi.mocked(request).mockImplementation(async (...args) =>
+    args[0].includes('clipboard')
+      ? [
+          { libraryId: 1, relativePath: 'one.jpg', mediaId: 3 },
+          { libraryId: 2, relativePath: 'two.jpg', mediaId: 4 },
+        ]
+      : original(...args),
+  )
+  setup({ libraryId: undefined, folderId: undefined })
+  await user.click(await screen.findByRole('button', { name: 'Delete' }))
+  await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+  expect((await screen.findAllByRole('alert'))[0]).toHaveTextContent('read-only')
+  expect(vi.mocked(request).mock.calls.some(call => call[0] === '/api/files/items')).toBe(false)
 })

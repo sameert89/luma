@@ -49,7 +49,8 @@ export function BackgroundJobsButton({ libraryId, compact = false }: { libraryId
     )
     previous.current = new Map(tasks.data.map(task => [task.id, task.state]))
     if (changed)
-      for (const key of ['media', 'folders', 'libraries', 'trash']) void client.invalidateQueries({ queryKey: [key] })
+      for (const key of ['media', 'folders', 'libraries', 'trash', 'detail', 'neighbors'])
+        void client.invalidateQueries({ queryKey: [key] })
   }, [client, tasks.data])
   const busy =
     !!starting ||

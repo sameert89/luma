@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState, useSyncExternalStore } from 'react'
 import { ClipboardPaste, Copy, FolderCog, FolderPlus, Scissors, Trash2, Upload, X } from 'lucide-react'
+import { RenameFileAction } from './RenameFileAction'
 import { Modal } from '../../components/ui/Modal'
 import { Checkbox, Field, IconButton, Input, QuietButton, Select } from '../../components/ui/Controls'
 import { request, errorMessage, type Library } from '../browse/api'
@@ -22,13 +23,13 @@ export function FileManagementButton({
   active,
   onToggle,
 }: {
-  libraryId: number
+  libraryId?: number
   active: boolean
   onToggle: () => void
 }) {
   const capabilities = useCapabilities().data
   if (!capabilities?.accessConfigured) return null
-  const writable = capabilities.libraries?.some(item => item.libraryId === libraryId && item.writable)
+  const writable = capabilities.libraries?.some(item => (!libraryId || item.libraryId === libraryId) && item.writable)
   return (
     <IconButton
       label="File management"
@@ -49,8 +50,8 @@ export function FileToolbar({
   onQueued,
   onClipboard,
 }: {
-  libraryId: number
-  folderId: number
+  libraryId?: number
+  folderId?: number
   selected?: Set<number>
   selectedFolders?: Set<number>
   onQueued?: () => void
@@ -60,6 +61,7 @@ export function FileToolbar({
   const clipboard = useSyncExternalStore(subscribeClipboard, clipboardSnapshot)
   const location = useQuery({
     queryKey: ['file-location', folderId],
+    enabled: folderId !== undefined,
     queryFn: ({ signal }) => request<Location>(`/api/files/location?folderId=${folderId}`, signal),
   })
   const [dialog, setDialog] = useState<'mkdir' | 'delete' | 'upload' | null>(null)
@@ -73,19 +75,30 @@ export function FileToolbar({
   const count = selected.size + selectedFolders.size
   const writable =
     capabilities?.accessConfigured &&
-    capabilities.libraries?.some(item => item.libraryId === libraryId && item.writable)
+    capabilities.libraries?.some(item => (!libraryId || item.libraryId === libraryId) && item.writable)
   // Source entries keep their original location while browsing to the destination.
-  const canPaste = !!clipboard && clipboard.entries.every(item => item.libraryId === libraryId)
+  const canPaste =
+    !!location.data && !!clipboard && clipboard.entries.every(item => item.libraryId === location.data.libraryId)
+  async function selection() {
+    const entries = await request<components['schemas']['FileClipboardEntry'][]>(
+      '/api/files/clipboard',
+      undefined,
+      'POST',
+      { mediaIds: [...selected], folderIds: [...selectedFolders] },
+    )
+    if (
+      entries.some(
+        entry => !capabilities?.libraries?.some(library => library.libraryId === entry.libraryId && library.writable),
+      )
+    )
+      throw new Error('The selection includes a read-only library.')
+    return entries
+  }
   async function capture(kind: 'move' | 'copy') {
     setBusy(true)
     setError('')
     try {
-      const entries = await request<components['schemas']['FileClipboardEntry'][]>(
-        '/api/files/clipboard',
-        undefined,
-        'POST',
-        { mediaIds: [...selected], folderIds: [...selectedFolders] },
-      )
+      const entries = await selection()
       setClipboard({ kind, entries })
       setMessage(
         `${entries.length} items ready to ${kind === 'move' ? 'move' : 'copy'}. Open a destination folder and choose Paste.`,
@@ -98,47 +111,40 @@ export function FileToolbar({
     }
   }
   async function execute(kind: 'mkdir' | 'delete' | 'paste') {
-    if (!location.data) return
+    if (kind !== 'delete' && !location.data) return
     setBusy(true)
     setError('')
     setMessage('')
     let queued = 0
     const failed: NonNullable<typeof clipboard>['entries'] = []
     try {
-      if (kind === 'mkdir') {
+      if (kind === 'mkdir' && location.data) {
         if (!name.trim() || /[/\\]/.test(name) || name === '.' || name === '..')
           throw new Error('Enter a folder name, not a path.')
         await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
-          libraryId,
+          libraryId: location.data.libraryId,
           kind: 'mkdir',
           source: [location.data.relativePath, name].filter(Boolean).join('/'),
         })
         queued++
       } else if (kind === 'delete') {
-        for (const item of [...selected].map(mediaId => ({ mediaId }))) {
+        const entries = await selection()
+        for (const item of entries) {
           await request<OperationAccepted>('/api/files/items', undefined, 'POST', {
-            libraryId,
-            ...item,
+            libraryId: item.libraryId,
+            ...(item.mediaId != null ? { mediaId: item.mediaId } : { folderId: item.folderId }),
             kind: permanent ? 'delete' : 'recycle',
           })
           queued++
         }
-        for (const folderId of selectedFolders) {
-          await request<OperationAccepted>('/api/files/items', undefined, 'POST', {
-            libraryId,
-            folderId,
-            kind: permanent ? 'delete' : 'recycle',
-          })
-          queued++
-        }
-      } else if (clipboard) {
+      } else if (clipboard && location.data) {
         for (const item of clipboard.entries) {
           try {
             const destination = [location.data.relativePath, item.relativePath.split('/').at(-1)]
               .filter(Boolean)
               .join('/')
             await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
-              libraryId,
+              libraryId: location.data.libraryId,
               kind: clipboard.kind,
               source: item.relativePath,
               destination,
@@ -215,6 +221,16 @@ export function FileToolbar({
           <ClipboardPaste className="size-4" />
           Paste{clipboard ? ` (${clipboard.entries.length})` : ''}
         </QuietButton>
+        <RenameFileAction
+          libraryId={libraryId}
+          mediaIds={[...selected]}
+          folderIds={[...selectedFolders]}
+          disabled={busy}
+          onQueued={() => {
+            onQueued?.()
+            setMessage('Rename queued. Follow progress in Background jobs.')
+          }}
+        />
         <QuietButton
           disabled={busy || !count}
           onClick={() => {
@@ -239,6 +255,7 @@ export function FileToolbar({
           </IconButton>
         )}
       </div>
+      {!location.data && <p className="text-sm text-muted">Open a folder to paste, upload, or create a folder.</p>}
       {clipboard && !canPaste && (
         <p className="text-sm text-muted">Open a folder in the source library to paste these items.</p>
       )}
@@ -293,7 +310,7 @@ export function FileToolbar({
             </>
           )}
           {dialog === 'upload' && location.data && (
-            <UploadPicker libraryId={libraryId} destination={location.data.relativePath} />
+            <UploadPicker libraryId={location.data.libraryId} destination={location.data.relativePath} />
           )}
           {error && (
             <p role="alert" className="text-sm text-danger">

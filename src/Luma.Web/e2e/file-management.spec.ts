@@ -82,7 +82,7 @@ test('closing a navigated viewer reveals the last photo, including beyond the Ga
   expect(Number(await page.getByTestId('gallery-grid').getAttribute('data-retained-items'))).toBeLessThanOrEqual(120)
 })
 
-test('viewer Delete queues recycling and returns without leaving a stale viewer history entry', async ({ page }) => {
+test('viewer Delete queues recycling and advances in the same player', async ({ page }) => {
   const posts: Record<string, unknown>[] = []
   await page.route('**/api/files/capabilities', route =>
     route.fulfill({ json: { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] } }),
@@ -98,15 +98,73 @@ test('viewer Delete queues recycling and returns without leaving a stale viewer 
     .getByRole('button', { name: /^Open / })
   await first.waitFor({ state: 'visible' })
   const id = Number(await first.getAttribute('data-media-id'))
+  const neighbors = await (
+    await page.request.get(`/api/media/${id}/neighbors?libraryId=1&folderId=1&mediaType=image&sort=name&order=asc`)
+  ).json()
   await first.click()
+  const player = await page.locator('[data-motion=viewer]').elementHandle()
   await page.getByRole('button', { name: 'Viewer menu', exact: true }).click()
   await page.getByRole('button', { name: 'Delete file', exact: true }).click()
   const confirmation = page.getByRole('dialog', { name: 'Delete file', exact: true })
   await expect(confirmation.getByRole('checkbox')).not.toBeChecked()
   expect(posts).toHaveLength(0)
   await confirmation.getByRole('button', { name: 'Move to recycle bin', exact: true }).click()
-  await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect.poll(() => page.evaluate(() => new URL(location.href).searchParams.has('media'))).toBe(false)
-  await expect.poll(() => page.evaluate(() => !!history.state?.lumaModal)).toBe(false)
+  await expect(page.getByRole('dialog', { name: neighbors.next.fileName, exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(1)
+  expect(await player!.evaluate(element => element.isConnected)).toBe(true)
+  expect(await page.evaluate(() => !!history.state?.lumaModal)).toBe(true)
   expect(posts).toEqual([{ libraryId: 1, mediaId: id, kind: 'recycle' }])
+})
+
+test('file management stays available in search and tag results and Rename queues from toolbar and viewer', async ({
+  page,
+}) => {
+  const posts: Record<string, unknown>[] = []
+  await page.route('**/api/files/capabilities', route =>
+    route.fulfill({ json: { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] } }),
+  )
+  await page.route('**/api/files/clipboard', route =>
+    route.fulfill({
+      json: route
+        .request()
+        .postDataJSON()
+        .mediaIds.map((mediaId: number) => ({ libraryId: 1, relativePath: 'photo.jpg', mediaId, folderId: null })),
+    }),
+  )
+  await page.route('**/api/files/items', route => {
+    posts.push(route.request().postDataJSON())
+    return route.fulfill({ status: 202, json: { id: 'queued-rename' } })
+  })
+  for (const query of ['q=photo', 'tag=Vacation']) {
+    await page.goto(`/?${query}`)
+    await page.getByRole('button', { name: 'File management', exact: true }).click()
+    await expect(page.getByRole('group', { name: 'File actions' })).toBeVisible()
+  }
+  await page.getByRole('button', { name: 'Select media', exact: true }).click()
+  await page
+    .getByRole('checkbox', { name: /^Select / })
+    .first()
+    .check()
+  await page.getByRole('button', { name: 'Rename', exact: true }).click()
+  const rename = page.getByRole('dialog', { name: 'Rename', exact: true })
+  await expect(rename.getByRole('textbox', { name: 'Name' })).toHaveValue('photo.jpg')
+  await rename.getByRole('textbox', { name: 'Name' }).fill('renamed.jpg')
+  await rename.getByRole('button', { name: 'Rename', exact: true }).click()
+  await expect(rename).toBeHidden()
+  await page
+    .getByTestId('media-cell')
+    .first()
+    .getByRole('button', { name: /^Open / })
+    .click()
+  await page.getByRole('button', { name: 'Viewer menu', exact: true }).click()
+  await page.getByRole('button', { name: 'Rename file', exact: true }).click()
+  await expect(rename.getByRole('textbox', { name: 'Name' })).toHaveValue('photo.jpg')
+  await rename.getByRole('textbox', { name: 'Name' }).fill('viewer-renamed.jpg')
+  await rename.getByRole('button', { name: 'Rename', exact: true }).click()
+  await expect(rename).toBeHidden()
+  await expect(page.getByRole('dialog')).toHaveCount(1)
+  expect(posts.map(post => [post.kind, post.destination])).toEqual([
+    ['move', 'renamed.jpg'],
+    ['move', 'viewer-renamed.jpg'],
+  ])
 })

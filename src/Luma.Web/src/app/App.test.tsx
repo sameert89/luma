@@ -1690,3 +1690,21 @@ it('closing after viewer navigation reveals the current item instead of restorin
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height)
   }
 })
+
+it.each(['/?q=photo', '/?tag=Vacation'])('keeps file management available in filtered results at %s', async url => {
+  browsingApi()
+  const previous = globalThis.fetch
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((path: string, init?: RequestInit) =>
+      path.includes('/files/capabilities')
+        ? Promise.resolve(
+            new Response(JSON.stringify({ accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] })),
+          )
+        : previous(path, init),
+    ),
+  )
+  renderApp(url)
+  await userEvent.click(await screen.findByRole('button', { name: 'File management' }))
+  expect(await screen.findByRole('group', { name: 'File actions' })).toBeVisible()
+})

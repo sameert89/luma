@@ -1100,7 +1100,7 @@ export function App() {
                           >
                             {selecting ? <Check className="size-4" /> : <CopyCheck className="size-4" />}
                           </IconButton>
-                          {section === 'library' && filters.libraryId && filters.folderId && (
+                          {(section === 'library' || section === 'search') && (
                             <FileManagementButton
                               libraryId={filters.libraryId}
                               active={fileManaging}
@@ -1137,7 +1137,7 @@ export function App() {
                       )}
                     </div>
                   </div>
-                  {section === 'library' && fileManaging && filters.libraryId && filters.folderId && (
+                  {showGallery && fileManaging && (
                     <FileToolbar
                       libraryId={filters.libraryId}
                       folderId={filters.folderId}
@@ -1393,6 +1393,7 @@ export function App() {
             triggerId.current = item.id
             setActive(item)
           }}
+          onRenameQueued={() => showToast('Rename queued. Follow progress in Background jobs.')}
           onDeleteQueued={fallback => {
             triggerId.current = fallback?.id ?? null
             showToast('Deletion queued. Follow progress in Background jobs.')

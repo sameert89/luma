@@ -12,11 +12,13 @@ type Target = Pick<Media, 'id' | 'libraryId' | 'fileName' | 'availability'>
 export function DeleteMediaAction({
   item,
   className,
+  disabled = false,
   onOpenChange,
   onQueued,
 }: {
   item: Target
   className?: string
+  disabled?: boolean
   onOpenChange: (open: boolean) => void
   onQueued: () => void
 }) {
@@ -60,7 +62,7 @@ export function DeleteMediaAction({
       <IconButton
         label="Delete file"
         className={className}
-        disabled={!writable || item.availability === 'missing'}
+        disabled={disabled || !writable || item.availability === 'missing'}
         title={writable ? 'Delete file' : 'This library is read-only'}
         onClick={() => {
           setTarget(item)

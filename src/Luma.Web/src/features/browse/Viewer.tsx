@@ -1,3 +1,4 @@
+import { RenameFileAction } from '../files/RenameFileAction'
 import { DeleteMediaAction } from '../files/DeleteMediaAction'
 import { readSetting } from '../../app/uiDefaults'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,7 +15,7 @@ import {
   HeartCrack,
   X,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MediaInformation } from './MediaInformation'
 import { MediaStage } from './MediaStage'
 import { MediaActions, actionButton } from './MediaActions'
@@ -66,6 +67,7 @@ export function Viewer({
   onWatchReels,
   restoreFocus,
   onDeleteQueued,
+  onRenameQueued,
   onExitComplete,
 }: {
   active: Media
@@ -75,6 +77,7 @@ export function Viewer({
   onClose: () => void
   onWatchReels?: (item: Media) => void
   restoreFocus: () => void
+  onRenameQueued?: () => void
   onDeleteQueued?: (fallback: Media | null) => void
   onExitComplete?: () => void
 }) {
@@ -113,8 +116,20 @@ export function Viewer({
     queryFn: ({ signal }) => request<Neighbors>(`/api/media/${active.id}/neighbors?${queryString(filters)}`, signal),
     gcTime: 0,
   })
-  const previous = neighbors.data?.previous
-  const next = neighbors.data?.next
+  // Queued removals can remain in SQLite until the worker finishes. Retain their
+  // known links so repeated deletion/navigation never reopens a queued item.
+  const removed = useRef(new Map<number, { previous: Media | null; next: Media | null }>())
+  function remaining(candidate: Media | null | undefined, side: 'previous' | 'next') {
+    const seen = new Set<number>()
+    while (candidate && removed.current.has(candidate.id)) {
+      if (seen.has(candidate.id)) return null
+      seen.add(candidate.id)
+      candidate = removed.current.get(candidate.id)?.[side]
+    }
+    return candidate ?? null
+  }
+  const previous = remaining(neighbors.data?.previous, 'previous')
+  const next = remaining(neighbors.data?.next, 'next')
   usePreviewPriority([item, next, previous], true)
   const motion = item.mediaType === 'video' || isGif(item)
   useEffect(() => {
@@ -179,7 +194,13 @@ export function Viewer({
   const prefer = (value: 'liked' | 'disliked' | 'neutral') => preference.mutate({ id: item.id, value })
   useEffect(() => {
     function key(event: KeyboardEvent) {
-      if (!open || detailsOpen || document.querySelectorAll('[role="dialog"][data-state="open"]').length > 1) return
+      if (
+        !open ||
+        detailsOpen ||
+        deleteOpen ||
+        document.querySelectorAll('[role="dialog"][data-state="open"]').length > 1
+      )
+        return
       if (
         event.target instanceof HTMLElement &&
         (event.target.closest('input,select,textarea,video,[contenteditable="true"]') ||
@@ -214,7 +235,7 @@ export function Viewer({
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [previous, next, navigate, open, detailsOpen])
+  }, [previous, next, navigate, open, detailsOpen, deleteOpen])
   return (
     <>
       <Modal
@@ -302,16 +323,32 @@ export function Viewer({
             <IconButton label="View options" className={actionButton} onClick={() => setOptionsOpen(true)}>
               <Settings2 className="size-4" />
             </IconButton>
+            <RenameFileAction
+              mediaIds={[item.id]}
+              libraryId={item.libraryId}
+              onQueued={onRenameQueued}
+              iconOnly
+              className={actionButton}
+              disabled={item.availability === 'missing'}
+              onOpenChange={value => {
+                setDeleteOpen(value)
+                if (value) setSlideshow(false)
+              }}
+            />
             <DeleteMediaAction
               item={item}
+              disabled={neighbors.isPending}
               className={actionButton}
               onOpenChange={open => {
                 setDeleteOpen(open)
                 if (open) setSlideshow(false)
               }}
               onQueued={() => {
-                onDeleteQueued?.(next ?? previous ?? null)
-                setOpen(false)
+                removed.current.set(item.id, { previous, next })
+                const fallback = next ?? previous ?? null
+                onDeleteQueued?.(fallback)
+                if (fallback) navigate(fallback, next ? 'next' : 'previous')
+                else setOpen(false)
               }}
             />
             <IconButton label="Media details" className={actionButton} onClick={() => setDetailsOpen(true)}>

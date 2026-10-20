@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -446,3 +447,77 @@ it('does not navigate the video behind an open caption settings dialog', async (
   await userEvent.keyboard('{ArrowRight}')
   expect(changed).toHaveBeenCalledWith(next)
 })
+
+it.each(['image', 'video'])(
+  'deleting %s advances, falls back at the end and skips queued removals without closing',
+  async mediaType => {
+    window.history.replaceState(null, '', '/')
+    const items = [1, 2, 3].map(
+      id =>
+        ({
+          id,
+          libraryId: 1,
+          folderId: 1,
+          fileName: `${id}.${mediaType === 'video' ? 'mp4' : 'jpg'}`,
+          mediaType,
+          extension: mediaType === 'video' ? '.mp4' : '.jpg',
+          availability: 'present',
+          preference: 'neutral',
+          modifiedAt: '2026-01-01T00:00:00Z',
+          effectiveDate: '2026-01-01T00:00:00Z',
+          capturedAt: null,
+          width: null,
+          height: null,
+          durationMs: null,
+          sizeBytes: 100,
+          tags: [],
+          thumbnail: { status: 'ready', url: '/thumb', width: null, height: null },
+          preview: { status: 'ready', url: '/preview', width: null, height: null },
+        }) as Media,
+    )
+    const fetch = vi.fn(async (url: string) => {
+      const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
+      return new Response(
+        JSON.stringify(
+          url.includes('capabilities')
+            ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] }
+            : url.includes('/neighbors?')
+              ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+              : url === '/api/files/items'
+                ? { id: 'queued' }
+                : url === '/api/libraries'
+                  ? []
+                  : items[id - 1],
+        ),
+      )
+    })
+    vi.stubGlobal('fetch', fetch)
+    const closed = vi.fn()
+    function Controlled() {
+      const [active, setActive] = useState(items[1])
+      return <Viewer active={active} filters={{}} onChange={setActive} onClose={closed} restoreFocus={vi.fn()} />
+    }
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+        <Controlled />
+      </QueryClientProvider>,
+    )
+    const user = userEvent.setup()
+    async function remove() {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete file' })).toBeEnabled())
+      await user.click(screen.getByRole('button', { name: 'Delete file' }))
+      await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+    }
+    await remove()
+    await screen.findByRole('dialog', { name: items[2].fileName })
+    expect(closed).not.toHaveBeenCalled()
+    await remove()
+    await screen.findByRole('dialog', { name: items[0].fileName })
+    expect(closed).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next item' })).toBeDisabled())
+    await remove()
+    await waitFor(() => expect(closed).toHaveBeenCalledOnce())
+    const posts = fetch.mock.calls.filter(call => call[0] === '/api/files/items')
+    expect(posts).toHaveLength(3)
+  },
+)
