@@ -324,7 +324,7 @@ test('rescans from the folder menu after confirmation and shows progress in Back
   await page.screenshot({ animations: 'disabled', path: `test-results/scanning-${testInfo.project.name}.png` })
 })
 
-test('browses cached media, navigates the viewer, and restores position and focus', async ({ page }) => {
+test('browses cached media and returns focus to the last viewed item', async ({ page }) => {
   const errors: string[] = []
   const cacheFailures: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -339,16 +339,14 @@ test('browses cached media, navigates the viewer, and restores position and focu
     element.dispatchEvent(new Event('scroll'))
   })
   await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
-  const opened = await scroller.evaluate(element => {
+  await scroller.evaluate(element => {
     const viewport = element.getBoundingClientRect()
     const trigger = [...element.querySelectorAll<HTMLButtonElement>('button[data-media-id]')].find(button => {
       const rect = button.getBoundingClientRect()
       return rect.top >= viewport.top && rect.bottom <= viewport.bottom
     })
     if (!trigger) throw new Error('No fully visible media item')
-    const result = { id: trigger.dataset.mediaId!, position: element.scrollTop }
     trigger.click()
-    return result
   })
   const viewer = page.getByRole('dialog')
   await expect(viewer).toBeVisible()
@@ -370,10 +368,12 @@ test('browses cached media, navigates the viewer, and restores position and focu
   await expect(viewer.locator('.motion-media')).toHaveAttribute('data-direction', 'next')
   await expect(viewer.locator('.motion-media')).toHaveCSS('animation-duration', '0.18s')
   await expect(viewer.locator('img,video')).toHaveCount(1)
+  const lastTitle = (await viewer.locator('header').textContent())!.trim()
   await page.keyboard.press('Escape')
   await expect(viewer).toBeHidden()
-  await expect(page.locator(`button[data-media-id="${opened.id}"]`)).toBeFocused()
-  expect(Math.abs((await scroller.evaluate(element => element.scrollTop)) - opened.position)).toBeLessThan(5)
+  const lastViewed = page.getByRole('button', { name: `Open ${lastTitle}`, exact: true })
+  await expect(lastViewed).toBeFocused()
+  await expect(lastViewed).toBeInViewport()
   expect(errors).toEqual([])
   expect(cacheFailures).toEqual([])
   await page.screenshot({

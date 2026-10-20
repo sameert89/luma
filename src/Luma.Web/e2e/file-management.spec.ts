@@ -59,7 +59,7 @@ test('file toolbar stays hidden until requested, keeps a cut clipboard across fo
 })
 
 test('closing a navigated viewer reveals the last photo, including beyond the Gallery window', async ({ page }) => {
-  await page.goto('/?libraryId=1&folderId=2&mediaType=image')
+  await page.goto('/?libraryId=1&folderId=1&mediaType=image&sort=name&order=asc')
   const first = page
     .getByTestId('media-cell')
     .first()
@@ -91,7 +91,7 @@ test('viewer Delete queues recycling and returns without leaving a stale viewer 
     posts.push(route.request().postDataJSON())
     return route.fulfill({ status: 202, json: { id: 'queued-viewer-delete' } })
   })
-  await page.goto('/?libraryId=1&folderId=2&mediaType=image')
+  await page.goto('/?libraryId=1&folderId=1&mediaType=image&sort=name&order=asc')
   const first = page
     .getByTestId('media-cell')
     .first()
