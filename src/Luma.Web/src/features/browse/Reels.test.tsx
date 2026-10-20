@@ -320,7 +320,7 @@ it('keeps like and dislike on the stage beside a bottom menu, loops by default a
   }
 })
 
-it('queues deletion from Flick, suspends advancement and skips queued reels through next, previous and empty', async () => {
+it('deletes reels through next, previous and empty while skipping queued items', async () => {
   window.history.replaceState(null, '', '/flick')
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
@@ -395,21 +395,16 @@ it('disables Delete in the Flick menu for a read-only library', async () => {
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation((url: string) =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify(
-            url.includes('capabilities')
-              ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: false }] }
-              : url.includes('/neighbors?')
-                ? { previous: null, next: null }
-                : /media\/\d+$/.test(url)
-                  ? clip(1)
-                  : { items: [clip(1)] },
-          ),
-        ),
-      ),
-    ),
+    vi.fn().mockImplementation((url: string) => {
+      const data = url.includes('capabilities')
+        ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: false }] }
+        : url.includes('/neighbors?')
+          ? { previous: null, next: null }
+          : /media\\/\\d+$/.test(url)
+            ? clip(1)
+            : { items: [clip(1)] }
+      return Promise.resolve(new Response(JSON.stringify(data)))
+    }),
   )
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   try {
