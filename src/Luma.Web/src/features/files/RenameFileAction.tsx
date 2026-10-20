@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Pencil } from 'lucide-react'
 import { Field, IconButton, Input, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
@@ -39,15 +39,12 @@ export function RenameFileAction({
   const [error, setError] = useState('')
   const queued = useRef(false)
   const input = useRef<HTMLInputElement>(null)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || !target) return
-    const frame = requestAnimationFrame(() => {
-      input.current?.focus()
-      const name = target.relativePath.split('/').at(-1) ?? ''
-      const dot = name.lastIndexOf('.')
-      input.current?.setSelectionRange(0, target.mediaId != null && dot > 0 ? dot : name.length)
-    })
-    return () => cancelAnimationFrame(frame)
+    input.current?.focus()
+    const name = target.relativePath.split('/').at(-1) ?? ''
+    const dot = name.lastIndexOf('.')
+    input.current?.setSelectionRange(0, target.mediaId != null && dot > 0 ? dot : name.length)
   }, [open, target])
   const original = target?.relativePath.split('/').at(-1) ?? ''
   async function begin() {
