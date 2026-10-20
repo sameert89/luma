@@ -47,12 +47,6 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
               OR EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=@Id AND State IN ('queued','running'))
             """, root, tx, cancellationToken: ct)))
             throw new ApiRequestException(409, "library_busy", "Finish indexing or resolve the operation needing attention before changing this library.");
-        var active = (await db.QueryAsync<FileOperation>(new CommandDefinition($"SELECT * FROM FileOperations WHERE LibraryId=@Id AND State IN ({ActiveStates}) LIMIT 501", root, tx, cancellationToken: ct))).ToArray();
-        if (active.Length >= 500) throw new ApiRequestException(409, "queue_full", "Wait for queued file operations to finish before adding more.");
-        static bool Overlaps(string a, string b) => a == b || a.StartsWith(b + '/', StringComparison.Ordinal) || b.StartsWith(a + '/', StringComparison.Ordinal);
-        var paths = new[] { source, destination }.OfType<string>().Select(root.Key).ToArray();
-        if (active.Any(other => new[] { other.Source, other.Destination }.OfType<string>().Any(path => paths.Any(candidate => Overlaps(candidate, root.Key(path))))))
-            throw new ApiRequestException(409, "path_busy", "A queued operation already uses this file or destination. Wait for it to finish.");
         if (request.Kind is "restore" or "purge")
         {
             if (!Guid.TryParseExact(request.RecycleId, "N", out _)) throw ApiRequestException.Invalid();
@@ -80,15 +74,22 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
                 throw new ApiRequestException(409, "directory_exists", "The destination folder already exists.");
             EnsureDestination(root, source);
         }
-        if (operation.Destination is not null)
+        var active = (await db.QueryAsync<FileOperation>(new CommandDefinition($"SELECT * FROM FileOperations WHERE LibraryId=@Id AND State IN ({ActiveStates}) LIMIT 501", root, tx, cancellationToken: ct))).ToArray();
+        if (active.Length >= 500) throw new ApiRequestException(409, "queue_full", "Wait for queued file operations to finish before adding more.");
+        static bool Overlaps(string a, string b) => a == b || a.StartsWith(b + '/', StringComparison.Ordinal) || b.StartsWith(a + '/', StringComparison.Ordinal);
+        var paths = new[] { operation.Source, operation.Destination }.OfType<string>().Select(root.Key).ToArray();
+        if (active.Any(other => new[] { other.Source, other.Destination }.OfType<string>().Any(path => paths.Any(candidate => Overlaps(candidate, root.Key(path))))))
+            throw new ApiRequestException(409, "path_busy", "A queued operation already uses this file or destination. Wait for it to finish.");
+        var checkedDestination = operation.Kind == "mkdir" ? operation.Source : operation.Destination;
+        if (checkedDestination is not null)
         {
-            EnsureDestination(root, operation.Destination);
+            EnsureDestination(root, checkedDestination);
             if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
-                SELECT EXISTS(SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND (PathKey=@key OR (PathKey>=@key||'/' AND PathKey<@key||'0')))
-                  OR EXISTS(SELECT 1 FROM Folders WHERE LibraryId=@LibraryId AND (PathKey=@key OR (PathKey>=@key||'/' AND PathKey<@key||'0')))
-                  OR EXISTS(SELECT 1 FROM Comics WHERE LibraryId=@LibraryId AND (PathKey=@key OR (PathKey>=@key||'/' AND PathKey<@key||'0')))
-                """, new { operation.LibraryId, key = root.Key(operation.Destination) }, tx, cancellationToken: ct)) &&
-                root.Key(operation.Destination) != root.Key(operation.Source))
+                SELECT EXISTS(SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND PathKey=@key UNION ALL SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0')
+                  OR EXISTS(SELECT 1 FROM Folders WHERE LibraryId=@LibraryId AND PathKey=@key UNION ALL SELECT 1 FROM Folders WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0')
+                  OR EXISTS(SELECT 1 FROM Comics WHERE LibraryId=@LibraryId AND PathKey=@key UNION ALL SELECT 1 FROM Comics WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0')
+                """, new { operation.LibraryId, key = root.Key(checkedDestination) }, tx, cancellationToken: ct)) &&
+                (operation.Kind == "mkdir" || root.Key(checkedDestination) != root.Key(operation.Source)))
                 throw new ApiRequestException(409, "indexed_destination_exists", "The destination has retained library metadata. Choose a different name.");
         }
         await db.ExecuteAsync(new CommandDefinition("""
@@ -99,13 +100,13 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         {
             // SQL prefix matching avoids loading a large subtree into application memory.
             await db.ExecuteAsync(new CommandDefinition("""
-                INSERT INTO OperationMedia SELECT @Id,Id,RelativePath,Availability FROM Media
-                  WHERE LibraryId=@LibraryId AND (PathKey=@key OR (PathKey>=@key||'/' AND PathKey<@key||'0'));
-                INSERT INTO OperationComics SELECT @Id,Id,RelativePath,Availability FROM Comics
-                  WHERE LibraryId=@LibraryId AND (PathKey=@key OR (PathKey>=@key||'/' AND PathKey<@key||'0'));
-                INSERT INTO OperationFolders SELECT @Id,Id,RelativePath FROM Folders
-                  WHERE LibraryId=@LibraryId AND (PathKey=@key OR (PathKey>=@key||'/' AND PathKey<@key||'0'));
-                """, new { operation.Id, operation.LibraryId, key = root.Key(source) }, tx, cancellationToken: ct));
+                INSERT INTO OperationMedia SELECT @Id,Id,RelativePath,Availability FROM Media WHERE LibraryId=@LibraryId AND PathKey=@key
+                  UNION ALL SELECT @Id,Id,RelativePath,Availability FROM Media WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
+                INSERT INTO OperationComics SELECT @Id,Id,RelativePath,Availability FROM Comics WHERE LibraryId=@LibraryId AND PathKey=@key
+                  UNION ALL SELECT @Id,Id,RelativePath,Availability FROM Comics WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
+                INSERT INTO OperationFolders SELECT @Id,Id,RelativePath FROM Folders WHERE LibraryId=@LibraryId AND PathKey=@key
+                  UNION ALL SELECT @Id,Id,RelativePath FROM Folders WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
+                """, new { operation.Id, operation.LibraryId, key = root.Key(operation.Source) }, tx, cancellationToken: ct));
         }
         tx.Commit();
         return new(operation.Id);

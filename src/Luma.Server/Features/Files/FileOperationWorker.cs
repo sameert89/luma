@@ -183,7 +183,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
     {
         // Index only the newly published path, never its siblings. Replaying this is idempotent.
         if (row.Kind is "copy" or "upload")
-            await ScanWorker.IndexPublishedPathAsync(database, root, row.Destination!, ct);
+            await ScanWorker.IndexPublishedPathAsync(database, root, row.Destination!, ct, importMetadata: row.Kind == "upload");
         await using var db = await operations.OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
         if (await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM FileOperations WHERE Id=@Id", row, tx, cancellationToken: ct)) == "completed") return;

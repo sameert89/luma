@@ -365,5 +365,18 @@ public sealed class FileOperationTests
         Assert.Equal("complete original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
     }
 
+    [Fact]
+    public async Task Restore_overlap_checks_the_journal_source_instead_of_the_client_supplied_path()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var recycled = await RunAsync(operations, worker, f, new(1, "recycle", "photo.jpg"));
+        await operations.QueueAsync(new(1, "restore", "photo.jpg", RecycleId: recycled.Id), default);
+        var error = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "restore", "different.jpg", RecycleId: recycled.Id), default));
+        Assert.Equal("path_busy", error.Code);
+    }
+
     private sealed class SimulatedCrash : Exception;
 }

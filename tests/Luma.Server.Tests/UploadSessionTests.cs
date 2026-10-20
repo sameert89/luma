@@ -131,6 +131,10 @@ public sealed class UploadSessionTests
         Assert.Equal("abcdef", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
         Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans WHERE State='queued'"));
         Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE RelativePath='photo.jpg'"));
+        var request = await db.ExecuteScalarAsync<string>("SELECT Request FROM MetadataJobs WHERE Kind='import' ORDER BY Id DESC LIMIT 1");
+        Assert.NotNull(request);
+        Assert.Contains("MediaIds", request);
+        Assert.DoesNotContain("\"MediaIds\":null", request);
     }
 
     [Fact]

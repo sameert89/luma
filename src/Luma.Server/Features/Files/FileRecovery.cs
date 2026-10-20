@@ -82,6 +82,11 @@ public sealed class FileRecovery(FileOperations operations)
                 throw new ApiRequestException(409, "indexed_destination_exists", "Choose a destination without retained library metadata.");
             var uploads = await db.QueryAsync<string>(new CommandDefinition("SELECT Target FROM UploadSessions WHERE LibraryId=@LibraryId AND Id<>COALESCE(@UploadId,'') AND State IN ('waitingForClient','paused','finalizing')", row, tx, cancellationToken: ct));
             if (uploads.Any(path => root.Key(path) == root.Key(target))) throw new ApiRequestException(409, "library_busy", "Another upload reserves this destination.");
+            var active = await db.QueryAsync<FileOperation>(new CommandDefinition($"SELECT * FROM FileOperations WHERE LibraryId=@LibraryId AND Id<>@Id AND State IN ({FileOperations.ActiveStates})", row, tx, cancellationToken: ct));
+            var targetKey = root.Key(target);
+            if (active.Any(other => new[] { other.Source, other.Destination }.OfType<string>().Any(path =>
+                root.Key(path) == targetKey || root.Key(path).StartsWith(targetKey + '/', StringComparison.Ordinal) || targetKey.StartsWith(root.Key(path) + '/', StringComparison.Ordinal))))
+                throw new ApiRequestException(409, "path_busy", "A queued operation already reserves this destination.");
             row.Destination = target;
         }
         if (!Inspect(row, root).Actions.Contains(request.Action))

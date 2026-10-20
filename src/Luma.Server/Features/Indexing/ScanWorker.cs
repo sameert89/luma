@@ -315,7 +315,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
 
     // Used only by the mutation worker after publication. It visits the new path, not the
     // containing folder, and never performs missing-file reconciliation on unrelated records.
-    internal static async Task IndexPublishedPathAsync(Database database, LibraryOptions root, string relative, CancellationToken ct)
+    internal static async Task IndexPublishedPathAsync(Database database, LibraryOptions root, string relative, CancellationToken ct, bool importMetadata = false)
     {
         var path = Luma.Server.Features.Files.MutationPaths.Resolve(root, relative);
         await using var db = await database.OpenAsync(ct);
@@ -341,6 +341,22 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 var directory = entry.Attributes.HasFlag(FileAttributes.Directory);
                 await PersistEntryAsync(db, tx, folders, scan, root, new(Path.GetRelativePath(root.Path, entry.FullName).Replace(Path.DirectorySeparatorChar, '/'),
                     directory, directory ? 0 : ((FileInfo)entry).Length, entry.LastWriteTimeUtc.ToString("O")), ct, excluded);
+                if (directory)
+                    await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET DirectIndexedAt=@now WHERE LibraryId=@Id AND PathKey=@key",
+                        new { root.Id, now, key = root.Key(Path.GetRelativePath(root.Path, entry.FullName).Replace(Path.DirectorySeparatorChar, '/')) }, tx, cancellationToken: ct));
+            }
+            tx.Commit();
+        }
+        if (importMetadata)
+        {
+            using var tx = db.BeginTransaction();
+            var mode = await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT MetadataMode FROM Libraries WHERE Id=@Id", root, tx, cancellationToken: ct));
+            var ids = (await db.QueryAsync<long>(new CommandDefinition("SELECT Id FROM Media WHERE LibraryId=@Id AND LastSeenScanId=@scanId LIMIT 500", new { root.Id, scanId = id }, tx, cancellationToken: ct))).ToArray();
+            if (mode is "embedded" or "xmp" && ids.Length > 0 && await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running')", transaction: tx, cancellationToken: ct)) < 16)
+            {
+                var request = new Luma.Server.Features.Tags.MetadataJobRequest(MediaIds: ids, Query: new Luma.Server.Features.Media.MediaQuery { LibraryId = root.Id }.Normalize(), IncludeSidecars: mode == "xmp", Automatic: true, ScanId: id);
+                await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt,ScanId) VALUES('import','queued',@request,@now,@id); UPDATE Scans SET MetadataQueued=1 WHERE Id=@id",
+                    new { request = System.Text.Json.JsonSerializer.Serialize(request), now, id }, tx, cancellationToken: ct));
             }
             tx.Commit();
         }
