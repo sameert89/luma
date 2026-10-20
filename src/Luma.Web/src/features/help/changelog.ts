@@ -6,6 +6,16 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.7',
+    date: '2026-10-20',
+    headline: 'Viewer deletion and returning to the last photo',
+    changes: [
+      'The expanded Gallery viewer menu now offers Delete file for writable libraries. Recycling is the default; permanent deletion requires an explicit choice. Deletion queues immediately and returns to Gallery without waiting for filesystem work.',
+      'After navigating in the viewer, closing it reveals and focuses the last viewed item. Deep navigation uses a bounded cursor window, preserving your filters and sort without scanning the collection. Closing without navigating keeps the original scroll position.',
+      'Viewer confirmation and closing wait for their browser-history entries to finish, preventing stale file URLs or an extra Back step.',
+    ],
+  },
+  {
     version: '2.0.0-beta.6',
     date: '2026-10-20',
     headline: 'Browse, cut, copy and paste',

@@ -41,6 +41,7 @@ import {
   SlidersHorizontal,
   Tag,
   Timer,
+  Trash2,
   Volume2,
   VolumeX,
   X,
@@ -562,7 +563,7 @@ export const guideSections: GuideSection[] = [
             icons: [X],
             name: 'Close viewer',
             where: 'Top right of the viewer',
-            what: 'Returns to the gallery at the same place.',
+            what: 'Returns to the last item viewed in the current Gallery results, scrolling it into view and restoring keyboard focus. If you did not navigate, the original scroll position stays unchanged. Deep navigation loads a bounded page window directly rather than walking the entire collection.',
           },
           {
             icons: [EllipsisVertical, X],
@@ -575,6 +576,12 @@ export const guideSections: GuideSection[] = [
             name: 'View options',
             where: 'Viewer menu',
             what: 'Fit or fill, zoom, actual size, rotate, playback speed, picture in picture, fullscreen, download and stream URL.',
+          },
+          {
+            icons: [Trash2],
+            name: 'Delete file',
+            where: 'Gallery viewer → expanded Viewer menu',
+            what: 'Confirm recycling of the displayed photo or video, or explicitly select permanent deletion. The operation is queued and the viewer returns to Gallery near the next item; follow progress in Background jobs. Read-only libraries disable deletion, and the action is hidden when file management is off.',
           },
           {
             icons: [Info],
