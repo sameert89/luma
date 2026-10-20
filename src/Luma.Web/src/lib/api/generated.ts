@@ -1587,6 +1587,7 @@ export interface components {
         MediaNeighbors: {
             previous: components["schemas"]["MediaSummary"] | null;
             next: components["schemas"]["MediaSummary"] | null;
+            pageCursor?: string | null;
         };
         MediaPage: {
             items: components["schemas"]["MediaSummary"][];

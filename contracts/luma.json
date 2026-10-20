@@ -5086,6 +5086,10 @@
               }
             ],
             "nullable": true
+          },
+          "pageCursor": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
