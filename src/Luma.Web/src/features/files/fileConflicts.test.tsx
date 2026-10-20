@@ -6,11 +6,17 @@ import { FileConflictDialog } from './FileConflictDialog'
 import { chooseConflict, conflictBatch, conflictSnapshot, waitForFileSlot, withFileConflict } from './fileConflicts'
 
 const collision = () => new ApiError(409, { code: 'destination_exists', title: 'Already exists', traceId: 'test' })
-afterEach(() => { while (conflictSnapshot().length) chooseConflict('skip', false); vi.useRealTimers() })
+afterEach(() => {
+  while (conflictSnapshot().length) chooseConflict('skip', false)
+  vi.useRealTimers()
+})
 
 test('Replace retries only after explicit confirmation and carries the overwrite choice', async () => {
   render(<FileConflictDialog />)
-  const action = vi.fn(async (replace: boolean) => { if (!replace) throw collision(); return { id: 'queued' } })
+  const action = vi.fn(async (replace: boolean) => {
+    if (!replace) throw collision()
+    return { id: 'queued' }
+  })
   const result = withFileConflict(action, { batch: conflictBatch(), target: 'photos/photo.jpg' })
   expect(await screen.findByRole('dialog', { name: 'An item already exists' })).toHaveTextContent('photos/photo.jpg')
   expect(action).toHaveBeenCalledTimes(1)
@@ -21,7 +27,9 @@ test('Replace retries only after explicit confirmation and carries the overwrite
 
 test('Skip all resolves simultaneous conflicts in one batch and does not affect the next batch', async () => {
   render(<FileConflictDialog />)
-  const action = vi.fn(async () => { throw collision() })
+  const action = vi.fn(async () => {
+    throw collision()
+  })
   const batch = conflictBatch()
   const first = withFileConflict(action, { batch, target: 'one.jpg' })
   const second = withFileConflict(action, { batch, target: 'two.jpg' })
@@ -39,7 +47,9 @@ test('Skip all resolves simultaneous conflicts in one batch and does not affect 
 test('cancelling a pending conflict dismisses it without retrying the mutation', async () => {
   render(<FileConflictDialog />)
   const controller = new AbortController()
-  const action = vi.fn(async () => { throw collision() })
+  const action = vi.fn(async () => {
+    throw collision()
+  })
   const result = withFileConflict(action, { batch: conflictBatch(), target: 'one.jpg', signal: controller.signal })
   const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' })
   await screen.findByRole('dialog')
@@ -52,7 +62,9 @@ test('cancelling a pending conflict dismisses it without retrying the mutation',
 test('temporary path reservations wait automatically and remain cancellable', async () => {
   vi.useFakeTimers()
   const controller = new AbortController()
-  const action = vi.fn(async () => { throw new ApiError(409, { code: 'path_busy', traceId: 'test' }) })
+  const action = vi.fn(async () => {
+    throw new ApiError(409, { code: 'path_busy', traceId: 'test' })
+  })
   const result = waitForFileSlot(action, controller.signal)
   const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' })
   await vi.advanceTimersByTimeAsync(500)

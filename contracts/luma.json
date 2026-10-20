@@ -4536,6 +4536,10 @@
             "type": "string",
             "nullable": true
           },
+          "replacementId": {
+            "type": "string",
+            "nullable": true
+          },
           "uploadId": {
             "type": "string",
             "nullable": true

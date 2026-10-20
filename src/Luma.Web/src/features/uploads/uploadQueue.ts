@@ -110,9 +110,13 @@ export async function addUploads(files: File[], libraryId: number, destination: 
     for (let attempt = 0; ; attempt++) {
       try {
         const operation = await withFileConflict(
-          replaceExisting => request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
-            libraryId, kind: 'mkdir', source, ...(replaceExisting ? { replaceExisting: true } : {}),
-          }),
+          replaceExisting =>
+            request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
+              libraryId,
+              kind: 'mkdir',
+              source,
+              ...(replaceExisting ? { replaceExisting: true } : {}),
+            }),
           { batch, target: source },
         )
         if (operation) await waitForOperation(operation.id)
@@ -133,7 +137,10 @@ export async function addUploads(files: File[], libraryId: number, destination: 
   let skipped = 0
   for (const file of files.filter(file => !resumed.has(file))) {
     const target = [destination, file.webkitRelativePath || file.name].filter(Boolean).join('/')
-    if ([...skippedFolders].some(folder => target.startsWith(folder + '/'))) { skipped++; continue }
+    if ([...skippedFolders].some(folder => target.startsWith(folder + '/'))) {
+      skipped++
+      continue
+    }
     const key = `upload-${Date.now()}-${++sequence}`
     queue = [
       ...queue,
@@ -307,12 +314,21 @@ export async function uploadAction(key: string, action: 'pause' | 'resume' | 'ca
         if (!(error instanceof ApiError) || error.status !== 404) throw error
         if (['uploading', 'failed'].includes(item.state)) {
           try {
-            id = (await request<Session>('/api/files/uploads', undefined, 'POST', {
-              libraryId: item.libraryId, target: item.target, sizeBytes: item.size, requestId: item.requestId,
-              ...(item.replaceExisting ? { replaceExisting: true } : {}),
-            })).id
+            id = (
+              await request<Session>('/api/files/uploads', undefined, 'POST', {
+                libraryId: item.libraryId,
+                target: item.target,
+                sizeBytes: item.size,
+                requestId: item.requestId,
+                ...(item.replaceExisting ? { replaceExisting: true } : {}),
+              })
+            ).id
           } catch (admission) {
-            if (!(admission instanceof ApiError) || !['path_busy', 'destination_exists', 'upload_capacity'].includes(admission.problem?.code ?? '')) throw admission
+            if (
+              !(admission instanceof ApiError) ||
+              !['path_busy', 'destination_exists', 'upload_capacity'].includes(admission.problem?.code ?? '')
+            )
+              throw admission
           }
         }
       }

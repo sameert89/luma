@@ -26,6 +26,12 @@ jobs:
       - run: npm run format
         if: always()
         working-directory: src/Luma.Web
+      - run: npm run lint
+        working-directory: src/Luma.Web
+      - run: npm run build
+        working-directory: src/Luma.Web
+      - run: npm test -- --maxWorkers=2
+        working-directory: src/Luma.Web
       - name: Report canonical source
         if: always()
         shell: python

@@ -1420,6 +1420,7 @@ export interface components {
             source?: string;
             destination?: string | null;
             recycleId?: string | null;
+            replacementId?: string | null;
             uploadId?: string | null;
             isDirectory?: boolean;
             /** Format: int64 */

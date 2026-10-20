@@ -116,7 +116,8 @@ it('carries an explicit Replace choice from upload admission through finalizatio
   mocks.request.mockReset().mockImplementation(async (path: string, _signal, _method, body) => {
     if (path === '/api/files/uploads' && !body.replaceExisting)
       throw new ApiError(409, { code: 'destination_exists', traceId: 'test' })
-    if (path.includes('/finalize')) return { id: 'session', state: 'finalizing', committedOffset: 0, operationId: 'publication' }
+    if (path.includes('/finalize'))
+      return { id: 'session', state: 'finalizing', committedOffset: 0, operationId: 'publication' }
     return { id: 'session', state: 'waitingForClient', committedOffset: 0 }
   })
   const queue = await import('./uploadQueue')
@@ -126,5 +127,7 @@ it('carries an explicit Replace choice from upload admission through finalizatio
   conflicts.chooseConflict('replace', true)
   await waitFor(() => expect(queue.uploadSnapshot()[0].state).toBe('completed'))
   expect(mocks.request.mock.calls.some(call => call[0] === '/api/files/uploads' && call[3]?.replaceExisting)).toBe(true)
-  expect(mocks.request.mock.calls.some(call => call[0] === '/api/files/uploads/session/finalize?replaceExisting=true')).toBe(true)
+  expect(
+    mocks.request.mock.calls.some(call => call[0] === '/api/files/uploads/session/finalize?replaceExisting=true'),
+  ).toBe(true)
 })
