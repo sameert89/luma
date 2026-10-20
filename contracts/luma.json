@@ -4482,6 +4482,10 @@
           "destination": {
             "type": "string",
             "nullable": true
+          },
+          "replaceExisting": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

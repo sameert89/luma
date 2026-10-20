@@ -1403,6 +1403,8 @@ export interface components {
             /** Format: int64 */
             folderId?: number | null;
             destination?: string | null;
+            /** @default false */
+            replaceExisting: boolean;
         };
         FileLocation: {
             /** Format: int64 */
