@@ -30,14 +30,15 @@ public static class FileEndpoints
             if ((folderId.HasValue ? 1 : 0) + (mediaId.HasValue ? 1 : 0) != 1) throw Luma.Server.Http.ApiRequestException.Invalid();
             await using var db = await database.OpenAsync(ct);
             var table = folderId.HasValue ? "Folders" : "Media";
-            return TypedResults.Ok(await db.QuerySingleOrDefaultAsync<FileLocation>(new CommandDefinition($"SELECT LibraryId,RelativePath FROM {table} WHERE Id=@id", new { id = folderId ?? mediaId }, cancellationToken: ct)) ?? throw Luma.Server.Http.ApiRequestException.Missing());
+            var live = folderId.HasValue ? "Recycled=0" : "Availability='present'";
+            return TypedResults.Ok(await db.QuerySingleOrDefaultAsync<FileLocation>(new CommandDefinition($"SELECT LibraryId,RelativePath FROM {table} WHERE Id=@id AND {live}", new { id = folderId ?? mediaId }, cancellationToken: ct)) ?? throw Luma.Server.Http.ApiRequestException.Missing());
         }).WithName("GetFileLocation");
         files.MapPost("/clipboard", async (FileSelectionRequest request, Database database, IndexingOptions options, CancellationToken ct) =>
         {
             if (request.MediaIds.Length + request.FolderIds.Length is < 1 or > 500) throw Luma.Server.Http.ApiRequestException.Invalid("Select between 1 and 500 items.");
             await using var db = await database.OpenAsync(ct);
             var entries = (await db.QueryAsync<FileClipboardEntry>(new CommandDefinition("""
-                SELECT LibraryId,RelativePath,Id AS MediaId,NULL AS FolderId FROM Media WHERE Id IN @MediaIds
+                SELECT LibraryId,RelativePath,Id AS MediaId,NULL AS FolderId FROM Media WHERE Id IN @MediaIds AND Availability='present'
                 UNION ALL
                 SELECT LibraryId,RelativePath,NULL AS MediaId,Id AS FolderId FROM Folders WHERE Id IN @FolderIds AND ParentId IS NOT NULL AND Recycled=0
                 """, request, cancellationToken: ct))).ToArray();
@@ -52,8 +53,9 @@ public static class FileEndpoints
             if ((request.FolderId.HasValue ? 1 : 0) + (request.MediaId.HasValue ? 1 : 0) != 1) throw Luma.Server.Http.ApiRequestException.Invalid();
             await using var db = await database.OpenAsync(ct);
             var table = request.FolderId.HasValue ? "Folders" : "Media";
-            var source = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition($"SELECT RelativePath FROM {table} WHERE LibraryId=@LibraryId AND Id=@id", new { request.LibraryId, id = request.FolderId ?? request.MediaId }, cancellationToken: ct)) ?? throw Luma.Server.Http.ApiRequestException.Missing();
-            return TypedResults.Accepted(uri: (string?)null, value: await operations.QueueAsync(new(request.LibraryId, request.Kind, source, request.Destination), ct));
+            var live = request.FolderId.HasValue ? "Recycled=0" : "Availability='present'";
+            var source = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition($"SELECT RelativePath FROM {table} WHERE LibraryId=@LibraryId AND Id=@id AND {live}", new { request.LibraryId, id = request.FolderId ?? request.MediaId }, cancellationToken: ct)) ?? throw Luma.Server.Http.ApiRequestException.Missing();
+            return TypedResults.Accepted(uri: (string?)null, value: await operations.QueueAsync(new(request.LibraryId, request.Kind, source, request.Destination, ReplaceExisting: request.ReplaceExisting), ct, request.MediaId, request.FolderId));
         }).WithName("CreateFileItemOperation");
         files.MapPost("/operations", async (FileOperationRequest request, FileOperations operations, CancellationToken ct) =>
             TypedResults.Accepted(uri: (string?)null, value: await operations.QueueAsync(request, ct))).WithName("CreateFileOperation");

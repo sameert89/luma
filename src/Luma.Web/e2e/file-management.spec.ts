@@ -27,7 +27,7 @@ test('file toolbar stays hidden until requested, keeps a cut clipboard across fo
       ],
     }),
   )
-  await page.route('**/api/files/operations', route => {
+  await page.route('**/api/files/items', route => {
     posts.push(route.request().postDataJSON())
     return route.fulfill({ status: 202, json: { id: 'queued-file' } })
   })
@@ -48,7 +48,7 @@ test('file toolbar stays hidden until requested, keeps a cut clipboard across fo
   await page.getByRole('button', { name: 'Paste (1)' }).click()
   await expect(page.getByRole('status').filter({ hasText: '1 operation queued' })).toBeVisible()
   expect(posts).toEqual([
-    { libraryId: 1, kind: 'move', source: 'source/photo.jpg', destination: 'destination/photo.jpg' },
+    { libraryId: 1, kind: 'move', mediaId: expect.any(Number), destination: 'destination/photo.jpg' },
   ])
   await page.getByRole('button', { name: 'Upload', exact: true }).click()
   const upload = page.getByRole('dialog', { name: 'Upload', exact: true })
@@ -291,7 +291,7 @@ for (const [kind, choice] of [
           })),
       }),
     )
-    await page.route('**/api/files/operations', route => {
+    await page.route('**/api/files/items', route => {
       const body = route.request().postDataJSON()
       requests.push(body)
       return body.replaceExisting

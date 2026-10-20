@@ -155,10 +155,10 @@ export function FileToolbar({
               .join('/')
             const result = await withFileConflict(
               replaceExisting =>
-                request<OperationAccepted>('/api/files/operations', controller?.signal, 'POST', {
+                request<OperationAccepted>('/api/files/items', controller?.signal, 'POST', {
                   libraryId: location.data!.libraryId,
                   kind: clipboard.kind,
-                  source: item.relativePath,
+                  ...(item.mediaId != null ? { mediaId: item.mediaId } : { folderId: item.folderId }),
                   destination,
                   ...(replaceExisting ? { replaceExisting: true } : {}),
                 }),

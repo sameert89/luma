@@ -20,7 +20,7 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         return root;
     }
 
-    public async Task<FileOperationAccepted> QueueAsync(FileOperationRequest request, CancellationToken ct)
+    public async Task<FileOperationAccepted> QueueAsync(FileOperationRequest request, CancellationToken ct, long? mediaId = null, long? folderId = null)
     {
         var root = WritableRoot(request.LibraryId);
         if (request.Kind is not ("mkdir" or "copy" or "move" or "recycle" or "delete" or "restore" or "purge")) throw ApiRequestException.Invalid();
@@ -41,6 +41,15 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         };
         await using var db = await OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
+        if (mediaId.HasValue && folderId.HasValue) throw ApiRequestException.Invalid();
+        if (mediaId.HasValue || folderId.HasValue)
+        {
+            var table = folderId.HasValue ? "Folders" : "Media";
+            var live = folderId.HasValue ? "Recycled=0" : "Availability='present'";
+            var current = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition($"SELECT RelativePath FROM {table} WHERE LibraryId=@LibraryId AND Id=@id AND {live}", new { request.LibraryId, id = folderId ?? mediaId }, tx, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
+            if (!StringComparer.Ordinal.Equals(current, source))
+                throw new ApiRequestException(409, "source_changed", "The selected item changed. Select it again before continuing.");
+        }
         if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"""
             SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@Id AND State='needsAttention')
               OR EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running'))

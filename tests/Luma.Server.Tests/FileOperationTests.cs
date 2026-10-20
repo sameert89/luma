@@ -403,6 +403,8 @@ public sealed class FileOperationTests
         Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@oldId AND TagId=99", new { oldId }));
         Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE Id=@oldId", new { oldId }));
         await Assert.ThrowsAsync<ApiRequestException>(() => new Luma.Server.Features.Media.OriginalContent(f.Database, f.Options).ServeAsync(oldId, false, new Microsoft.AspNetCore.Http.DefaultHttpContext(), default));
+        await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "delete", "target.jpg"), default, mediaId: oldId));
+        Assert.Equal("new bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "target.jpg")));
         var targetId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE PathKey=@key", new { key = f.Root.Key("target.jpg") });
         Assert.NotEqual(oldId, targetId);
         if (kind == "move") Assert.Equal(sourceId, targetId);

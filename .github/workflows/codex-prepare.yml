@@ -1,0 +1,49 @@
+name: Prepare requested file changes
+on:
+  push:
+    branches: [codex/luma-v2]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: src/Luma.Web/package-lock.json
+      - run: dotnet restore Luma.slnx --locked-mode
+      - run: npm ci
+        working-directory: src/Luma.Web
+      - run: dotnet format Luma.slnx --no-restore
+      - run: npm run generate:api
+        working-directory: src/Luma.Web
+      - run: npm run format
+        if: always()
+        working-directory: src/Luma.Web
+      - run: npm run lint
+        working-directory: src/Luma.Web
+      - run: npm run build
+        working-directory: src/Luma.Web
+      - run: npm test -- --maxWorkers=2
+        working-directory: src/Luma.Web
+      - name: Report canonical source
+        if: always()
+        shell: python
+        run: |
+          import json, pathlib, subprocess
+          changed = subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
+          for name in changed:
+              path = pathlib.Path(name)
+              if not path.is_file():
+                  continue
+              print("LUMA_CANON_BEGIN " + json.dumps(name))
+              content = path.read_text()
+              for offset in range(0, len(content), 8000):
+                  print("LUMA_CANON_CHUNK " + json.dumps(content[offset:offset+8000]))
+              print("LUMA_CANON_END")
