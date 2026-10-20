@@ -276,5 +276,94 @@ public sealed class FileOperationTests
         Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", queued.Id, "content")));
     }
 
+    [Fact]
+    public async Task Independent_deletions_queue_without_waiting_and_do_not_rescan_the_folder()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        foreach (var name in new[] { "one.jpg", "two.jpg", "keep.jpg" }) await File.WriteAllTextAsync(Path.Combine(f.Root.Path, name), name);
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        await using var db = await f.Database.OpenAsync(default);
+        var scans = await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans");
+        var refresh = new Luma.Server.Features.Indexing.AutomaticLibraryRefresh(f.Database, f.Options, NullLogger<Luma.Server.Features.Indexing.AutomaticLibraryRefresh>.Instance);
+        refresh.ApplySettings(1, new(WatcherDebounceSeconds: 0, FileStabilitySeconds: 0));
+        var one = await operations.QueueAsync(new(1, "recycle", "one.jpg"), default);
+        var two = await operations.QueueAsync(new(1, "recycle", "two.jpg"), default);
+        Assert.Equal("queued", (await operations.GetAsync(two.Id, default)).State);
+        foreach (var id in new[] { one.Id, two.Id }) await ResumeQueuedAsync(f, operations, worker, id);
+        refresh.Observe(f.Root, Path.Combine(f.Root.Path, "one.jpg"), WatcherChangeTypes.Deleted);
+        refresh.Observe(f.Root, Path.Combine(f.Root.Path, "two.jpg"), WatcherChangeTypes.Deleted);
+        refresh.Observe(f.Root, f.Root.Path, WatcherChangeTypes.Changed);
+        await refresh.FlushStableChangesAsync(default);
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM DirtyFolders"));
+        Assert.Equal(scans, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans"));
+        Assert.Equal(2, (await operations.TrashAsync(1, null, default)).Count);
+        Assert.True(File.Exists(Path.Combine(f.Root.Path, "keep.jpg")));
+        // An unrelated external change in the same directory must still be discovered.
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "external.jpg"), "external");
+        refresh.Observe(f.Root, Path.Combine(f.Root.Path, "external.jpg"), WatcherChangeTypes.Created);
+        await refresh.FlushStableChangesAsync(default);
+        await refresh.FlushStableChangesAsync(default);
+        Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM DirtyFolders"));
+    }
+
+    [Fact]
+    public async Task Queue_rejects_overlapping_sources_and_destinations_but_accepts_distinct_files()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "album", "one.jpg"), "one");
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "two.jpg"), "two");
+        await f.ScanAsync();
+        var (operations, _) = Services(f);
+        await operations.QueueAsync(new(1, "copy", "album", "copied"), default);
+        Assert.Equal("path_busy", (await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "recycle", "album/one.jpg"), default))).Code);
+        Assert.Equal("path_busy", (await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "two.jpg", "copied"), default))).Code);
+        await operations.QueueAsync(new(1, "recycle", "two.jpg"), default);
+    }
+
+    [Fact]
+    public async Task Copy_indexes_only_the_new_path_keeps_source_identity_and_copies_tags()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "inner"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "album", "inner", "photo.jpg"), "original");
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "sibling.jpg"), "sibling");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var sourceId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='album/inner/photo.jpg'");
+        var siblingScan = await db.ExecuteScalarAsync<long>("SELECT LastSeenScanId FROM Media WHERE RelativePath='sibling.jpg'");
+        await db.ExecuteAsync("INSERT INTO Tags(Id,Name,NormalizedKey) VALUES(1,'test','test'); INSERT INTO MediaTags VALUES(@sourceId,1)", new { sourceId });
+        var (operations, worker) = Services(f);
+        var row = await RunAsync(operations, worker, f, new(1, "copy", "album", "copied"));
+        Assert.Equal("completed", row.State);
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "copied", "inner", "photo.jpg")));
+        Assert.Equal(sourceId, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='album/inner/photo.jpg'"));
+        Assert.Equal(siblingScan, await db.ExecuteScalarAsync<long>("SELECT LastSeenScanId FROM Media WHERE RelativePath='sibling.jpg'"));
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags"));
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans WHERE State IN ('queued','running')"));
+        await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "copy", "album", "copied"), default));
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "album", "inner", "photo.jpg")));
+    }
+
+    [Fact]
+    public async Task Interrupted_partial_copy_rebuilds_private_payload_without_publishing_partial_bytes()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "complete original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var queued = await operations.QueueAsync(new(1, "copy", "photo.jpg", "copy.jpg"), default);
+        var payload = MutationPaths.Internal(f.Root, MutationPaths.OperationsDirectory, queued.Id, "payload");
+        Directory.CreateDirectory(Path.GetDirectoryName(payload)!);
+        await File.WriteAllTextAsync(payload, "partial");
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE FileOperations SET State='running' WHERE Id=@Id", queued);
+        await worker.RecoverAsync(default);
+        Assert.Equal("completed", (await operations.GetAsync(queued.Id, default)).State);
+        Assert.Equal("complete original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "copy.jpg")));
+        Assert.Equal("complete original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
+    }
+
     private sealed class SimulatedCrash : Exception;
 }

@@ -313,6 +313,39 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         }
     }
 
+    // Used only by the mutation worker after publication. It visits the new path, not the
+    // containing folder, and never performs missing-file reconciliation on unrelated records.
+    internal static async Task IndexPublishedPathAsync(Database database, LibraryOptions root, string relative, CancellationToken ct)
+    {
+        var path = Luma.Server.Features.Files.MutationPaths.Resolve(root, relative);
+        await using var db = await database.OpenAsync(ct);
+        var now = DateTimeOffset.UtcNow.ToString("O");
+        var id = await db.ExecuteScalarAsync<long>(new CommandDefinition("INSERT INTO Scans(LibraryId,State,StartedAt,FinishedAt) VALUES(@Id,'completed',@now,@now) RETURNING Id",
+            new { root.Id, now }, cancellationToken: ct));
+        var scan = new ScanRow { Id = id, LibraryId = root.Id };
+        var excluded = (await db.QueryAsync<string>(new CommandDefinition("SELECT PathKey FROM Folders WHERE LibraryId=@Id AND Hidden=1 UNION SELECT PathKey FROM PanelSources WHERE LibraryId=@Id AND ExcludeFromGallery=1", root, cancellationToken: ct))).ToArray();
+        IEnumerable<FileSystemInfo> Entries()
+        {
+            if (!Directory.Exists(path)) { yield return new FileInfo(path); yield break; }
+            yield return new DirectoryInfo(path);
+            foreach (var entry in SourceTraversal.Enumerate(path, recursive: true)) yield return entry;
+        }
+        foreach (var batch in Entries().Chunk(32))
+        {
+            ct.ThrowIfCancellationRequested();
+            await database.YieldToForegroundAsync(ct);
+            using var tx = db.BeginTransaction();
+            var folders = new Dictionary<string, long>();
+            foreach (var entry in batch)
+            {
+                var directory = entry.Attributes.HasFlag(FileAttributes.Directory);
+                await PersistEntryAsync(db, tx, folders, scan, root, new(Path.GetRelativePath(root.Path, entry.FullName).Replace(Path.DirectorySeparatorChar, '/'),
+                    directory, directory ? 0 : ((FileInfo)entry).Length, entry.LastWriteTimeUtc.ToString("O")), ct, excluded);
+            }
+            tx.Commit();
+        }
+    }
+
     private static async Task PersistEntryAsync(SqliteConnection db, SqliteTransaction tx, Dictionary<string, long> folders, ScanRow scan, LibraryOptions root, DiscoveredEntry entry, CancellationToken ct, string[] excludedPaths, bool priority = false)
     {
         var entryKey = root.Key(entry.RelativePath);

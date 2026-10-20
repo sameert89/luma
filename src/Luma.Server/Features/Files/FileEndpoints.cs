@@ -32,6 +32,21 @@ public static class FileEndpoints
             var table = folderId.HasValue ? "Folders" : "Media";
             return TypedResults.Ok(await db.QuerySingleOrDefaultAsync<FileLocation>(new CommandDefinition($"SELECT LibraryId,RelativePath FROM {table} WHERE Id=@id", new { id = folderId ?? mediaId }, cancellationToken: ct)) ?? throw Luma.Server.Http.ApiRequestException.Missing());
         }).WithName("GetFileLocation");
+        files.MapPost("/clipboard", async (FileSelectionRequest request, Database database, IndexingOptions options, CancellationToken ct) =>
+        {
+            if (request.MediaIds.Length + request.FolderIds.Length is < 1 or > 500) throw Luma.Server.Http.ApiRequestException.Invalid("Select between 1 and 500 items.");
+            await using var db = await database.OpenAsync(ct);
+            var entries = (await db.QueryAsync<FileClipboardEntry>(new CommandDefinition("""
+                SELECT LibraryId,RelativePath,Id AS MediaId,NULL AS FolderId FROM Media WHERE Id IN @MediaIds
+                UNION ALL
+                SELECT LibraryId,RelativePath,NULL AS MediaId,Id AS FolderId FROM Folders WHERE Id IN @FolderIds AND ParentId IS NOT NULL AND Recycled=0
+                """, request, cancellationToken: ct))).ToArray();
+            if (entries.Length != request.MediaIds.Distinct().Count() + request.FolderIds.Distinct().Count()) throw Luma.Server.Http.ApiRequestException.Missing();
+            // Selecting a folder already includes its descendants. Queue each original once.
+            return TypedResults.Ok(entries.Where(entry => !entries.Any(parent => parent.FolderId.HasValue && parent != entry && parent.LibraryId == entry.LibraryId &&
+                (options.Libraries.Find(root => root.Id == entry.LibraryId) is { } library) &&
+                library.Key(entry.RelativePath).StartsWith(library.Key(parent.RelativePath) + '/', StringComparison.Ordinal))).ToArray());
+        }).WithName("GetFileClipboardEntries");
         files.MapPost("/items", async (FileItemRequest request, Database database, FileOperations operations, CancellationToken ct) =>
         {
             if ((request.FolderId.HasValue ? 1 : 0) + (request.MediaId.HasValue ? 1 : 0) != 1) throw Luma.Server.Http.ApiRequestException.Invalid();

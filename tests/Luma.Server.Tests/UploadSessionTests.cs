@@ -129,7 +129,8 @@ public sealed class UploadSessionTests
         await worker.ExecuteOperationAsync(await operations.GetAsync(finalized.OperationId!, default), false, default);
         Assert.Equal("completed", (await uploads.GetAsync(upload.Id, default)).State);
         Assert.Equal("abcdef", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
-        Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans WHERE State='queued'"));
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans WHERE State='queued'"));
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE RelativePath='photo.jpg'"));
     }
 
     [Fact]

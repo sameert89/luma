@@ -45,7 +45,7 @@ public sealed class FileRecovery(FileOperations operations)
                 _ => false
             };
             if (retry) actions.Add("retry");
-            if (phase == "running" && !staged && row.Kind is "mkdir" or "move" or "delete" or "recycle")
+            if (phase == "running" && !staged && row.Kind is "mkdir" or "copy" or "move" or "delete" or "recycle")
             {
                 if ((row.Kind == "mkdir" && !sourceExists) || (sourceExists && !destinationExists)) actions.Add("cancel");
                 if ((row.Kind == "mkdir" && !sourceExists) || (sourceMatches && !destinationExists)) actions.Add("restart");
@@ -53,7 +53,7 @@ public sealed class FileRecovery(FileOperations operations)
             // A missing publication marker is never inferred automatically. Explicit confirmation
             // still requires matching indexed size/timestamp/type and the absence of owned staging.
             if ((phase == "reserved" || phase is null && row.FailureCode == "publication_uncertain") && !staged && destinationMatches &&
-                row.Kind is "move" or "restore" or "upload" or "mkdir") actions.Add("confirmPublished");
+                row.Kind is "copy" or "move" or "restore" or "upload" or "mkdir") actions.Add("confirmPublished");
         }
         return new(row, Path.GetRelativePath(root.Path, staging).Replace(Path.DirectorySeparatorChar, '/'),
             sourceExists, sourceMatches, staged, destinationExists, destinationMatches, actions);
@@ -70,9 +70,9 @@ public sealed class FileRecovery(FileOperations operations)
             throw new ApiRequestException(409, "recovery_changed", "This operation changed. Reload its evidence before continuing.");
         if (request.Destination is not null)
         {
-            if (request.Action != "retry" || row.RecoveryState != "reserved" || row.Kind is not ("move" or "restore" or "upload")) throw ApiRequestException.Invalid();
+            if (request.Action != "retry" || row.RecoveryState != "reserved" || row.Kind is not ("copy" or "move" or "restore" or "upload")) throw ApiRequestException.Invalid();
             var target = MutationPaths.Normalize(request.Destination);
-            if (root.Key(target).StartsWith(root.Key(row.Source) + '/', StringComparison.Ordinal) || row.Kind == "move" && root.Key(target) == root.Key(row.Source)) throw ApiRequestException.Invalid();
+            if (root.Key(target).StartsWith(root.Key(row.Source) + '/', StringComparison.Ordinal) || row.Kind is "move" or "copy" && root.Key(target) == root.Key(row.Source)) throw ApiRequestException.Invalid();
             FileOperations.EnsureDestination(root, target);
             if (root.Key(target) != root.Key(row.Source) && await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
                 SELECT EXISTS(SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND (PathKey=@key OR substr(PathKey,1,length(@key)+1)=@key||'/'))

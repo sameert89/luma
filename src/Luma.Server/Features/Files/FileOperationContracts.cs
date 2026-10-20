@@ -27,3 +27,6 @@ public sealed class FileOperation
 
 public sealed record FileLocation(long LibraryId, string RelativePath);
 public sealed record FileItemRequest(long LibraryId, string Kind, long? MediaId = null, long? FolderId = null, string? Destination = null);
+
+public sealed record FileSelectionRequest(long[] MediaIds, long[] FolderIds);
+public sealed record FileClipboardEntry(long LibraryId, string RelativePath, long? MediaId, long? FolderId);

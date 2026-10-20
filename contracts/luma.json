@@ -3335,6 +3335,39 @@
         }
       }
     },
+    "/api/files/clipboard": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetFileClipboardEntries",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileClipboardEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/items": {
       "post": {
         "tags": [
@@ -4387,6 +4420,34 @@
           }
         }
       },
+      "FileClipboardEntry": {
+        "required": [
+          "libraryId",
+          "relativePath",
+          "mediaId",
+          "folderId"
+        ],
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "relativePath": {
+            "type": "string"
+          },
+          "mediaId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "folderId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
       "FileItemRequest": {
         "required": [
           "libraryId",
@@ -4611,6 +4672,29 @@
           "destination": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "FileSelectionRequest": {
+        "required": [
+          "mediaIds",
+          "folderIds"
+        ],
+        "type": "object",
+        "properties": {
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "folderIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
           }
         }
       },

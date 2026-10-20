@@ -976,6 +976,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/clipboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["GetFileClipboardEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files/items": {
         parameters: {
             query?: never;
@@ -1369,6 +1385,15 @@ export interface components {
             libraryId: number;
             writable: boolean;
         };
+        FileClipboardEntry: {
+            /** Format: int64 */
+            libraryId: number;
+            relativePath: string;
+            /** Format: int64 */
+            mediaId: number | null;
+            /** Format: int64 */
+            folderId: number | null;
+        };
         FileItemRequest: {
             /** Format: int64 */
             libraryId: number;
@@ -1435,6 +1460,10 @@ export interface components {
             confirmed: boolean;
             expectedFailureCode: string | null;
             destination?: string | null;
+        };
+        FileSelectionRequest: {
+            mediaIds: number[];
+            folderIds: number[];
         };
         FileStorageReport: {
             bootId: string;
@@ -3780,6 +3809,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FileLocation"];
+                };
+            };
+        };
+    };
+    GetFileClipboardEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileClipboardEntry"][];
                 };
             };
         };

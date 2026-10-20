@@ -27,6 +27,8 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                     UPDATE FileOperations SET State='running' WHERE Id=(
                       SELECT o.Id FROM FileOperations o WHERE o.State='queued'
                       AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
+                      AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
+                      AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
                       ORDER BY o.CreatedAt LIMIT 1) AND State='queued' RETURNING *
                     """, cancellationToken: stoppingToken));
                 if (row is null) { await Task.Delay(500, stoppingToken); continue; }
@@ -79,14 +81,25 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             {
                 // A crash after reservation but before the state write has an owned staging path.
                 // A public source alone cannot distinguish the original from its replacement.
-                if (recovering && row.Kind is not ("upload" or "restore" or "purge") && !Exists(staging))
+                if (recovering && row.Kind is not ("copy" or "upload" or "restore" or "purge") && !Exists(staging))
                     throw Attention("interrupted_before_reservation");
                 if (!Exists(staging))
                 {
                     ct.ThrowIfCancellationRequested();
                     Directory.CreateDirectory(Path.GetDirectoryName(staging)!);
                     MutationPaths.Internal(root, category, row.Id);
-                    if (row.Kind == "mkdir") Directory.CreateDirectory(staging);
+                    if (row.Kind == "copy")
+                    {
+                        Verify(source, row);
+                        var payload = MutationPaths.Internal(root, MutationPaths.OperationsDirectory, row.Id, "payload");
+                        if (Directory.Exists(payload)) await DeleteOwnedDirectoryAsync(payload, ct);
+                        else if (File.Exists(payload)) File.Delete(payload);
+                        await CopyToStagingAsync(root, row, source, payload, ct);
+                        Verify(source, row);
+                        if (row.IsDirectory) Directory.Move(payload, staging);
+                        else File.Move(payload, staging, overwrite: false);
+                    }
+                    else if (row.Kind == "mkdir") Directory.CreateDirectory(staging);
                     else
                     {
                         Verify(source, row);
@@ -136,7 +149,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             if (row.State is "published" or "finalizing")
             {
                 if (row.Kind == "recycle" && !Exists(staging)) throw Attention("staging_unavailable");
-                if (row.Kind is "upload" or "move" or "restore" or "mkdir")
+                if (row.Kind is "upload" or "copy" or "move" or "restore" or "mkdir")
                 {
                     var target = MutationPaths.Resolve(root, destination!);
                     if (!Exists(target)) throw Attention("destination_unavailable");
@@ -168,6 +181,9 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
 
     private async Task ReconcileAsync(FileOperation row, LibraryOptions root, CancellationToken ct)
     {
+        // Index only the newly published path, never its siblings. Replaying this is idempotent.
+        if (row.Kind is "copy" or "upload")
+            await ScanWorker.IndexPublishedPathAsync(database, root, row.Destination!, ct);
         await using var db = await operations.OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
         if (await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM FileOperations WHERE Id=@Id", row, tx, cancellationToken: ct)) == "completed") return;
@@ -209,22 +225,40 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             if (!row.IsDirectory)
                 await db.ExecuteAsync(new CommandDefinition("UPDATE Media SET FileName=@name,FolderId=@parentId WHERE Id IN (SELECT MediaId FROM OperationMedia WHERE OperationId=@snapshot)", new { name = Path.GetFileName(target), parentId, snapshot }, tx, cancellationToken: ct));
         }
-        else if (row.Kind == "mkdir") await EnsureFolderAsync(db, tx, root, row.Source, ct);
+        else if (row.Kind == "copy")
+        {
+            await db.ExecuteAsync(new CommandDefinition("""
+                INSERT OR IGNORE INTO MediaTags(MediaId,TagId)
+                  SELECT destination.Id,t.TagId FROM OperationMedia snapshot
+                  JOIN Media source ON source.Id=snapshot.MediaId
+                  JOIN MediaTags t ON t.MediaId=snapshot.MediaId
+                  JOIN Media destination ON destination.LibraryId=@LibraryId
+                    AND destination.PathKey=@targetKey||substr(source.PathKey,length(@sourceKey)+1)
+                  WHERE snapshot.OperationId=@Id;
+                """, new { row.Id, row.LibraryId, sourceKey = root.Key(row.Source), targetKey = root.Key(row.Destination!) }, tx, cancellationToken: ct));
+        }
+        else if (row.Kind == "mkdir")
+        {
+            var folderId = await EnsureFolderAsync(db, tx, root, row.Source, ct);
+            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET DirectIndexedAt=@now,SourceModifiedTicks=@ticks WHERE Id=@folderId",
+                new { folderId, now = DateTimeOffset.UtcNow.ToString("O"), ticks = Directory.GetLastWriteTimeUtc(MutationPaths.Resolve(root, row.Source)).Ticks }, tx, cancellationToken: ct));
+        }
         else if (row.Kind == "upload")
         {
-            var parentPath = row.Destination!.Contains('/') ? row.Destination[..row.Destination.LastIndexOf('/')] : "";
-            var folderId = await EnsureFolderAsync(db, tx, root, parentPath, ct);
-            // Existing scan worker discovers the safely published original; no scan in browse handlers.
-            await db.ExecuteAsync(new CommandDefinition("""
-                INSERT INTO Scans(LibraryId,FolderId,State,StartedAt,MetadataMode)
-                  SELECT @LibraryId,@folderId,'queued',@now,MetadataMode FROM Libraries WHERE Id=@LibraryId
-                    AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'));
-                UPDATE UploadSessions SET State='completed',UpdatedAt=@now WHERE Id=@UploadId;
-                """, new { row.LibraryId, row.UploadId, folderId, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+            await db.ExecuteAsync(new CommandDefinition("UPDATE UploadSessions SET State='completed',UpdatedAt=@now WHERE Id=@UploadId",
+                new { row.UploadId, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
         }
         if (row.Kind is "restore" or "purge")
             await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET Restored=1 WHERE Id=@RecycleId", row, tx, cancellationToken: ct));
         await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='completed',FinishedAt=@now,FailureCode=NULL WHERE Id=@Id", new { row.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+        foreach (var path in new[] { row.Source, row.Destination }.OfType<string>())
+        {
+            var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
+            var directory = MutationPaths.Resolve(root, parent, allowRoot: true);
+            if (Directory.Exists(directory))
+                await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET SourceModifiedTicks=@ticks WHERE LibraryId=@Id AND PathKey=@key",
+                    new { root.Id, key = root.Key(parent), ticks = Directory.GetLastWriteTimeUtc(directory).Ticks }, tx, cancellationToken: ct));
+        }
         tx.Commit();
         row.State = "completed";
     }
@@ -240,6 +274,37 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         return id;
     }
 
+
+    private static async Task CopyToStagingAsync(LibraryOptions root, FileOperation row, string source, string staging, CancellationToken ct)
+    {
+        async Task CopyFileAsync(string from, string to)
+        {
+            if (File.GetAttributes(from).HasFlag(FileAttributes.ReparsePoint)) throw Attention("unsafe_path");
+            var length = new FileInfo(from).Length;
+            var modified = File.GetLastWriteTimeUtc(from);
+            await using (var input = new FileStream(from, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, useAsync: true))
+            await using (var output = new FileStream(to, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, useAsync: true))
+            {
+                await input.CopyToAsync(output, ct);
+                await output.FlushAsync(ct);
+                output.Flush(flushToDisk: true);
+            }
+            if (new FileInfo(from).Length != length || File.GetLastWriteTimeUtc(from) != modified) throw Attention("source_changed");
+            File.SetLastWriteTimeUtc(to, modified);
+        }
+        if (!row.IsDirectory) { await CopyFileAsync(source, staging); return; }
+        Directory.CreateDirectory(staging);
+        foreach (var entry in SourceTraversal.Enumerate(source, recursive: true, skipLinks: false))
+        {
+            ct.ThrowIfCancellationRequested();
+            var relative = Path.GetRelativePath(source, entry.FullName);
+            _ = MutationPaths.Resolve(root, row.Source + '/' + relative.Replace(Path.DirectorySeparatorChar, '/'));
+            var target = Path.Combine(staging, relative);
+            if (entry.Attributes.HasFlag(FileAttributes.Directory)) Directory.CreateDirectory(target);
+            else await CopyFileAsync(entry.FullName, target);
+        }
+        Directory.SetLastWriteTimeUtc(staging, new DateTime(row.SourceModifiedTicks, DateTimeKind.Utc));
+    }
 
     private static async Task DeleteOwnedDirectoryAsync(string path, CancellationToken ct)
     {
