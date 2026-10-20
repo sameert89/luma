@@ -6,6 +6,16 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.9',
+    date: '2026-10-21',
+    headline: 'Delete directly from Flick',
+    changes: [
+      'The Flick three-dot menu now offers Delete file for writable libraries. Confirm to queue recycling, or explicitly choose permanent deletion.',
+      'Filters stays in the top bar; its duplicate button has been removed from the Flick menu.',
+      'After deletion, Flick keeps playing the next reel or the previous one at the end. Queued deletions are skipped; deleting the final item shows the empty view. Playback and auto-scroll pause while confirmation is open.',
+    ],
+  },
+  {
     version: '2.0.0-beta.8',
     date: '2026-10-20',
     headline: 'Keep viewing after deletion, and rename in place',

@@ -168,3 +168,39 @@ test('file management stays available in search and tag results and Rename queue
     ['move', 'viewer-renamed.jpg'],
   ])
 })
+
+test('Flick menu deletion advances, falls back and empties without reopening queued reels', async ({ page }) => {
+  const posts: Record<string, unknown>[] = []
+  const items = await Promise.all([5, 10, 15].map(async id => (await page.request.get(`/api/media/${id}`)).json()))
+  await page.route('**/api/files/capabilities', route =>
+    route.fulfill({ json: { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] } }),
+  )
+  await page.route('**/api/media/*/neighbors?**', route => {
+    const id = Number(new URL(route.request().url()).pathname.split('/').at(-2))
+    const index = items.findIndex(item => item.id === id)
+    return route.fulfill({ json: { previous: items[index - 1] ?? null, next: items[index + 1] ?? null } })
+  })
+  await page.route('**/api/files/items', route => {
+    posts.push(route.request().postDataJSON())
+    return route.fulfill({ status: 202, json: { id: 'queued-flick-delete' } })
+  })
+  await page.goto('/flick?libraryId=1&mediaType=video&sort=name&order=asc&media=10')
+  await expect(page.getByLabel(items[1].fileName, { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Flick menu', exact: true }).click()
+  const flick = page.getByRole('region', { name: 'Flick', exact: true })
+  await expect(flick.getByRole('button', { name: 'Filters', exact: true })).toHaveCount(0)
+  const stage = await flick.elementHandle()
+  for (const next of [items[2], items[0]]) {
+    await page.getByRole('button', { name: 'Delete file', exact: true }).click()
+    const confirmation = page.getByRole('dialog', { name: 'Delete file', exact: true })
+    await expect(confirmation.getByRole('checkbox')).not.toBeChecked()
+    await confirmation.getByRole('button', { name: 'Move to recycle bin', exact: true }).click()
+    await expect(page.getByLabel(next.fileName, { exact: true })).toBeVisible()
+    expect(await stage!.evaluate(element => element.isConnected)).toBe(true)
+  }
+  await page.getByRole('button', { name: 'Delete file', exact: true }).click()
+  await page.getByRole('button', { name: 'Move to recycle bin', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'No reels to show', exact: true })).toBeVisible()
+  expect(posts.map(post => post.mediaId)).toEqual([10, 15, 5])
+  await expect.poll(() => page.evaluate(() => !!history.state?.lumaModal)).toBe(false)
+})

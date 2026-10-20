@@ -68,7 +68,9 @@ test('reels keep rating and the menu within thumb reach and loop by default', as
   await dislike.click()
   await expect(dislike).toHaveAttribute('aria-pressed', 'false')
   await menu.click()
-  await expect(reels.getByRole('button', { name: 'Filters', exact: true })).toBeInViewport()
+  await expect(reels.getByRole('button', { name: 'Filters', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Filters', exact: true })).toBeVisible()
+  await expect(reels.getByRole('button', { name: /^(Hide|Show) filters$/ })).toBeInViewport()
 })
 
 test('video controls stack on upright phones and stay on one row elsewhere', async ({ page }, testInfo) => {

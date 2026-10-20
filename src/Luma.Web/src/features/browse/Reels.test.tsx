@@ -319,3 +319,109 @@ it('keeps like and dislike on the stage beside a bottom menu, loops by default a
     client.clear()
   }
 })
+
+it('queues deletion from Flick, suspends advancement and skips queued reels through next, previous and empty', async () => {
+  window.history.replaceState(null, '', '/flick')
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const items = [1, 2, 3].map(clip)
+  const fetch = vi.fn().mockImplementation((url: string) => {
+    const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
+    const data = url.includes('capabilities')
+      ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] }
+      : url === '/api/files/items'
+        ? { id: 'queued' }
+        : url.includes('/neighbors?')
+          ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+          : /media\/\d+$/.test(url)
+            ? items[id - 1]
+            : { items: [items[0]] }
+    return Promise.resolve(new Response(JSON.stringify(data)))
+  })
+  vi.stubGlobal('fetch', fetch)
+  const changed = vi.fn()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <Reels
+          filters={{ mediaType: 'video' }}
+          startId={2}
+          onFilters={vi.fn()}
+          onOpenViewer={vi.fn()}
+          onItemChange={changed}
+        />
+      </QueryClientProvider>,
+    )
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Flick menu' }))
+    await user.click(screen.getByRole('button', { name: 'Auto-scroll' }))
+    const stage = screen.getByRole('region', { name: 'Flick' })
+    expect(within(stage).queryByRole('button', { name: 'Filters' })).not.toBeInTheDocument()
+    async function remove() {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete file' })).toBeEnabled())
+      await user.click(screen.getByRole('button', { name: 'Delete file' }))
+      await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+    }
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete file' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Delete file' }))
+    fireEvent.ended(screen.getByLabelText('2.mp4'))
+    expect(screen.getByLabelText('2.mp4')).toBeInTheDocument()
+    expect(fetch.mock.calls.some(([url]) => url === '/api/files/items')).toBe(false)
+    await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+    await screen.findByLabelText('3.mp4')
+    expect(stage).toBeInTheDocument()
+    await remove()
+    await screen.findByLabelText('1.mp4')
+    expect(stage).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled())
+    await remove()
+    await screen.findByRole('heading', { name: 'No reels to show' })
+    expect(changed).toHaveBeenLastCalledWith(null)
+    expect(JSON.parse(localStorage.getItem('luma-reels-state')!).mediaId).toBeNull()
+    const posts = fetch.mock.calls.filter(([url]) => url === '/api/files/items')
+    expect(posts.map(([, init]) => JSON.parse(init.body).mediaId)).toEqual([2, 3, 1])
+    expect(fetch.mock.calls.some(([url]) => url.startsWith('/api/files/operations/'))).toBe(false)
+  } finally {
+    vi.restoreAllMocks()
+    client.clear()
+  }
+})
+
+it('disables Delete in the Flick menu for a read-only library', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url.includes('capabilities')
+              ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: false }] }
+              : url.includes('/neighbors?')
+                ? { previous: null, next: null }
+                : /media\/\d+$/.test(url)
+                  ? clip(1)
+                  : { items: [clip(1)] },
+          ),
+        ),
+      ),
+    ),
+  )
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <Reels filters={{ mediaType: 'video' }} onFilters={vi.fn()} onOpenViewer={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
+    expect(await screen.findByRole('button', { name: 'Delete file' })).toBeDisabled()
+  } finally {
+    vi.restoreAllMocks()
+    client.clear()
+  }
+})

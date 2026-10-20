@@ -1,3 +1,4 @@
+import { DeleteMediaAction } from '../files/DeleteMediaAction'
 import { readSetting } from '../../app/uiDefaults'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
@@ -78,7 +79,7 @@ export function Reels({
   startId?: number | null
   viewerOpen?: boolean
   onFilters: () => void
-  onItemChange?: (id: number) => void
+  onItemChange?: (id: number | null) => void
   onOpenViewer: (item: Media) => void
 }) {
   const isFullscreen = useFullscreen()
@@ -97,11 +98,14 @@ export function Reels({
   const [menuOpen, setMenuOpen] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
-  const suspended = viewerOpen || tags || optionsOpen || infoOpen
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [exhausted, setExhausted] = useState(false)
+  const removed = useRef(new Map<number, { previous: Media | null; next: Media | null }>())
+  const suspended = viewerOpen || tags || optionsOpen || infoOpen || deleteOpen
   const first = useQuery({
     queryKey: ['reels-first', queryFilters],
     queryFn: ({ signal }) => request<MediaPage>(`/api/media?${queryString({ ...queryFilters, limit: 1 })}`, signal),
-    enabled: !restoredId,
+    enabled: !restoredId && !exhausted,
     gcTime: 0,
   })
   const base = active ?? first.data?.items[0]
@@ -109,14 +113,15 @@ export function Reels({
   const detail = useQuery({
     queryKey: ['detail', baseId],
     queryFn: ({ signal }) => request<Media>(`/api/media/${baseId}`, signal),
-    enabled: !!baseId,
+    enabled: !!baseId && !exhausted,
     gcTime: 0,
     refetchInterval: query => (query.state.data?.preview.status === 'ready' ? false : 3000),
   })
-  const item = detail.data ?? (base?.id === baseId ? base : undefined)
+  const availableItem = detail.data ?? (base?.id === baseId ? base : undefined)
+  const item = exhausted ? undefined : availableItem
   useEffect(() => {
-    if (item) onItemChange?.(item.id)
-  }, [item?.id, onItemChange])
+    if (item || exhausted) onItemChange?.(item?.id ?? null)
+  }, [item?.id, exhausted, onItemChange])
   useEffect(() => {
     if (
       restoredId &&
@@ -142,9 +147,19 @@ export function Reels({
     enabled: !!item,
     gcTime: 0,
   })
-  const next = neighbors.data?.next
+  function remaining(candidate: Media | null | undefined, side: 'previous' | 'next') {
+    const seen = new Set<number>()
+    while (candidate && removed.current.has(candidate.id)) {
+      if (seen.has(candidate.id)) return null
+      seen.add(candidate.id)
+      candidate = removed.current.get(candidate.id)?.[side]
+    }
+    return candidate ?? null
+  }
+  const previous = remaining(neighbors.data?.previous, 'previous')
+  const next = remaining(neighbors.data?.next, 'next')
   const preference = usePreference()
-  usePreviewPriority([item, next, neighbors.data?.previous], true)
+  usePreviewPriority([item, next, previous], true)
   useEffect(() => {
     if (!next || next.mediaType !== 'video' || suspended) return
     let warm: HTMLVideoElement | null = null
@@ -176,7 +191,8 @@ export function Reels({
     return () => preload.removeAttribute('src')
   }, [nextStill])
   function navigate(direction: 'next' | 'previous') {
-    const target = neighbors.data?.[direction]
+    if (suspended) return
+    const target = direction === 'next' ? next : previous
     if (target) {
       setDirection(direction)
       setActive(target)
@@ -196,6 +212,7 @@ export function Reels({
   useEffect(() => {
     function key(event: KeyboardEvent) {
       if (
+        suspended ||
         document.querySelector('[role="dialog"]') ||
         (event.target instanceof HTMLElement && event.target.closest('input,select,textarea,video,button'))
       )
@@ -203,7 +220,7 @@ export function Reels({
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
         const move = event.key === 'ArrowDown' ? 'next' : 'previous'
-        const target = neighbors.data?.[move]
+        const target = move === 'next' ? next : previous
         if (target) {
           setDirection(move)
           setActive(target)
@@ -212,21 +229,21 @@ export function Reels({
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [neighbors.data])
-  if (first.isError)
+  }, [next, previous, suspended])
+  if (!exhausted && first.isError)
     return (
       <p role="alert" className="p-5 text-danger">
         {errorMessage(first.error)}
       </p>
     )
-  if (!item && detail.isError && !(detail.error instanceof ApiError && detail.error.status === 404))
+  if (!exhausted && !item && detail.isError && !(detail.error instanceof ApiError && detail.error.status === 404))
     return (
       <p role="alert" className="p-5 text-danger">
         {errorMessage(detail.error)}
       </p>
     )
   if (!item) {
-    const loading = first.isPending || (detail.isPending && !!baseId)
+    const loading = !exhausted && (first.isPending || (detail.isPending && !!baseId))
     return (
       <section
         aria-labelledby="reels-state-title"
@@ -300,9 +317,6 @@ export function Reels({
           menuLabel="Flick menu"
           className="bottom-16"
         >
-          <IconButton label="Filters" className={actionButton} onClick={onFilters}>
-            <SlidersHorizontal className="size-4" />
-          </IconButton>
           {onToggleFilters && (
             <IconButton
               label={filtersVisible ? 'Hide filters' : 'Show filters'}
@@ -334,13 +348,31 @@ export function Reels({
           <IconButton label="View options" className={actionButton} onClick={() => setOptionsOpen(true)}>
             <Settings2 className="size-4" />
           </IconButton>
+          <DeleteMediaAction
+            item={item}
+            className={actionButton}
+            disabled={neighbors.isPending}
+            onOpenChange={setDeleteOpen}
+            onQueued={() => {
+              removed.current.set(item.id, { previous, next })
+              const target = next ?? previous
+              if (target) {
+                setDirection(next ? 'next' : 'previous')
+                setActive(target)
+              } else {
+                setActive(null)
+                setRestoredId(null)
+                setExhausted(true)
+              }
+            }}
+          />
           <IconButton label="Media information" className={actionButton} onClick={() => setInfoOpen(true)}>
             <Info className="size-4" />
           </IconButton>
           <IconButton
             label="Previous"
             className={actionButton}
-            disabled={!neighbors.data?.previous}
+            disabled={!previous}
             onClick={() => navigate('previous')}
           >
             <ChevronUp className="size-4" />
