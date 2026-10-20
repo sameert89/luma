@@ -400,7 +400,7 @@ it('disables Delete in the Flick menu for a read-only library', async () => {
         ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: false }] }
         : url.includes('/neighbors?')
           ? { previous: null, next: null }
-          : /media\\/\\d+$/.test(url)
+          : /media\/\d+$/.test(url)
             ? clip(1)
             : { items: [clip(1)] }
       return Promise.resolve(new Response(JSON.stringify(data)))
