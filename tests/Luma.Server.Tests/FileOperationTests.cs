@@ -397,19 +397,20 @@ public sealed class FileOperationTests
         Assert.Equal("destination_exists", conflict.Code);
         var replaced = await RunAsync(operations, worker, f, new(1, kind, "source.jpg", "target.jpg", ReplaceExisting: true));
         Assert.Equal("completed", replaced.State);
-        Assert.NotNull(replaced.RecycleId);
+        Assert.NotNull(replaced.ReplacementId);
         Assert.Equal("new bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "target.jpg")));
-        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", replaced.RecycleId!, "content")));
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", replaced.ReplacementId!, "content")));
         Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@oldId AND TagId=99", new { oldId }));
         Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE Id=@oldId", new { oldId }));
-        var targetId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE PathKey='target.jpg'");
+        await Assert.ThrowsAsync<ApiRequestException>(() => new Luma.Server.Features.Media.OriginalContent(f.Database, f.Options).ServeAsync(oldId, false, new Microsoft.AspNetCore.Http.DefaultHttpContext(), default));
+        var targetId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE PathKey=@key", new { key = f.Root.Key("target.jpg") });
         Assert.NotEqual(oldId, targetId);
         if (kind == "move") Assert.Equal(sourceId, targetId);
         else Assert.True(File.Exists(Path.Combine(f.Root.Path, "source.jpg")));
-        var restored = await RunAsync(operations, worker, f, new(1, "restore", "target.jpg", "previous.jpg", replaced.RecycleId));
+        var restored = await RunAsync(operations, worker, f, new(1, "restore", "target.jpg", "previous.jpg", replaced.ReplacementId));
         Assert.Equal("completed", restored.State);
         Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "previous.jpg")));
-        Assert.Equal(oldId, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE PathKey='previous.jpg'"));
+        Assert.Equal(oldId, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE PathKey=@key", new { key = f.Root.Key("previous.jpg") }));
     }
 
     [Fact]
@@ -422,7 +423,7 @@ public sealed class FileOperationTests
         var accepted = await operations.QueueAsync(new(1, "copy", "source.jpg", "target.jpg", ReplaceExisting: true), default);
         var queued = await operations.GetAsync(accepted.Id, default);
         await operations.CancelAsync(accepted.Id, default);
-        Assert.Equal("cancelled", (await operations.GetAsync(queued.RecycleId!, default)).State);
+        Assert.Equal("cancelled", (await operations.GetAsync(queued.ReplacementId!, default)).State);
         Assert.Equal("new bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "source.jpg")));
         Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "target.jpg")));
     }

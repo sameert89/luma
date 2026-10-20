@@ -3767,6 +3767,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "replaceExisting",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -4606,6 +4613,10 @@
           "recycleId": {
             "type": "string",
             "nullable": true
+          },
+          "replaceExisting": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -5953,6 +5964,10 @@
           "requestId": {
             "type": "string",
             "nullable": true
+          },
+          "replaceExisting": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

@@ -12,6 +12,7 @@ public sealed class FileOperation
     public string Source { get; set; } = "";
     public string? Destination { get; set; }
     public string? RecycleId { get; set; }
+    public string? ReplacementId { get; set; }
     public string? UploadId { get; set; }
     public bool IsDirectory { get; set; }
     public long SourceSize { get; set; }

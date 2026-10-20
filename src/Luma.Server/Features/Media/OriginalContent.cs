@@ -22,7 +22,7 @@ public sealed class OriginalContent(Database database, IndexingOptions options)
         await using var db = await database.OpenAsync(ct);
         var source = await db.QuerySingleOrDefaultAsync<Source>(new CommandDefinition("""
             SELECT m.LibraryId,m.RelativePath,m.FileName FROM Media m
-            JOIN Libraries l ON l.Id=m.LibraryId WHERE m.Id=@id AND l.Enabled=1
+            JOIN Libraries l ON l.Id=m.LibraryId WHERE m.Id=@id AND l.Enabled=1 AND m.Availability<>'missing'
             """, new { id }, cancellationToken: ct));
         if (source is null) throw ApiRequestException.Missing();
         var root = options.Libraries.SingleOrDefault(x => x.Id == source.LibraryId);

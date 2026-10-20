@@ -171,7 +171,7 @@ test('Flick restores its own filters when switching applications', async ({ page
   await switchExperience(page, 'Flick')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await reels.getByRole('button', { name: 'Flick menu' }).click()
-  await reels.getByRole('button', { name: 'Filters', exact: true }).click()
+  await page.getByRole('button', { name: 'Filters', exact: true }).click()
   const sheet = page.getByRole('dialog', { name: 'Filters and sorting' })
   await sheet.getByLabel('Media type').selectOption('image')
   await sheet.getByLabel('Sort direction').selectOption('asc')

@@ -15,15 +15,17 @@ export function FileConflictDialog() {
   return (
     <Modal
       open={!!current}
-      onOpenChange={open => { if (!open) choose('skip') }}
+      onOpenChange={open => {
+        if (!open) choose('skip')
+      }}
       title="An item already exists"
       description="Choose how to handle this destination conflict."
     >
       <div className="space-y-4 p-5">
         <p className="break-words text-sm font-medium">{current?.target}</p>
         <p className="text-sm text-muted">
-          Replace moves the existing item and its contents to the recycle bin before publishing this item.
-          Skip keeps the destination unchanged.
+          Replace moves the existing item and its contents to the recycle bin before publishing this item. Skip keeps
+          the destination unchanged.
         </p>
         <label className="flex items-center gap-2 text-sm">
           <Checkbox checked={all} onChange={event => setAll(event.target.checked)} />

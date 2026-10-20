@@ -44,7 +44,7 @@ public sealed class UploadSessionTests
         var (_, uploads, _) = Services(f);
         await uploads.CreateAsync(new(1, "Photo.jpg", 3), default);
         var conflict = await Assert.ThrowsAsync<ApiRequestException>(() => uploads.CreateAsync(new(1, "photo.JPG", 3), default));
-        Assert.Equal("library_busy", conflict.Code);
+        Assert.Equal("path_busy", conflict.Code);
     }
 
     [Fact]
@@ -215,7 +215,7 @@ public sealed class UploadSessionTests
         var published = await operations.GetAsync(finalized.OperationId!, default);
         Assert.Equal("completed", published.State);
         Assert.Equal("new", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
-        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", published.RecycleId!, "content")));
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", published.ReplacementId!, "content")));
     }
 
 }

@@ -16,8 +16,8 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
     setPreparing(true)
     setMessage('Preparing uploads… You can close this dialog; uploads continue in Background jobs.')
     try {
-      await addUploads(files, libraryId, destination)
-      setMessage(`${files.length} files queued for upload. Follow progress in Background jobs.`)
+      const result = await addUploads(files, libraryId, destination)
+      setMessage(`${result.queued} files queued for upload.${result.skipped ? ` ${result.skipped} skipped.` : ''} Follow progress in Background jobs.`)
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not start upload.')
     } finally {

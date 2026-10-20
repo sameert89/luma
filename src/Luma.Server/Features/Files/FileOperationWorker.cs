@@ -29,7 +29,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                       AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
                       AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
                       AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
-                      AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.RecycleId=o.Id AND parent.Kind IN ('copy','move','upload'))
+                      AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.ReplacementId=o.Id)
                       ORDER BY o.CreatedAt LIMIT 1) AND State='queued' RETURNING *
                     """, cancellationToken: stoppingToken));
                 if (row is null) { await Task.Delay(500, stoppingToken); continue; }
@@ -72,9 +72,9 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 await StateAsync(row, row.State, ct);
             }
             var root = operations.WritableRoot(row.LibraryId, requireAvailable: false);
-            if (row.RecycleId is not null && row.Kind is "copy" or "move" or "upload")
+            if (row.ReplacementId is not null)
             {
-                var replacement = await operations.GetAsync(row.RecycleId, ct);
+                var replacement = await operations.GetAsync(row.ReplacementId, ct);
                 var replacementRecovering = replacement.State != "queued";
                 if (replacement.State == "queued") await StateAsync(replacement, "running", ct);
                 if (replacement.State != "completed")

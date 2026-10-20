@@ -96,7 +96,10 @@ public sealed class TaskQueueTests
         await using var f = await PipelineFixture.CreateAsync();
         await BrowsingTests.SeedAsync(f, 1);
         await using (var db = await f.Database.OpenAsync(default))
-            await db.ExecuteAsync("INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt,FailureCode) VALUES(40,1,'interrupted','2026-01-02','2026-01-02','interrupted')");
+            await db.ExecuteAsync("""
+                INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt,FailureCode) VALUES(40,1,'interrupted','2026-01-02','2026-01-02','interrupted');
+                INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt) VALUES(41,1,'completed','2026-01-03','2026-01-03');
+                """);
         await using var host = Host(f);
         using var client = host.CreateClient();
 

@@ -104,15 +104,19 @@ export async function addUploads(files: File[], libraryId: number, destination: 
     for (let depth = 1; depth <= parts.length; depth++)
       folders.add([destination, ...parts.slice(0, depth)].filter(Boolean).join('/'))
   }
+  const skippedFolders = new Set<string>()
   for (const source of folders) {
+    if ([...skippedFolders].some(folder => source === folder || source.startsWith(folder + '/'))) continue
     for (let attempt = 0; ; attempt++) {
       try {
-        const operation = await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
-          libraryId,
-          kind: 'mkdir',
-          source,
-        })
-        await waitForOperation(operation.id)
+        const operation = await withFileConflict(
+          replaceExisting => request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
+            libraryId, kind: 'mkdir', source, ...(replaceExisting ? { replaceExisting: true } : {}),
+          }),
+          { batch, target: source },
+        )
+        if (operation) await waitForOperation(operation.id)
+        else skippedFolders.add(source)
         break
       } catch (error) {
         if (error instanceof ApiError && error.status === 409) {
@@ -126,7 +130,10 @@ export async function addUploads(files: File[], libraryId: number, destination: 
       }
     }
   }
+  let skipped = 0
   for (const file of files.filter(file => !resumed.has(file))) {
+    const target = [destination, file.webkitRelativePath || file.name].filter(Boolean).join('/')
+    if ([...skippedFolders].some(folder => target.startsWith(folder + '/'))) { skipped++; continue }
     const key = `upload-${Date.now()}-${++sequence}`
     queue = [
       ...queue,
@@ -146,6 +153,7 @@ export async function addUploads(files: File[], libraryId: number, destination: 
     update(key, {})
   }
   pump()
+  return { queued: files.length - skipped, skipped }
 }
 function pump() {
   while (workers < 2) {
@@ -168,7 +176,9 @@ async function transfer(item: QueuedUpload) {
     const batch = item.batch ?? conflictBatch()
     let replacing = item.replaceExisting ?? false
     const options = {
-      batch, target: item.target, signal: controller.signal,
+      batch,
+      target: item.target,
+      signal: controller.signal,
       waiting: () => update(item.key, { state: 'waiting' }),
       conflicting: () => update(item.key, { state: 'conflict' }),
     }
@@ -177,8 +187,12 @@ async function transfer(item: QueuedUpload) {
       : await withFileConflict(async replaceExisting => {
           replacing ||= replaceExisting
           if (replacing) update(item.key, { replaceExisting: true })
+          update(item.key, { state: 'uploading' })
           const created = await request<Session>('/api/files/uploads', controller.signal, 'POST', {
-            libraryId: item.libraryId, target: item.target, sizeBytes: item.size, requestId,
+            libraryId: item.libraryId,
+            target: item.target,
+            sizeBytes: item.size,
+            requestId,
             ...(replacing ? { replaceExisting: true } : {}),
           })
           update(item.key, { state: 'uploading' })
@@ -235,7 +249,11 @@ async function transfer(item: QueuedUpload) {
           const finalized = await withFileConflict(async replaceExisting => {
             replacing ||= replaceExisting
             if (replacing) update(item.key, { replaceExisting: true })
-            return request<Session>(`/api/files/uploads/${id}/finalize${replacing ? '?replaceExisting=true' : ''}`, controller.signal, 'POST')
+            return request<Session>(
+              `/api/files/uploads/${id}/finalize${replacing ? '?replaceExisting=true' : ''}`,
+              controller.signal,
+              'POST',
+            )
           }, options)
           if (!finalized) {
             await request(`/api/files/uploads/${id}/cancel`, controller.signal, 'POST')
@@ -281,10 +299,23 @@ export async function uploadAction(key: string, action: 'pause' | 'resume' | 'ca
   try {
     let id = item.id
     if (!id && item.requestId) {
-      // The request ID is the durable session ID. Look it up without creating a
-      // new session when a queued/conflicting item is cancelled before admission.
-      try { id = (await request<Session>(`/api/files/uploads/${item.requestId}`)).id }
-      catch (error) { if (!(error instanceof ApiError) || error.status !== 404) throw error }
+      // Resolve a lost creation response by its stable ID. If admission is still
+      // in flight, the idempotent creation request serializes behind it before cancellation.
+      try {
+        id = (await request<Session>(`/api/files/uploads/${item.requestId}`)).id
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 404) throw error
+        if (['uploading', 'failed'].includes(item.state)) {
+          try {
+            id = (await request<Session>('/api/files/uploads', undefined, 'POST', {
+              libraryId: item.libraryId, target: item.target, sizeBytes: item.size, requestId: item.requestId,
+              ...(item.replaceExisting ? { replaceExisting: true } : {}),
+            })).id
+          } catch (admission) {
+            if (!(admission instanceof ApiError) || !['path_busy', 'destination_exists', 'upload_capacity'].includes(admission.problem?.code ?? '')) throw admission
+          }
+        }
+      }
     }
     if (id) await request(`/api/files/uploads/${id}/${action}`, undefined, 'POST')
     update(key, { id, state: action === 'pause' ? 'paused' : 'cancelled', controller: undefined })

@@ -28,7 +28,7 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         var destination = request.Destination is null ? null : MutationPaths.Normalize(request.Destination);
         if (request.Kind is "move" or "copy" && (destination is null || root.Key(source) == root.Key(destination) || root.Key(destination).StartsWith(root.Key(source) + '/', StringComparison.Ordinal) || root.Key(source).StartsWith(root.Key(destination) + '/', StringComparison.Ordinal)))
             throw ApiRequestException.Invalid("Source and destination must be distinct and must not contain one another.");
-        if (request.ReplaceExisting && request.Kind is not ("move" or "copy")) throw ApiRequestException.Invalid();
+        if (request.ReplaceExisting && request.Kind is not ("move" or "copy" or "mkdir")) throw ApiRequestException.Invalid();
         var operation = new FileOperation
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -86,13 +86,13 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         var checkedDestination = operation.Kind == "mkdir" ? operation.Source : operation.Destination;
         if (checkedDestination is not null)
         {
-            var targetPath = MutationPaths.Resolve(root, checkedDestination);
-            var replacing = request.ReplaceExisting && (File.Exists(targetPath) || Directory.Exists(targetPath));
+            var existingPath = await ExistingDestinationAsync(db, tx, root, checkedDestination, ct);
+            var replacing = request.ReplaceExisting && (existingPath is not null || await HasIndexedDestinationAsync(db, tx, root, checkedDestination, ct));
             EnsureDestination(root, checkedDestination, allowExisting: replacing);
             if (replacing)
             {
-                if (active.Length >= 499) throw new ApiRequestException(409, "queue_full", "Wait for queued file operations to finish before replacing more items.");
-                operation.RecycleId = await ReserveReplacementAsync(db, tx, root, checkedDestination, operation.IsDirectory, ct);
+                if (existingPath is not null && active.Length >= 499) throw new ApiRequestException(409, "queue_full", "Wait for queued file operations to finish before replacing more items.");
+                operation.ReplacementId = await ReserveReplacementAsync(db, tx, root, checkedDestination, operation.IsDirectory, ct);
             }
             if (!replacing && await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
                 SELECT EXISTS(SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND PathKey=@key UNION ALL SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0')
@@ -103,8 +103,8 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
                 throw new ApiRequestException(409, "indexed_destination_exists", "The destination has retained library metadata. Choose a different name.");
         }
         await db.ExecuteAsync(new CommandDefinition("""
-            INSERT INTO FileOperations(Id,LibraryId,Kind,Source,Destination,RecycleId,IsDirectory,SourceSize,SourceModifiedTicks,CreatedAt)
-            VALUES(@Id,@LibraryId,@Kind,@Source,@Destination,@RecycleId,@IsDirectory,@SourceSize,@SourceModifiedTicks,@CreatedAt);
+            INSERT INTO FileOperations(Id,LibraryId,Kind,Source,Destination,RecycleId,ReplacementId,IsDirectory,SourceSize,SourceModifiedTicks,CreatedAt)
+            VALUES(@Id,@LibraryId,@Kind,@Source,@Destination,@RecycleId,@ReplacementId,@IsDirectory,@SourceSize,@SourceModifiedTicks,@CreatedAt);
             """, operation, tx, cancellationToken: ct));
         if (operation.Kind is "copy" or "move" or "recycle" or "delete")
         {
@@ -141,7 +141,27 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
 
     internal static async Task<string> ReserveReplacementAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, string target, bool isDirectory, CancellationToken ct)
     {
-        var path = MutationPaths.Resolve(root, target);
+        var existing = await ExistingDestinationAsync(db, tx, root, target, ct);
+        if (existing is null)
+        {
+            var archived = await db.ExecuteScalarAsync<string?>(new CommandDefinition("""
+                SELECT Id FROM (
+                  SELECT o.Id,o.FinishedAt FROM Media m JOIN OperationMedia s ON s.MediaId=m.Id JOIN FileOperations o ON o.Id=s.OperationId
+                    WHERE m.LibraryId=@Id AND m.PathKey=@key AND m.Availability='missing' AND o.State='completed'
+                      AND (o.Kind='delete' OR (o.Kind='recycle' AND o.Restored=0))
+                  UNION ALL
+                  SELECT o.Id,o.FinishedAt FROM Folders f JOIN OperationFolders s ON s.FolderId=f.Id JOIN FileOperations o ON o.Id=s.OperationId
+                    WHERE f.LibraryId=@Id AND f.PathKey=@key AND f.Recycled=1 AND o.State='completed'
+                      AND (o.Kind='delete' OR (o.Kind='recycle' AND o.Restored=0))
+                  UNION ALL
+                  SELECT o.Id,o.FinishedAt FROM Comics c JOIN OperationComics s ON s.ComicId=c.Id JOIN FileOperations o ON o.Id=s.OperationId
+                    WHERE c.LibraryId=@Id AND c.PathKey=@key AND c.Availability='missing' AND o.State='completed'
+                      AND (o.Kind='delete' OR (o.Kind='recycle' AND o.Restored=0))
+                ) ORDER BY FinishedAt DESC LIMIT 1
+                """, new { root.Id, key = root.Key(target) }, tx, cancellationToken: ct));
+            return archived ?? throw new ApiRequestException(409, "indexed_destination_exists", "The destination has retained metadata without a recoverable file operation. Choose another name or resolve it before replacing.");
+        }
+        var path = MutationPaths.Resolve(root, existing);
         if (Directory.Exists(path) != isDirectory)
             throw new ApiRequestException(409, "destination_type_conflict", "Files and folders cannot replace one another. Skip this item or choose a different destination.");
         var replacement = new FileOperation
@@ -149,7 +169,7 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
             Id = Guid.NewGuid().ToString("N"),
             LibraryId = root.Id,
             Kind = "recycle",
-            Source = target,
+            Source = existing,
             IsDirectory = isDirectory,
             SourceSize = isDirectory ? 0 : new FileInfo(path).Length,
             SourceModifiedTicks = File.GetLastWriteTimeUtc(path).Ticks,
@@ -162,6 +182,28 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         await CaptureAsync(db, tx, root, replacement, ct);
         return replacement.Id;
     }
+
+    internal static async Task<string?> ExistingDestinationAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, string target, CancellationToken ct)
+    {
+        var path = MutationPaths.Resolve(root, target);
+        if (File.Exists(path) || Directory.Exists(path)) return target;
+        var indexed = await db.QueryFirstOrDefaultAsync<string>(new CommandDefinition("""
+            SELECT RelativePath FROM Media WHERE LibraryId=@Id AND PathKey=@key
+            UNION ALL SELECT RelativePath FROM Folders WHERE LibraryId=@Id AND PathKey=@key
+            UNION ALL SELECT RelativePath FROM Comics WHERE LibraryId=@Id AND PathKey=@key
+            LIMIT 1
+            """, new { root.Id, key = root.Key(target) }, tx, cancellationToken: ct));
+        if (indexed is null) return null;
+        path = MutationPaths.Resolve(root, indexed);
+        return File.Exists(path) || Directory.Exists(path) ? indexed : null;
+    }
+
+    internal static Task<bool> HasIndexedDestinationAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, string target, CancellationToken ct) =>
+        db.ExecuteScalarAsync<bool>(new CommandDefinition("""
+            SELECT EXISTS(SELECT 1 FROM Media WHERE LibraryId=@Id AND PathKey=@key)
+              OR EXISTS(SELECT 1 FROM Folders WHERE LibraryId=@Id AND PathKey=@key)
+              OR EXISTS(SELECT 1 FROM Comics WHERE LibraryId=@Id AND PathKey=@key)
+            """, new { root.Id, key = root.Key(target) }, tx, cancellationToken: ct));
 
     internal static bool PathsOverlap(LibraryOptions root, string first, string second)
     {
@@ -198,7 +240,7 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
     {
         await using var db = await OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
-        var replacement = await db.ExecuteScalarAsync<string?>(new CommandDefinition("SELECT RecycleId FROM FileOperations WHERE Id=@id AND State='queued' AND Kind IN ('copy','move','upload')", new { id }, tx, cancellationToken: ct));
+        var replacement = await db.ExecuteScalarAsync<string?>(new CommandDefinition("SELECT ReplacementId FROM FileOperations WHERE Id=@id AND State='queued'", new { id }, tx, cancellationToken: ct));
         if (await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='cancelled',FinishedAt=@now WHERE Id=@id AND State='queued'", new { id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct)) == 0)
             throw new ApiRequestException(409, "operation_started", "Only an operation that has not started can be cancelled.");
         if (replacement is not null)

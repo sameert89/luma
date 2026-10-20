@@ -145,23 +145,30 @@ export function FileToolbar({
         }
       } else if (clipboard && location.data) {
         for (const [index, item] of clipboard.entries.entries()) {
-          if (controller?.signal.aborted) { failed.push(...clipboard.entries.slice(index)); break }
+          if (controller?.signal.aborted) {
+            failed.push(...clipboard.entries.slice(index))
+            break
+          }
           try {
             const destination = [location.data.relativePath, item.relativePath.split('/').at(-1)]
               .filter(Boolean)
               .join('/')
             const result = await withFileConflict(
-              replaceExisting => request<OperationAccepted>('/api/files/operations', controller?.signal, 'POST', {
-                libraryId: location.data!.libraryId,
-                kind: clipboard.kind,
-                source: item.relativePath,
-                destination,
-                ...(replaceExisting ? { replaceExisting: true } : {}),
-              }),
+              replaceExisting =>
+                request<OperationAccepted>('/api/files/operations', controller?.signal, 'POST', {
+                  libraryId: location.data!.libraryId,
+                  kind: clipboard.kind,
+                  source: item.relativePath,
+                  destination,
+                  ...(replaceExisting ? { replaceExisting: true } : {}),
+                }),
               { batch, target: destination, signal: controller?.signal },
             )
             if (result) queued++
-            else { skipped++; failed.push(item) }
+            else {
+              skipped++
+              failed.push(item)
+            }
           } catch (error) {
             failed.push(item)
             if (!controller?.signal.aborted) setError(errorMessage(error))
@@ -178,7 +185,9 @@ export function FileToolbar({
       setError(errorMessage(error))
     } finally {
       if (queued || skipped)
-        setMessage(`${queued} operation${queued === 1 ? '' : 's'} queued.${skipped ? ` ${skipped} skipped.` : ''} Follow progress in Background jobs.`)
+        setMessage(
+          `${queued} operation${queued === 1 ? '' : 's'} queued.${skipped ? ` ${skipped} skipped.` : ''} Follow progress in Background jobs.`,
+        )
       pasteController.current = null
       void client.invalidateQueries({ queryKey: ['tasks'] })
       setBusy(false)

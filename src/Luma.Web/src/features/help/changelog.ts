@@ -6,6 +6,17 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.10',
+    date: '2026-10-21',
+    headline: 'Independent uploads and clear destination conflicts',
+    changes: [
+      'Uploads reserve their own paths instead of blocking unrelated file work across the library. Temporary path reservations wait automatically and remain cancellable.',
+      'Upload, Move and Copy ask before replacing an existing destination. Choose Replace or Skip for one conflict or apply the choice to all remaining conflicts in that batch. The dialog works even after closing the upload window.',
+      'Replacement journals the old destination into the recycle bin before publication. Existing tags and identities remain attached to the recycled item; the incoming copy or upload receives a separate identity.',
+      'Database schema advances to 34 for replacement dependencies. Back up the database before upgrading; returning to an earlier release requires its matching pre-upgrade database and media backup.',
+    ],
+  },
+  {
     version: '2.0.0-beta.9',
     date: '2026-10-21',
     headline: 'Delete directly from Flick',

@@ -184,7 +184,7 @@ test('Flick menu deletion advances, falls back and empties without reopening que
     posts.push(route.request().postDataJSON())
     return route.fulfill({ status: 202, json: { id: 'queued-flick-delete' } })
   })
-  await page.goto('/flick?libraryId=1&mediaType=video&sort=name&order=asc&media=10')
+  await page.goto('/flick?view=reels&libraryId=1&mediaType=video&sort=name&order=asc&media=10')
   await expect(page.getByLabel(items[1].fileName, { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Flick menu', exact: true }).click()
   const flick = page.getByRole('region', { name: 'Flick', exact: true })

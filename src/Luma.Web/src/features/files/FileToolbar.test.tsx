@@ -63,7 +63,7 @@ test('cut survives navigation and pastes into the browsed destination without a 
   view.folder(5)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Paste (1)' })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: 'Paste (1)' }))
-  expect(request).toHaveBeenCalledWith('/api/files/operations', undefined, 'POST', {
+  expect(request).toHaveBeenCalledWith('/api/files/operations', expect.any(AbortSignal), 'POST', {
     libraryId: 1,
     kind: 'move',
     source: 'photos/one.jpg',

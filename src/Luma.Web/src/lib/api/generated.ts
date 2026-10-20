@@ -1444,6 +1444,8 @@ export interface components {
             source: string;
             destination?: string | null;
             recycleId?: string | null;
+            /** @default false */
+            replaceExisting: boolean;
         };
         FileRecoveryEvidence: {
             operation: components["schemas"]["FileOperation"];
@@ -1858,6 +1860,8 @@ export interface components {
             /** Format: int64 */
             sizeBytes: number;
             requestId?: string | null;
+            /** @default false */
+            replaceExisting: boolean;
         };
         UploadSession: {
             id?: string;
@@ -4119,7 +4123,9 @@ export interface operations {
     };
     FinalizeUploadSession: {
         parameters: {
-            query?: never;
+            query?: {
+                replaceExisting?: boolean;
+            };
             header?: never;
             path: {
                 id: string;
