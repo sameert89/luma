@@ -429,3 +429,10 @@ Beta.3 adds migration 33 (comic tags and source visibility). Stop Luma and back 
 SQLite before upgrading. Returning to beta.2 or older requires restoring the
 matching database backup; the migration guard rejects newer schemas. Keep a
 matching original-media backup when rolling back file operations as well.
+
+
+### Schema 34 and replacement upgrades
+
+Beta.10 adds schema 34 for durable replacement dependencies. Stop Luma and back up SQLite together with the matching originals, trash and staging before upgrading. An older binary refuses schema 34; rollback requires restoring its matching pre-upgrade database and media-volume backup.
+
+Upload, Move and Copy present Replace/Skip decisions for real destination conflicts. Replace preserves the previous item in the recycle bin; it does not merge an existing destination folder's contents. A batch choice applies only to that batch. Independent uploads no longer reserve the entire library, while overlapping paths and unresolved operation evidence remain protected.

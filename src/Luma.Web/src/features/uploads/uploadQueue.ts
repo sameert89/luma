@@ -189,7 +189,7 @@ async function transfer(item: QueuedUpload) {
       waiting: () => update(item.key, { state: 'waiting' }),
       conflicting: () => update(item.key, { state: 'conflict' }),
     }
-    let session = item.id
+    const admitted: Session | null = item.id
       ? await request<Session>(`/api/files/uploads/${item.id}`, controller.signal)
       : await withFileConflict(async replaceExisting => {
           replacing ||= replaceExisting
@@ -205,10 +205,11 @@ async function transfer(item: QueuedUpload) {
           update(item.key, { state: 'uploading' })
           return created
         }, options)
-    if (!session) {
+    if (!admitted) {
       update(item.key, { state: 'skipped', controller: undefined, file: undefined })
       return
     }
+    let session: Session = admitted
     update(item.key, { id: session.id, offset: session.committedOffset })
     if (session.state === 'paused')
       session = await request<Session>(`/api/files/uploads/${session.id}/resume`, controller.signal, 'POST')
@@ -252,8 +253,8 @@ async function transfer(item: QueuedUpload) {
       controller.signal.throwIfAborted()
       try {
         if (session.state !== 'finalizing') {
-          const id = session.id
-          const finalized = await withFileConflict(async replaceExisting => {
+          const id: string = session.id
+          const finalized: Session | null = await withFileConflict<Session>(async replaceExisting => {
             replacing ||= replaceExisting
             if (replacing) update(item.key, { replaceExisting: true })
             return request<Session>(

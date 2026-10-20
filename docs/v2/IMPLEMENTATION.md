@@ -242,3 +242,14 @@ For targets outside the retained cache, MediaNeighbors returns a signed pageCurs
 Queued viewer deletion advances in the same mounted player to the next item, then the previous one when at the end. Session-local links skip already queued removals while filesystem work catches up. Closing is reserved for an exhausted result list. Rename uses the existing journaled move endpoint with a same-parent destination and collision protections, for one selected file/folder or the current viewer item. Completed file tasks refresh active details and neighbors as well as Gallery.
 
 The file toolbar is available in folder, search and tag-result views. Selection resolution provides each source library ID before queueing deletion and rejects read-only selections before submitting mutations. Destination-dependent actions stay disabled without an open folder. No database or API schema changes are added.
+
+
+### beta.9 Flick deletion and beta.10 upload conflict handling
+
+Flick reuses the queued Delete confirmation from Gallery. Playback and auto-scroll suspend through dialog history cleanup, then navigation advances to the next available item or the previous one at the end. Session-local links skip queued deletions and an exhausted view clears its saved/current ID. The duplicate submenu Filters action is removed; header Filters remains.
+
+The upload admission/finalization library-wide operation guards caused unrelated files to conflict while another upload published. Admission, finalization and ordinary file intents now compare normalized source/destination paths, retaining case-policy, overlap, discovery, capacity and recovery protections. Temporary path/capacity conflicts wait with cancellation rather than exhausting a short manual retry cycle.
+
+A shared global dialog offers Replace or Skip and apply-to-all for the current batch, including after the upload dialog closes. Explicit replacement journals both the incoming intent and its recycle dependency in one SQLite transaction. The single worker owns both phases, excludes dependent steps from independent claiming, preserves the old content and IDs/tags, releases their public path keys, then publishes without filesystem overwrite. Cancellation before execution leaves both originals untouched. Retained recycled metadata can be released through its completed journal evidence. Missing original-media IDs cannot resolve to the incoming file.
+
+Migration 34 adds a separate ReplacementId relationship and reverse snapshot indexes. Restore understands the reserved recycled path keys and remains idempotent; older binaries reject this schema. Rollback requires a matching pre-upgrade database/media backup. Tests cover distinct upload publication, overlap/case policies, file/folder replacement and restore, cancellation, Skip/Replace batch choices, and global dialog lifecycle.

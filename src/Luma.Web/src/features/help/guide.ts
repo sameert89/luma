@@ -177,7 +177,7 @@ export const guideSections: GuideSection[] = [
             label: 'File management',
             name: 'File and folder changes',
             where: 'Gallery, inside a configured writable library',
-            what: 'Use the file-management icon beside Select to reveal or hide Cut, Copy, Paste, Rename, Delete, New folder and Upload. Select media or folder checkboxes, choose Cut or Copy, browse into a destination folder, then Paste. The clipboard survives folder navigation; cut clears after successful queueing, while copy remains available. Ctrl/Cmd+X, C and V and Delete work while file management is open, outside text fields and dialogs. Paste stays within the source library and never overwrites collisions. Rename works for one selected file or folder and asks for its new name. The expanded viewer menu also offers Rename and Delete; deletion advances to the next item, or the previous one at the end, and closes only when none remain. File management also works in search and tag results; open a destination folder to paste, upload or create a folder. New folder asks for a name in the current folder. Delete recycles by default and queues immediately after confirmation; progress and failures appear in Background jobs. Permanent deletion must be explicitly selected. Read-only libraries disable the file-management icon.',
+            what: 'Use the file-management icon beside Select to reveal or hide Cut, Copy, Paste, Rename, Delete, New folder and Upload. Select media or folder checkboxes, choose Cut or Copy, browse into a destination folder, then Paste. The clipboard survives folder navigation; cut clears after successful queueing, while copy remains available. Ctrl/Cmd+X, C and V and Delete work while file management is open, outside text fields and dialogs. Paste stays within the source library. Upload, Move and Copy ask you to Replace or Skip an existing destination, for one item or all remaining conflicts in that batch. Replace moves the previous item and its contents to the recycle bin; it does not merge folder contents. Temporary path reservations wait automatically and can be cancelled. Rename works for one selected file or folder and asks for its new name. The expanded viewer menu also offers Rename and Delete; deletion advances to the next item, or the previous one at the end, and closes only when none remain. File management also works in search and tag results; open a destination folder to paste, upload or create a folder. New folder asks for a name in the current folder. Delete recycles by default and queues immediately after confirmation; progress and failures appear in Background jobs. Permanent deletion must be explicitly selected. Read-only libraries disable the file-management icon.',
           },
           {
             label: 'Upload files / Upload folder',
@@ -341,7 +341,7 @@ export const guideSections: GuideSection[] = [
           {
             icons: [SlidersHorizontal],
             name: 'Filters',
-            where: 'Header, right of search (in Flick: the Flick menu)',
+            where: 'Header, right of search in Gallery and Flick',
             what: 'Opens Filters and sorting to limit results by folder, tags, search, media type, favourite state, date, size and more.',
           },
           {
@@ -581,7 +581,7 @@ export const guideSections: GuideSection[] = [
             icons: [Trash2],
             name: 'Delete file',
             where: 'Gallery viewer → expanded Viewer menu',
-            what: 'Confirm recycling of the displayed photo or video, or explicitly select permanent deletion. The operation is queued and the viewer returns to Gallery near the next item; follow progress in Background jobs. Read-only libraries disable deletion, and the action is hidden when file management is off.',
+            what: 'Confirm recycling of the displayed photo or video, or explicitly select permanent deletion. The operation is queued and the viewer advances to the next item, or the previous one at the end; it closes only when no items remain. Flick offers the same action in its three-dot menu. Follow progress in Background jobs. Read-only libraries disable deletion, and the action is hidden when file management is off.',
           },
           {
             icons: [Info],
