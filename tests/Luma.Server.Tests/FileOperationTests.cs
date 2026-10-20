@@ -379,4 +379,62 @@ public sealed class FileOperationTests
     }
 
     private sealed class SimulatedCrash : Exception;
+    [Theory]
+    [InlineData("copy")]
+    [InlineData("move")]
+    public async Task Explicit_replacement_preserves_the_old_file_and_tags_in_recycle_bin(string kind)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "source.jpg"), "new bytes");
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "target.jpg"), "old bytes");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var oldId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='target.jpg'");
+        var sourceId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='source.jpg'");
+        await db.ExecuteAsync("INSERT INTO Tags(Id,Name,NormalizedKey) VALUES(99,'old','OLD'); INSERT INTO MediaTags VALUES(@oldId,99)", new { oldId });
+        var (operations, worker) = Services(f);
+        var conflict = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, kind, "source.jpg", "target.jpg"), default));
+        Assert.Equal("destination_exists", conflict.Code);
+        var replaced = await RunAsync(operations, worker, f, new(1, kind, "source.jpg", "target.jpg", ReplaceExisting: true));
+        Assert.Equal("completed", replaced.State);
+        Assert.NotNull(replaced.RecycleId);
+        Assert.Equal("new bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "target.jpg")));
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", replaced.RecycleId!, "content")));
+        Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM MediaTags WHERE MediaId=@oldId AND TagId=99", new { oldId }));
+        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE Id=@oldId", new { oldId }));
+        var targetId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE PathKey='target.jpg'");
+        Assert.NotEqual(oldId, targetId);
+        if (kind == "move") Assert.Equal(sourceId, targetId);
+        else Assert.True(File.Exists(Path.Combine(f.Root.Path, "source.jpg")));
+        var restored = await RunAsync(operations, worker, f, new(1, "restore", "target.jpg", "previous.jpg", replaced.RecycleId));
+        Assert.Equal("completed", restored.State);
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "previous.jpg")));
+        Assert.Equal(oldId, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE PathKey='previous.jpg'"));
+    }
+
+    [Fact]
+    public async Task Cancelling_a_queued_replacement_keeps_both_originals_in_place()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "source.jpg"), "new bytes");
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "target.jpg"), "old bytes");
+        var (operations, _) = Services(f);
+        var accepted = await operations.QueueAsync(new(1, "copy", "source.jpg", "target.jpg", ReplaceExisting: true), default);
+        var queued = await operations.GetAsync(accepted.Id, default);
+        await operations.CancelAsync(accepted.Id, default);
+        Assert.Equal("cancelled", (await operations.GetAsync(queued.RecycleId!, default)).State);
+        Assert.Equal("new bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "source.jpg")));
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "target.jpg")));
+    }
+
+    [Fact]
+    public async Task Replacing_a_destination_that_contains_the_source_is_rejected()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album", "nested"));
+        var (operations, _) = Services(f);
+        await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "album/nested", "album", ReplaceExisting: true), default));
+        Assert.True(Directory.Exists(Path.Combine(f.Root.Path, "album", "nested")));
+    }
+
 }

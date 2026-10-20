@@ -19,7 +19,7 @@ public sealed class FileRecovery(FileOperations operations)
     private static FileRecoveryEvidence Inspect(FileOperation row, LibraryOptions root)
     {
         var category = row.Kind == "upload" ? MutationPaths.UploadDirectory : row.Kind is "recycle" or "restore" or "purge" ? MutationPaths.TrashDirectory : MutationPaths.OperationsDirectory;
-        var staging = MutationPaths.Internal(root, category, row.UploadId ?? row.RecycleId ?? row.Id);
+        var staging = MutationPaths.Internal(root, category, row.UploadId ?? (row.Kind is "restore" or "purge" ? row.RecycleId : null) ?? row.Id);
         var source = MutationPaths.Resolve(root, row.Source);
         var destination = row.Kind == "mkdir" ? source : row.Destination is null ? null : MutationPaths.Resolve(root, row.Destination);
         var staged = Exists(staging);

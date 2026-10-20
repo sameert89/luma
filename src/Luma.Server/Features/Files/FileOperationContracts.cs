@@ -1,6 +1,6 @@
 namespace Luma.Server.Features.Files;
 
-public sealed record FileOperationRequest(long LibraryId, string Kind, string Source, string? Destination = null, string? RecycleId = null);
+public sealed record FileOperationRequest(long LibraryId, string Kind, string Source, string? Destination = null, string? RecycleId = null, bool ReplaceExisting = false);
 public sealed record FileOperationAccepted(string Id);
 public sealed record FileCapability(long LibraryId, bool Writable);
 public sealed record FileCapabilities(bool AccessConfigured, IReadOnlyList<FileCapability> Libraries);

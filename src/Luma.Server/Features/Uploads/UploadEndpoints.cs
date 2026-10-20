@@ -22,8 +22,8 @@ public static class UploadEndpoints
             if (limit is { IsReadOnly: false }) limit.MaxRequestBodySize = UploadSessions.ChunkBytes;
             return TypedResults.Ok(await sessions.AppendAsync(id, offset, context.Request.Body, length, ct));
         }).WithName("AppendUploadChunk");
-        uploads.MapPost("/{id}/finalize", async (string id, UploadSessions sessions, CancellationToken ct) =>
-            TypedResults.Ok(await sessions.FinalizeAsync(id, ct))).WithName("FinalizeUploadSession");
+        uploads.MapPost("/{id}/finalize", async (string id, bool? replaceExisting, UploadSessions sessions, CancellationToken ct) =>
+            TypedResults.Ok(await sessions.FinalizeAsync(id, ct, replaceExisting ?? false))).WithName("FinalizeUploadSession");
         uploads.MapPost("/{id}/{action}", async (string id, string action, UploadSessions sessions, CancellationToken ct) =>
             TypedResults.Ok(await sessions.ChangeStateAsync(id, action, ct))).WithName("ChangeUploadSessionState");
     }

@@ -26,8 +26,9 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         if (request.Kind is not ("mkdir" or "copy" or "move" or "recycle" or "delete" or "restore" or "purge")) throw ApiRequestException.Invalid();
         var source = MutationPaths.Normalize(request.Source);
         var destination = request.Destination is null ? null : MutationPaths.Normalize(request.Destination);
-        if (request.Kind is "move" or "copy" && (destination is null || root.Key(source) == root.Key(destination) || root.Key(destination).StartsWith(root.Key(source) + '/', StringComparison.Ordinal)))
-            throw ApiRequestException.Invalid("Choose a distinct destination outside the source subtree.");
+        if (request.Kind is "move" or "copy" && (destination is null || root.Key(source) == root.Key(destination) || root.Key(destination).StartsWith(root.Key(source) + '/', StringComparison.Ordinal) || root.Key(source).StartsWith(root.Key(destination) + '/', StringComparison.Ordinal)))
+            throw ApiRequestException.Invalid("Source and destination must be distinct and must not contain one another.");
+        if (request.ReplaceExisting && request.Kind is not ("move" or "copy")) throw ApiRequestException.Invalid();
         var operation = new FileOperation
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -85,8 +86,15 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         var checkedDestination = operation.Kind == "mkdir" ? operation.Source : operation.Destination;
         if (checkedDestination is not null)
         {
-            EnsureDestination(root, checkedDestination);
-            if (await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
+            var targetPath = MutationPaths.Resolve(root, checkedDestination);
+            var replacing = request.ReplaceExisting && (File.Exists(targetPath) || Directory.Exists(targetPath));
+            EnsureDestination(root, checkedDestination, allowExisting: replacing);
+            if (replacing)
+            {
+                if (active.Length >= 499) throw new ApiRequestException(409, "queue_full", "Wait for queued file operations to finish before replacing more items.");
+                operation.RecycleId = await ReserveReplacementAsync(db, tx, root, checkedDestination, operation.IsDirectory, ct);
+            }
+            if (!replacing && await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
                 SELECT EXISTS(SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND PathKey=@key UNION ALL SELECT 1 FROM Media WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0')
                   OR EXISTS(SELECT 1 FROM Folders WHERE LibraryId=@LibraryId AND PathKey=@key UNION ALL SELECT 1 FROM Folders WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0')
                   OR EXISTS(SELECT 1 FROM Comics WHERE LibraryId=@LibraryId AND PathKey=@key UNION ALL SELECT 1 FROM Comics WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0')
@@ -100,15 +108,7 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
             """, operation, tx, cancellationToken: ct));
         if (operation.Kind is "copy" or "move" or "recycle" or "delete")
         {
-            // SQL prefix matching avoids loading a large subtree into application memory.
-            await db.ExecuteAsync(new CommandDefinition("""
-                INSERT INTO OperationMedia SELECT @Id,Id,RelativePath,Availability FROM Media WHERE LibraryId=@LibraryId AND PathKey=@key
-                  UNION ALL SELECT @Id,Id,RelativePath,Availability FROM Media WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
-                INSERT INTO OperationComics SELECT @Id,Id,RelativePath,Availability FROM Comics WHERE LibraryId=@LibraryId AND PathKey=@key
-                  UNION ALL SELECT @Id,Id,RelativePath,Availability FROM Comics WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
-                INSERT INTO OperationFolders SELECT @Id,Id,RelativePath FROM Folders WHERE LibraryId=@LibraryId AND PathKey=@key
-                  UNION ALL SELECT @Id,Id,RelativePath FROM Folders WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
-                """, new { operation.Id, operation.LibraryId, key = root.Key(operation.Source) }, tx, cancellationToken: ct));
+            await CaptureAsync(db, tx, root, operation, ct);
         }
         tx.Commit();
         return new(operation.Id);
@@ -126,6 +126,43 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         catch { await db.DisposeAsync(); throw; }
     }
 
+    internal static async Task CaptureAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, FileOperation operation, CancellationToken ct)
+    {
+        // SQL prefix matching avoids loading a large subtree into application memory.
+        await db.ExecuteAsync(new CommandDefinition("""
+            INSERT INTO OperationMedia SELECT @Id,Id,RelativePath,Availability FROM Media WHERE LibraryId=@LibraryId AND PathKey=@key
+              UNION ALL SELECT @Id,Id,RelativePath,Availability FROM Media WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
+            INSERT INTO OperationComics SELECT @Id,Id,RelativePath,Availability FROM Comics WHERE LibraryId=@LibraryId AND PathKey=@key
+              UNION ALL SELECT @Id,Id,RelativePath,Availability FROM Comics WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
+            INSERT INTO OperationFolders SELECT @Id,Id,RelativePath FROM Folders WHERE LibraryId=@LibraryId AND PathKey=@key
+              UNION ALL SELECT @Id,Id,RelativePath FROM Folders WHERE LibraryId=@LibraryId AND PathKey>=@key||'/' AND PathKey<@key||'0';
+            """, new { operation.Id, operation.LibraryId, key = root.Key(operation.Source) }, tx, cancellationToken: ct));
+    }
+
+    internal static async Task<string> ReserveReplacementAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, string target, bool isDirectory, CancellationToken ct)
+    {
+        var path = MutationPaths.Resolve(root, target);
+        if (Directory.Exists(path) != isDirectory)
+            throw new ApiRequestException(409, "destination_type_conflict", "Files and folders cannot replace one another. Skip this item or choose a different destination.");
+        var replacement = new FileOperation
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            LibraryId = root.Id,
+            Kind = "recycle",
+            Source = target,
+            IsDirectory = isDirectory,
+            SourceSize = isDirectory ? 0 : new FileInfo(path).Length,
+            SourceModifiedTicks = File.GetLastWriteTimeUtc(path).Ticks,
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O")
+        };
+        await db.ExecuteAsync(new CommandDefinition("""
+            INSERT INTO FileOperations(Id,LibraryId,Kind,Source,IsDirectory,SourceSize,SourceModifiedTicks,CreatedAt)
+            VALUES(@Id,@LibraryId,@Kind,@Source,@IsDirectory,@SourceSize,@SourceModifiedTicks,@CreatedAt);
+            """, replacement, tx, cancellationToken: ct));
+        await CaptureAsync(db, tx, root, replacement, ct);
+        return replacement.Id;
+    }
+
     internal static bool PathsOverlap(LibraryOptions root, string first, string second)
     {
         var a = root.Key(first);
@@ -133,10 +170,10 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         return a == b || a.StartsWith(b + '/', StringComparison.Ordinal) || b.StartsWith(a + '/', StringComparison.Ordinal);
     }
 
-    internal static void EnsureDestination(LibraryOptions root, string relative)
+    internal static void EnsureDestination(LibraryOptions root, string relative, bool allowExisting = false)
     {
         var path = MutationPaths.Resolve(root, relative);
-        if (File.Exists(path) || Directory.Exists(path)) throw new ApiRequestException(409, "destination_exists", "The destination already exists. Choose a different name.");
+        if (!allowExisting && (File.Exists(path) || Directory.Exists(path))) throw new ApiRequestException(409, "destination_exists", "The destination already exists. Choose a different name.");
         var parent = Path.GetDirectoryName(path)!;
         if (!Directory.Exists(parent)) throw ApiRequestException.Invalid("The destination folder does not exist.");
     }
@@ -160,7 +197,12 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
     public async Task CancelAsync(string id, CancellationToken ct)
     {
         await using var db = await OpenJournalAsync(ct);
-        if (await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='cancelled',FinishedAt=@now WHERE Id=@id AND State='queued'", new { id, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct)) == 0)
+        using var tx = db.BeginTransaction();
+        var replacement = await db.ExecuteScalarAsync<string?>(new CommandDefinition("SELECT RecycleId FROM FileOperations WHERE Id=@id AND State='queued' AND Kind IN ('copy','move','upload')", new { id }, tx, cancellationToken: ct));
+        if (await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='cancelled',FinishedAt=@now WHERE Id=@id AND State='queued'", new { id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct)) == 0)
             throw new ApiRequestException(409, "operation_started", "Only an operation that has not started can be cancelled.");
+        if (replacement is not null)
+            await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='cancelled',FinishedAt=@now WHERE Id=@replacement AND State='queued'", new { replacement, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+        tx.Commit();
     }
 }

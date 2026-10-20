@@ -5,7 +5,7 @@ using Luma.Server.Http;
 
 namespace Luma.Server.Features.Uploads;
 
-public sealed record UploadRequest(long LibraryId, string Target, long SizeBytes, string? RequestId = null);
+public sealed record UploadRequest(long LibraryId, string Target, long SizeBytes, string? RequestId = null, bool ReplaceExisting = false);
 public sealed class UploadSession
 {
     public string Id { get; set; } = "";
@@ -64,7 +64,10 @@ public sealed class UploadSessions(Database database, FileOperations operations,
             // rather than SQLite's ASCII-only upper/collation behavior.
             if (activeTargets.Any(existing => FileOperations.PathsOverlap(root, existing, target)))
                 throw new ApiRequestException(409, "library_busy", "An upload already reserves this destination.");
-            FileOperations.EnsureDestination(root, target);
+            var targetPath = MutationPaths.Resolve(root, target);
+            if (request.ReplaceExisting && Directory.Exists(targetPath))
+                throw new ApiRequestException(409, "destination_type_conflict", "A file cannot replace a folder. Skip this item or choose a different destination.");
+            FileOperations.EnsureDestination(root, target, allowExisting: request.ReplaceExisting);
             var now = DateTimeOffset.UtcNow.ToString("O");
             var session = new UploadSession { Id = request.RequestId ?? Guid.NewGuid().ToString("N"), LibraryId = root.Id, Target = target, SizeBytes = request.SizeBytes, CreatedAt = now, UpdatedAt = now };
             await db.ExecuteAsync(new CommandDefinition("INSERT INTO UploadSessions(Id,LibraryId,Target,SizeBytes,CreatedAt,UpdatedAt) VALUES(@Id,@LibraryId,@Target,@SizeBytes,@CreatedAt,@UpdatedAt)", session, tx, cancellationToken: ct));
@@ -153,7 +156,7 @@ public sealed class UploadSessions(Database database, FileOperations operations,
         finally { gate.Release(); }
     }
 
-    public async Task<UploadSession> FinalizeAsync(string id, CancellationToken ct)
+    public async Task<UploadSession> FinalizeAsync(string id, CancellationToken ct, bool replaceExisting = false)
     {
         var gate = Stripe(id);
         await gate.WaitAsync(ct);
@@ -173,7 +176,10 @@ public sealed class UploadSessions(Database database, FileOperations operations,
                 empty.Flush(true);
             }
             if (!File.Exists(path) || new FileInfo(path).Length != session.SizeBytes) throw new ApiRequestException(409, "upload_staging_incomplete", "The uploaded file size does not match the durable session.");
-            FileOperations.EnsureDestination(root, session.Target);
+            var targetPath = MutationPaths.Resolve(root, session.Target);
+            if (replaceExisting && Directory.Exists(targetPath))
+                throw new ApiRequestException(409, "destination_type_conflict", "A file cannot replace a folder. Skip this item or choose a different destination.");
+            FileOperations.EnsureDestination(root, session.Target, allowExisting: replaceExisting);
             await using var db = await operations.OpenJournalAsync(ct);
             using var tx = db.BeginTransaction();
             var active = (await db.QueryAsync<FileOperation>(new CommandDefinition($"SELECT * FROM FileOperations WHERE LibraryId=@LibraryId AND State IN ({FileOperations.ActiveStates}) LIMIT 501", session, tx, cancellationToken: ct))).ToArray();
@@ -182,12 +188,18 @@ public sealed class UploadSessions(Database database, FileOperations operations,
                 throw new ApiRequestException(409, "library_busy", "Resolve the operation needing attention before publishing to this library.");
             if (active.Any(operation => new[] { operation.Source, operation.Destination }.OfType<string>().Any(candidate => FileOperations.PathsOverlap(root, candidate, session.Target))))
                 throw new ApiRequestException(409, "path_busy", "A queued operation already uses this upload destination. Wait for it to finish.");
+            string? replacementId = null;
+            if (replaceExisting && File.Exists(targetPath))
+            {
+                if (active.Length >= 499) throw new ApiRequestException(409, "queue_full", "Wait for queued file operations to finish before replacing more items.");
+                replacementId = await FileOperations.ReserveReplacementAsync(db, tx, root, session.Target, isDirectory: false, ct);
+            }
             var operationId = Guid.NewGuid().ToString("N");
             await db.ExecuteAsync(new CommandDefinition("""
-                INSERT INTO FileOperations(Id,LibraryId,Kind,Source,Destination,UploadId,IsDirectory,SourceSize,SourceModifiedTicks,CreatedAt)
-                  VALUES(@operationId,@LibraryId,'upload',@Target,@Target,@Id,0,@SizeBytes,@modified,@now);
+                INSERT INTO FileOperations(Id,LibraryId,Kind,Source,Destination,UploadId,RecycleId,IsDirectory,SourceSize,SourceModifiedTicks,CreatedAt)
+                  VALUES(@operationId,@LibraryId,'upload',@Target,@Target,@Id,@replacementId,0,@SizeBytes,@modified,@now);
                 UPDATE UploadSessions SET State='finalizing',OperationId=@operationId,UpdatedAt=@now WHERE Id=@Id;
-                """, new { session.Id, session.LibraryId, session.Target, session.SizeBytes, operationId, modified = File.GetLastWriteTimeUtc(path).Ticks, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+                """, new { session.Id, session.LibraryId, session.Target, session.SizeBytes, operationId, replacementId, modified = File.GetLastWriteTimeUtc(path).Ticks, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
             tx.Commit();
             session.State = "finalizing"; session.OperationId = operationId;
             return session;

@@ -195,4 +195,27 @@ public sealed class UploadSessionTests
         Assert.Equal("waitingForClient", (await uploads.CreateAsync(new(1, "sibling/new.jpg", 0), default)).State);
     }
 
+    [Fact]
+    public async Task Replacing_an_upload_keeps_the_old_file_until_journaled_publication_and_recycles_it()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "old bytes");
+        await f.ScanAsync();
+        var (operations, uploads, worker) = Services(f);
+        await Assert.ThrowsAsync<ApiRequestException>(() => uploads.CreateAsync(new(1, "photo.jpg", 3), default));
+        var upload = await uploads.CreateAsync(new(1, "photo.jpg", 3, ReplaceExisting: true), default);
+        await uploads.AppendAsync(upload.Id, 0, new MemoryStream("new"u8.ToArray()), 3, default);
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
+        await Assert.ThrowsAsync<ApiRequestException>(() => uploads.FinalizeAsync(upload.Id, default));
+        var finalized = await uploads.FinalizeAsync(upload.Id, default, replaceExisting: true);
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE FileOperations SET State='running' WHERE Id=@Id", new { Id = finalized.OperationId });
+        await worker.ExecuteOperationAsync(await operations.GetAsync(finalized.OperationId!, default), false, default);
+        var published = await operations.GetAsync(finalized.OperationId!, default);
+        Assert.Equal("completed", published.State);
+        Assert.Equal("new", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
+        Assert.Equal("old bytes", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-trash", published.RecycleId!, "content")));
+    }
+
 }

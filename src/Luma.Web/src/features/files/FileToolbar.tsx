@@ -1,5 +1,6 @@
+import { conflictBatch, withFileConflict } from './fileConflicts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { ClipboardPaste, Copy, FolderCog, FolderPlus, Scissors, Trash2, Upload, X } from 'lucide-react'
 import { RenameFileAction } from './RenameFileAction'
 import { Modal } from '../../components/ui/Modal'
@@ -69,6 +70,7 @@ export function FileToolbar({
   const permanentId = useId()
   const [permanent, setPermanent] = useState(false)
   const [busy, setBusy] = useState(false)
+  const pasteController = useRef<AbortController | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const client = useQueryClient()
@@ -112,10 +114,14 @@ export function FileToolbar({
   }
   async function execute(kind: 'mkdir' | 'delete' | 'paste') {
     if (kind !== 'delete' && !location.data) return
+    const controller = kind === 'paste' ? new AbortController() : null
+    pasteController.current = controller
+    const batch = conflictBatch()
     setBusy(true)
     setError('')
     setMessage('')
     let queued = 0
+    let skipped = 0
     const failed: NonNullable<typeof clipboard>['entries'] = []
     try {
       if (kind === 'mkdir' && location.data) {
@@ -138,21 +144,27 @@ export function FileToolbar({
           queued++
         }
       } else if (clipboard && location.data) {
-        for (const item of clipboard.entries) {
+        for (const [index, item] of clipboard.entries.entries()) {
+          if (controller?.signal.aborted) { failed.push(...clipboard.entries.slice(index)); break }
           try {
             const destination = [location.data.relativePath, item.relativePath.split('/').at(-1)]
               .filter(Boolean)
               .join('/')
-            await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
-              libraryId: location.data.libraryId,
-              kind: clipboard.kind,
-              source: item.relativePath,
-              destination,
-            })
-            queued++
+            const result = await withFileConflict(
+              replaceExisting => request<OperationAccepted>('/api/files/operations', controller?.signal, 'POST', {
+                libraryId: location.data!.libraryId,
+                kind: clipboard.kind,
+                source: item.relativePath,
+                destination,
+                ...(replaceExisting ? { replaceExisting: true } : {}),
+              }),
+              { batch, target: destination, signal: controller?.signal },
+            )
+            if (result) queued++
+            else { skipped++; failed.push(item) }
           } catch (error) {
             failed.push(item)
-            setError(errorMessage(error))
+            if (!controller?.signal.aborted) setError(errorMessage(error))
           }
         }
         if (clipboard.kind === 'move') setClipboard(failed.length ? { ...clipboard, entries: failed } : null)
@@ -165,8 +177,9 @@ export function FileToolbar({
     } catch (error) {
       setError(errorMessage(error))
     } finally {
-      if (queued)
-        setMessage(`${queued} operation${queued === 1 ? '' : 's'} queued. Follow progress in Background jobs.`)
+      if (queued || skipped)
+        setMessage(`${queued} operation${queued === 1 ? '' : 's'} queued.${skipped ? ` ${skipped} skipped.` : ''} Follow progress in Background jobs.`)
+      pasteController.current = null
       void client.invalidateQueries({ queryKey: ['tasks'] })
       setBusy(false)
     }
@@ -249,6 +262,9 @@ export function FileToolbar({
           <Upload className="size-4" />
           Upload
         </QuietButton>
+        {busy && pasteController.current && (
+          <QuietButton onClick={() => pasteController.current?.abort()}>Cancel remaining</QuietButton>
+        )}
         {clipboard && (
           <IconButton label="Clear file clipboard" onClick={() => setClipboard(null)}>
             <X className="size-4" />

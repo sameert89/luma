@@ -29,6 +29,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                       AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
                       AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
                       AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
+                      AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.RecycleId=o.Id AND parent.Kind IN ('copy','move','upload'))
                       ORDER BY o.CreatedAt LIMIT 1) AND State='queued' RETURNING *
                     """, cancellationToken: stoppingToken));
                 if (row is null) { await Task.Delay(500, stoppingToken); continue; }
@@ -71,10 +72,33 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 await StateAsync(row, row.State, ct);
             }
             var root = operations.WritableRoot(row.LibraryId, requireAvailable: false);
+            if (row.RecycleId is not null && row.Kind is "copy" or "move" or "upload")
+            {
+                var replacement = await operations.GetAsync(row.RecycleId, ct);
+                var replacementRecovering = replacement.State != "queued";
+                if (replacement.State == "queued") await StateAsync(replacement, "running", ct);
+                if (replacement.State != "completed")
+                    await ExecuteOperationAsync(replacement, replacementRecovering, ct);
+                if ((await operations.GetAsync(replacement.Id, ct)).State != "completed") throw Attention("replacement_incomplete");
+                // Preserve the recycled item's identity and tags while releasing its public
+                // path key. Its immutable snapshot still supports restoration elsewhere.
+                await using var journal = await operations.OpenJournalAsync(ct);
+                using var transaction = journal.BeginTransaction();
+                var prefix = root.Key($".luma-trash/{replacement.Id}/");
+                await journal.ExecuteAsync(new CommandDefinition("""
+                    UPDATE Media SET PathKey=@prefix||PathKey WHERE Id IN (SELECT MediaId FROM OperationMedia WHERE OperationId=@Id)
+                      AND substr(PathKey,1,length(@prefix))<>@prefix;
+                    UPDATE Comics SET PathKey=@prefix||PathKey WHERE Id IN (SELECT ComicId FROM OperationComics WHERE OperationId=@Id)
+                      AND substr(PathKey,1,length(@prefix))<>@prefix;
+                    UPDATE Folders SET PathKey=@prefix||PathKey WHERE Id IN (SELECT FolderId FROM OperationFolders WHERE OperationId=@Id)
+                      AND substr(PathKey,1,length(@prefix))<>@prefix;
+                    """, new { replacement.Id, prefix }, transaction, cancellationToken: ct));
+                transaction.Commit();
+            }
             // Losing access is not deletion, and cannot trigger cleanup.
             _ = MutationPaths.Resolve(root, "", allowRoot: true);
             var category = row.Kind == "upload" ? MutationPaths.UploadDirectory : row.Kind is "recycle" or "restore" or "purge" ? MutationPaths.TrashDirectory : MutationPaths.OperationsDirectory;
-            var staging = MutationPaths.Internal(root, category, row.UploadId ?? row.RecycleId ?? row.Id);
+            var staging = MutationPaths.Internal(root, category, row.UploadId ?? (row.Kind is "restore" or "purge" ? row.RecycleId : null) ?? row.Id);
             var source = row.Kind is "upload" or "restore" or "purge" ? staging : MutationPaths.Resolve(root, row.Source);
             var destination = row.Kind == "mkdir" ? row.Source : row.Destination;
             if (row.State == "running")
@@ -187,7 +211,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         await using var db = await operations.OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
         if (await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM FileOperations WHERE Id=@Id", row, tx, cancellationToken: ct)) == "completed") return;
-        var snapshot = row.RecycleId ?? row.Id;
+        var snapshot = row.Kind is "restore" or "purge" ? row.RecycleId ?? row.Id : row.Id;
         if (row.Kind is "recycle" or "delete" or "purge")
         {
             await db.ExecuteAsync(new CommandDefinition("""
@@ -206,22 +230,31 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             // Snapshot paths remain immutable so reconciliation is idempotent.
             await db.ExecuteAsync(new CommandDefinition("""
                 UPDATE Comics SET RelativePath=@target||substr((SELECT OriginalPath FROM OperationComics WHERE OperationId=@snapshot AND ComicId=Comics.Id),length(@Source)+1),
-                  PathKey=@targetKey||substr(PathKey,length(@sourceKey)+1),
+                  PathKey=CASE WHEN substr(PathKey,1,length(@recycledPrefix))=@recycledPrefix
+                    THEN @targetKey||substr(PathKey,length(@recycledPrefix)+length(@sourceKey)+1)
+                    WHEN RelativePath=@target||substr((SELECT OriginalPath FROM OperationComics WHERE OperationId=@snapshot AND ComicId=Comics.Id),length(@Source)+1)
+                    THEN PathKey ELSE @targetKey||substr(PathKey,length(@sourceKey)+1) END,
                   Availability=(SELECT OriginalAvailability FROM OperationComics WHERE OperationId=@snapshot AND ComicId=Comics.Id)
                 WHERE Id IN (SELECT ComicId FROM OperationComics WHERE OperationId=@snapshot);
                 UPDATE Media SET RelativePath=@target||substr((SELECT OriginalPath FROM OperationMedia WHERE OperationId=@snapshot AND MediaId=Media.Id),length(@Source)+1),
-                  PathKey=@targetKey||substr(PathKey,length(@sourceKey)+1),
+                  PathKey=CASE WHEN substr(PathKey,1,length(@recycledPrefix))=@recycledPrefix
+                    THEN @targetKey||substr(PathKey,length(@recycledPrefix)+length(@sourceKey)+1)
+                    WHEN RelativePath=@target||substr((SELECT OriginalPath FROM OperationMedia WHERE OperationId=@snapshot AND MediaId=Media.Id),length(@Source)+1)
+                    THEN PathKey ELSE @targetKey||substr(PathKey,length(@sourceKey)+1) END,
                   Availability=(SELECT OriginalAvailability FROM OperationMedia WHERE OperationId=@snapshot AND MediaId=Media.Id)
                 WHERE Id IN (SELECT MediaId FROM OperationMedia WHERE OperationId=@snapshot);
                 UPDATE Folders SET RelativePath=@target||substr((SELECT OriginalPath FROM OperationFolders WHERE OperationId=@snapshot AND FolderId=Folders.Id),length(@Source)+1),
-                  PathKey=@targetKey||substr(PathKey,length(@sourceKey)+1),Recycled=0
+                  PathKey=CASE WHEN substr(PathKey,1,length(@recycledPrefix))=@recycledPrefix
+                    THEN @targetKey||substr(PathKey,length(@recycledPrefix)+length(@sourceKey)+1)
+                    WHEN RelativePath=@target||substr((SELECT OriginalPath FROM OperationFolders WHERE OperationId=@snapshot AND FolderId=Folders.Id),length(@Source)+1)
+                    THEN PathKey ELSE @targetKey||substr(PathKey,length(@sourceKey)+1) END,Recycled=0
                 WHERE Id IN (SELECT FolderId FROM OperationFolders WHERE OperationId=@snapshot);
                 UPDATE Folders SET ParentId=@parentId WHERE LibraryId=@LibraryId AND PathKey=@targetKey;
                 DELETE FROM FolderAncestry WHERE DescendantId IN (SELECT FolderId FROM OperationFolders WHERE OperationId=@snapshot)
                   AND AncestorId NOT IN (SELECT FolderId FROM OperationFolders WHERE OperationId=@snapshot);
                 INSERT OR IGNORE INTO FolderAncestry SELECT p.AncestorId,f.FolderId FROM FolderAncestry p,OperationFolders f
                   WHERE p.DescendantId=@parentId AND f.OperationId=@snapshot;
-                """, new { row.LibraryId, row.Source, target, targetKey = root.Key(target), sourceKey = root.Key(row.Source), snapshot, parentId }, tx, cancellationToken: ct));
+                """, new { row.LibraryId, row.Source, target, targetKey = root.Key(target), sourceKey = root.Key(row.Source), snapshot, parentId, recycledPrefix = root.Key($".luma-trash/{snapshot}/") }, tx, cancellationToken: ct));
             if (!row.IsDirectory)
                 await db.ExecuteAsync(new CommandDefinition("UPDATE Media SET FileName=@name,FolderId=@parentId WHERE Id IN (SELECT MediaId FROM OperationMedia WHERE OperationId=@snapshot)", new { name = Path.GetFileName(target), parentId, snapshot }, tx, cancellationToken: ct));
         }

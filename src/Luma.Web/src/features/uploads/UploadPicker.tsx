@@ -98,7 +98,7 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
         </p>
       )}
       <p className="text-sm text-muted">
-        {queue.filter(item => !['completed', 'cancelled'].includes(item.state)).length} uploads in queue
+        {queue.filter(item => !['completed', 'cancelled', 'skipped'].includes(item.state)).length} uploads in queue
       </p>
       {queue.slice(-100).map(item => (
         <article key={item.key} className="space-y-2 rounded-lg border border-line p-3">
@@ -125,7 +125,7 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
                 Resume / retry
               </QuietButton>
             )}
-            {!['completed', 'cancelled', 'finalizing'].includes(item.state) && (
+            {!['completed', 'cancelled', 'skipped', 'finalizing'].includes(item.state) && (
               <QuietButton
                 onClick={() => void uploadAction(item.key, 'cancel').catch(error => setError(String(error)))}
               >

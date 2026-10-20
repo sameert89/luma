@@ -1,3 +1,4 @@
+import { FileConflictDialog } from '../features/files/FileConflictDialog'
 import type { components } from '../lib/api/generated'
 import { ApplicationSettings } from './ApplicationSettings'
 import { readSetting } from './uiDefaults'
@@ -1383,6 +1384,7 @@ export function App() {
           </div>
         </div>
       </Modal>
+      <FileConflictDialog />
       {active && (
         <Viewer
           active={active}
