@@ -1,47 +1,105 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { expect, test, vi } from 'vitest'
-import { FileToolbar } from './FileToolbar'
+import { beforeEach, expect, test, vi } from 'vitest'
+import { FileManagementButton, FileToolbar } from './FileToolbar'
 import { request } from '../browse/api'
-vi.mock('../browse/api', () => ({
-  request: vi.fn(async (path: string) =>
-    path.includes('capabilities')
-      ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] }
-      : { libraryId: 1, relativePath: 'photos' },
-  ),
-  errorMessage: () => 'Failed',
-}))
-vi.mock('../uploads/UploadPicker', () => ({ UploadPicker: () => null }))
-test('deletion defaults to recycling and reviewing does not send a mutation', async () => {
-  const user = userEvent.setup()
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
-    <QueryClientProvider client={client}>
-      <FileToolbar libraryId={1} folderId={2} selected={new Set([3, 4])} />
-    </QueryClientProvider>,
-  )
-  await user.click(await screen.findByRole('button', { name: 'Manage files' }))
-  await user.selectOptions(screen.getByLabelText('Operation'), 'delete')
-  expect(screen.getByRole('checkbox')).not.toBeChecked()
-  await user.click(await screen.findByRole('button', { name: 'Review deletion' }))
-  expect(screen.getByRole('alert')).toHaveTextContent('Delete 2 selected items?')
-  expect(vi.mocked(request).mock.calls.every(call => call[2] !== 'POST')).toBe(true)
-  await user.click(screen.getByRole('button', { name: 'Cancel' }))
-  expect(screen.queryByText('Delete 2 selected items?')).not.toBeInTheDocument()
+import { setClipboard } from './clipboard'
+vi.mock('../browse/api', () => ({ request: vi.fn(), errorMessage: (error: unknown) => String(error) }))
+vi.mock('../uploads/UploadPicker', () => ({ UploadPicker: () => <p>Upload drop zone</p> }))
+beforeEach(() => {
+  setClipboard(null)
+  vi.mocked(request)
+    .mockReset()
+    .mockImplementation(async (path, _signal, method) => {
+      if (path.includes('capabilities'))
+        return { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] }
+      if (path.includes('clipboard'))
+        return [{ libraryId: 1, relativePath: 'photos/one.jpg', mediaId: 3, folderId: null }]
+      if (path.includes('location'))
+        return { libraryId: 1, relativePath: path.endsWith('=5') ? 'destination' : 'photos' }
+      if (method === 'POST') return { id: 'queued' }
+      throw new Error(`Unexpected request: ${path}`)
+    })
 })
-
-test('read-only capabilities disable file actions and a successful recheck restores them', async () => {
+function setup(props: Partial<Parameters<typeof FileToolbar>[0]> = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  const ui = (folderId = 2) => (
+    <QueryClientProvider client={client}>
+      <FileToolbar libraryId={1} folderId={folderId} selected={new Set([3, 4])} {...props} />
+    </QueryClientProvider>
+  )
+  const view = render(ui())
+  return { client, ...view, folder: (id: number) => view.rerender(ui(id)) }
+}
+test('deletion queues every selected file without polling and closes the dialog', async () => {
+  const user = userEvent.setup()
+  const onQueued = vi.fn()
+  setup({ onQueued })
+  await user.click(await screen.findByRole('button', { name: 'Delete' }))
+  expect(screen.getByRole('checkbox')).not.toBeChecked()
+  expect(vi.mocked(request).mock.calls.some(call => call[2] === 'POST')).toBe(false)
+  await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+  await screen.findByText('2 operations queued. Follow progress in Background jobs.')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  const posts = vi.mocked(request).mock.calls.filter(call => call[2] === 'POST')
+  expect(posts.map(call => call[3])).toEqual([
+    { libraryId: 1, mediaId: 3, kind: 'recycle' },
+    { libraryId: 1, mediaId: 4, kind: 'recycle' },
+  ])
+  expect(vi.mocked(request).mock.calls.some(call => call[0].startsWith('/api/files/operations/'))).toBe(false)
+  expect(onQueued).toHaveBeenCalledOnce()
+})
+test('cut survives navigation and pastes into the browsed destination without a path field', async () => {
+  const user = userEvent.setup()
+  const view = setup({ selected: new Set([3]) })
+  await user.click(await screen.findByRole('button', { name: 'Cut' }))
+  await screen.findByRole('button', { name: 'Paste (1)' })
+  view.folder(5)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Paste (1)' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'Paste (1)' }))
+  expect(request).toHaveBeenCalledWith('/api/files/operations', undefined, 'POST', {
+    libraryId: 1,
+    kind: 'move',
+    source: 'photos/one.jpg',
+    destination: 'destination/one.jpg',
+  })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Paste' })).toBeDisabled())
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+})
+test('copy retains the clipboard after paste and upload opens a dedicated dialog', async () => {
+  const user = userEvent.setup()
+  const view = setup({ selected: new Set([3]) })
+  await user.click(await screen.findByRole('button', { name: 'Copy' }))
+  view.folder(5)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Paste (1)' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'Paste (1)' }))
+  await screen.findByText('1 operation queued. Follow progress in Background jobs.')
+  expect(screen.getByRole('button', { name: 'Paste (1)' })).toBeEnabled()
+  await user.click(screen.getByRole('button', { name: 'Upload' }))
+  expect(screen.getByRole('dialog', { name: 'Upload' })).toHaveTextContent('Upload drop zone')
+})
+test('read-only capabilities disable the file-management toggle and hide write actions', () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(['file-capabilities'], { accessConfigured: true, libraries: [{ libraryId: 1, writable: false }] })
   render(
     <QueryClientProvider client={client}>
+      <FileManagementButton libraryId={1} active onToggle={vi.fn()} />
       <FileToolbar libraryId={1} folderId={2} />
     </QueryClientProvider>,
   )
-  expect(screen.getByRole('button', { name: 'Manage files' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Recycle bin' })).toBeDisabled()
-  expect(screen.getByText(/File changes disabled/)).toBeInTheDocument()
-  await client.invalidateQueries({ queryKey: ['file-capabilities'] })
-  expect(await screen.findByRole('button', { name: 'Manage files' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'File management' })).toBeDisabled()
+  expect(screen.queryByRole('group', { name: 'File actions' })).not.toBeInTheDocument()
+})
+test('new folder asks for a name only and queues creation in the current folder', async () => {
+  const user = userEvent.setup()
+  setup()
+  await user.click(await screen.findByRole('button', { name: 'New folder' }))
+  await user.type(screen.getByLabelText('Folder name'), 'Holiday')
+  await user.click(screen.getByRole('button', { name: 'Create folder' }))
+  expect(request).toHaveBeenCalledWith('/api/files/operations', undefined, 'POST', {
+    libraryId: 1,
+    kind: 'mkdir',
+    source: 'photos/Holiday',
+  })
 })

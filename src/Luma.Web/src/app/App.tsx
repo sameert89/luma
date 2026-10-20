@@ -6,7 +6,7 @@ import { useAppearance, AppearanceBackdrop, AppearanceSettings, AppIntroduction 
 import { AppSwitcher, type Experience } from './navigation/AppSwitcher'
 import { readExperience, saveExperience, sectionPath } from './navigation/experienceState'
 import { FileAccess } from '../features/files/FileAccess'
-import { FileToolbar } from '../features/files/FileToolbar'
+import { FileToolbar, FileManagementButton, RecycleBinSettings } from '../features/files/FileToolbar'
 import { SettingsSection } from '../components/ui/SettingsSection'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -27,7 +27,7 @@ import {
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
-import { IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
+import { Checkbox, IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
 import { Modal } from '../components/ui/Modal'
 import { SearchHeader, type SearchSuggestion } from '../components/ui/SearchHeader'
 import { Toast, useToast } from '../components/ui/Toast'
@@ -245,6 +245,8 @@ export function App() {
   useEffect(() => {
     if (unseenRelease()) setWhatsNewOpen(true)
   }, [])
+  const [fileManaging, setFileManaging] = useState(false)
+  const [selectedFolders, setSelectedFolders] = useState(new Set<number>())
   const [selecting, setSelecting] = useState(false)
   const [selectingAll, setSelectingAll] = useState(false)
   const [selected, setSelected] = useState(new Set<number>())
@@ -470,6 +472,7 @@ export function App() {
     setFilters(value)
     setSearch(value.q ?? '')
     setSelected(new Set())
+    setSelectedFolders(new Set())
     setFolderCursor(undefined)
     setFilterOpen(false)
     setSection(target)
@@ -525,6 +528,7 @@ export function App() {
     }
     setSelecting(false)
     setSelected(new Set())
+    setSelectedFolders(new Set())
   }
   // Help is its own history entry: the origin entry remembers its scroll position, and Back
   // pops to it so its section, filters and folder come back exactly as they were.
@@ -559,9 +563,7 @@ export function App() {
     })
     return () => cancelAnimationFrame(frame)
   }, [section, queryString(filters), restoreScrollTop])
-  const helpParams = new URLSearchParams(queryString(filters))
-  helpParams.set('view', 'help')
-  helpParams.set('from', section === 'help' ? helpOrigin : section)
+
   function submitSearch() {
     if (section === 'reels') {
       apply({ ...filters, q: search.trim() || undefined, mediaType: 'video' }, 'reels')
@@ -628,7 +630,7 @@ export function App() {
     setSelected(old => {
       const next = new Set(old)
       if (next.has(id)) next.delete(id)
-      else if (next.size < 500) next.add(id)
+      else if (next.size + selectedFolders.size < 500) next.add(id)
       else {
         showToast('Select at most 500 items at a time.', 'danger')
         return old
@@ -654,6 +656,7 @@ export function App() {
         more = !!cursor
       } while (cursor && ids.size < 500)
       setSelected(ids)
+      setSelectedFolders(new Set())
       if (ids.size === 500 && more)
         showToast('Selected the first 500 matching items; bulk operations support up to 500.')
     } catch (error) {
@@ -723,6 +726,7 @@ export function App() {
     setFilters(value)
     setSearch(value.q ?? '')
     setSelected(new Set())
+    setSelectedFolders(new Set())
     setFolderCursor(undefined)
     setFilterOpen(false)
     setSection('reels')
@@ -760,6 +764,9 @@ export function App() {
   const showBackgroundJobs = true
   // auto-fit/minmax has no equivalent in the fixed column-count scale. Cards still
   // need an explicit maximum so a sparse album row remains easy to scan on desktop.
+  const helpParams = new URLSearchParams(queryString(filters))
+  helpParams.set('view', 'help')
+  helpParams.set('from', section === 'help' ? helpOrigin : section)
   const folderCards =
     section === 'library' && folders.data?.items.length ? (
       <section aria-label="Folders" className="grid grid-cols-[repeat(auto-fill,minmax(9rem,24rem))] gap-3 pb-4">
@@ -796,6 +803,23 @@ export function App() {
                 </span>
               </span>
             </button>
+            {selecting && (
+              <label htmlFor={`folder-selection-${folder.id}`} className="absolute top-1 left-1 rounded-lg bg-canvas">
+                <Checkbox
+                  id={`folder-selection-${folder.id}`}
+                  aria-label={`Select folder ${folder.name}`}
+                  checked={selectedFolders.has(folder.id)}
+                  onChange={() =>
+                    setSelectedFolders(previous => {
+                      const next = new Set(previous)
+                      if (next.has(folder.id)) next.delete(folder.id)
+                      else if (next.size + selected.size < 500) next.add(folder.id)
+                      return next
+                    })
+                  }
+                />
+              </label>
+            )}
             <div className="absolute top-1.5 right-1.5">
               <FolderActions
                 folder={folder}
@@ -953,6 +977,20 @@ export function App() {
             </Suspense>
           ) : section === 'settings' ? (
             <div className="overflow-auto scroll-py-2" data-scroll-restore>
+              <div className="flex flex-wrap gap-2 border-b border-line px-5 py-4">
+                <RecycleBinSettings />
+                <QuietLink
+                  data-help-entry
+                  href={`?${helpParams}`}
+                  onClick={event => {
+                    event.preventDefault()
+                    openHelp()
+                  }}
+                >
+                  <CircleHelp className="size-4" />
+                  Open the Help guide
+                </QuietLink>
+              </div>
               <section id="settings-general" className="scroll-mt-4">
                 <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">General</h2>
                 <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
@@ -963,36 +1001,6 @@ export function App() {
                   <FileAccess />
                 </div>
                 <ApplicationSettings />
-                <SettingsSection title="Help" description="See what each button, gesture and keyboard shortcut does.">
-                  <QuietLink
-                    data-help-entry
-                    href={`?${helpParams}`}
-                    className="w-fit"
-                    onClick={event => {
-                      event.preventDefault()
-                      openHelp()
-                    }}
-                  >
-                    <CircleHelp className="size-4" aria-hidden="true" />
-                    Open the Help guide
-                  </QuietLink>
-                </SettingsSection>
-                <SettingsSection
-                  title="About"
-                  description="Version and project information for this Luma installation."
-                >
-                  <div className="flex flex-col items-start gap-2 text-sm">
-                    <p>
-                      <span className="font-medium">Luma</span>{' '}
-                      <span className="text-muted">v{packageJson.version}</span>
-                    </p>
-                    <p className="text-muted">Created by Sameer Trivedi.</p>
-                    <QuietLink href="https://github.com/sameert89/luma" target="_blank" rel="noreferrer">
-                      <GitFork className="size-4" aria-hidden="true" />
-                      GitHub
-                    </QuietLink>
-                  </div>
-                </SettingsSection>
               </section>
               <section id="settings-gallery" className="scroll-mt-4">
                 <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Gallery</h2>
@@ -1028,6 +1036,18 @@ export function App() {
                   <QuietButton onClick={() => switchExperience('panels')}>Manage comic locations in Panels</QuietButton>
                 </SettingsSection>
               </section>
+              <SettingsSection title="About" description="Version and project information for this Luma installation.">
+                <div className="flex flex-col items-start gap-2 text-sm">
+                  <p>
+                    <span className="font-medium">Luma</span> <span className="text-muted">v{packageJson.version}</span>
+                  </p>
+                  <p className="text-muted">Created by Sameer Trivedi.</p>
+                  <QuietLink href="https://github.com/sameert89/luma" target="_blank" rel="noreferrer">
+                    <GitFork className="size-4" aria-hidden="true" />
+                    GitHub
+                  </QuietLink>
+                </div>
+              </SettingsSection>
             </div>
           ) : section === 'help' ? (
             <Help onBack={closeHelp} />
@@ -1048,23 +1068,27 @@ export function App() {
                       </h1>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      {home && (
-                        <QuietButton data-help-entry onClick={openHelp}>
-                          <CircleHelp className="size-4" aria-hidden="true" />
-                          Help
-                        </QuietButton>
-                      )}
                       {showGallery && (
                         <>
                           <IconButton
                             label={selecting ? 'Done selecting' : 'Select media'}
                             onClick={() => {
                               setSelecting(!selecting)
-                              if (selecting) setSelected(new Set())
+                              if (selecting) {
+                                setSelected(new Set())
+                                setSelectedFolders(new Set())
+                              }
                             }}
                           >
                             {selecting ? <Check className="size-4" /> : <CopyCheck className="size-4" />}
                           </IconButton>
+                          {section === 'library' && filters.libraryId && filters.folderId && (
+                            <FileManagementButton
+                              libraryId={filters.libraryId}
+                              active={fileManaging}
+                              onToggle={() => setFileManaging(value => !value)}
+                            />
+                          )}
                           {selecting && (
                             <IconButton label="Select all" disabled={selectingAll} onClick={() => void selectAll()}>
                               {selectingAll ? (
@@ -1095,10 +1119,23 @@ export function App() {
                       )}
                     </div>
                   </div>
-                  {section === 'library' && filters.libraryId && filters.folderId && (
-                    <div className="flex flex-wrap gap-2">
-                      <FileToolbar libraryId={filters.libraryId} folderId={filters.folderId} selected={selected} />
-                    </div>
+                  {section === 'library' && fileManaging && filters.libraryId && filters.folderId && (
+                    <FileToolbar
+                      libraryId={filters.libraryId}
+                      folderId={filters.folderId}
+                      selected={selected}
+                      selectedFolders={selectedFolders}
+                      onClipboard={() => {
+                        setSelected(new Set())
+                        setSelectedFolders(new Set())
+                        setSelecting(false)
+                      }}
+                      onQueued={() => {
+                        setSelected(new Set())
+                        setSelectedFolders(new Set())
+                        setSelecting(false)
+                      }}
+                    />
                   )}
                   {section === 'library' && folders.data && (
                     <>
@@ -1123,14 +1160,20 @@ export function App() {
                       )}
                     </>
                   )}
-                  {selected.size > 0 && (
+                  {(selected.size > 0 || selectedFolders.size > 0) && (
                     <div className="flex items-center gap-3 rounded-2xl bg-surface p-3">
-                      <p className="text-sm">{selected.size} selected</p>
-                      <Button className="min-h-10" onClick={() => setBulkOpen(true)}>
+                      <p className="text-sm">{selected.size + selectedFolders.size} selected</p>
+                      <Button className="min-h-10" disabled={!selected.size} onClick={() => setBulkOpen(true)}>
                         <Tag className="mr-2 size-4" />
                         Edit tags
                       </Button>
-                      <IconButton label="Clear selection" onClick={() => setSelected(new Set())}>
+                      <IconButton
+                        label="Clear selection"
+                        onClick={() => {
+                          setSelected(new Set())
+                          setSelectedFolders(new Set())
+                        }}
+                      >
                         <X className="size-4" />
                       </IconButton>
                     </div>

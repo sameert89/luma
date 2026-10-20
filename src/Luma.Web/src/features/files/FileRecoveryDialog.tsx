@@ -37,7 +37,8 @@ export function FileRecoveryDialog({
     [error, setError] = useState('')
   const row = evidence.data?.operation
   const blocked = capabilities.data?.libraries?.some(item => item.libraryId === row?.libraryId && !item.writable)
-  const alternative = row?.recoveryState === 'reserved' && ['move', 'restore', 'upload'].includes(row.kind ?? '')
+  const alternative =
+    row?.recoveryState === 'reserved' && ['copy', 'move', 'restore', 'upload'].includes(row.kind ?? '')
   const actions = [...(evidence.data?.actions ?? [])]
   if (alternative && destination.trim() && !actions.includes('retry')) actions.unshift('retry')
   async function resolve(action: string) {

@@ -1,203 +1,352 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useId, useState } from 'react'
-import { FolderCog, Trash2 } from 'lucide-react'
+import { useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { ClipboardPaste, Copy, FolderCog, FolderPlus, Scissors, Trash2, Upload, X } from 'lucide-react'
 import { Modal } from '../../components/ui/Modal'
-import { Checkbox, Field, Input, QuietButton, Select } from '../../components/ui/Controls'
-import { request, errorMessage } from '../browse/api'
+import { Checkbox, Field, IconButton, Input, QuietButton, Select } from '../../components/ui/Controls'
+import { request, errorMessage, type Library } from '../browse/api'
 import type { components } from '../../lib/api/generated'
-import { waitForOperation, type OperationAccepted, type FileOperation } from './operations'
+import type { OperationAccepted, FileOperation } from './operations'
 import { UploadPicker } from '../uploads/UploadPicker'
+import { clipboardSnapshot, setClipboard, subscribeClipboard } from './clipboard'
 
 type Location = components['schemas']['FileLocation']
 type Capabilities = components['schemas']['FileCapabilities']
+function useCapabilities() {
+  return useQuery({
+    queryKey: ['file-capabilities'],
+    queryFn: ({ signal }) => request<Capabilities>('/api/files/capabilities', signal),
+  })
+}
+export function FileManagementButton({
+  libraryId,
+  active,
+  onToggle,
+}: {
+  libraryId: number
+  active: boolean
+  onToggle: () => void
+}) {
+  const capabilities = useCapabilities().data
+  if (!capabilities?.accessConfigured) return null
+  const writable = capabilities.libraries?.some(item => item.libraryId === libraryId && item.writable)
+  return (
+    <IconButton
+      label="File management"
+      aria-pressed={active && writable}
+      disabled={!writable}
+      title={writable ? 'File management' : 'This library is read-only'}
+      onClick={onToggle}
+    >
+      <FolderCog className="size-4" />
+    </IconButton>
+  )
+}
 export function FileToolbar({
   libraryId,
   folderId,
   selected = new Set<number>(),
+  selectedFolders = new Set<number>(),
+  onQueued,
+  onClipboard,
 }: {
   libraryId: number
   folderId: number
   selected?: Set<number>
+  selectedFolders?: Set<number>
+  onQueued?: () => void
+  onClipboard?: () => void
 }) {
-  const capabilities = useQuery({
-    queryKey: ['file-capabilities'],
-    queryFn: ({ signal }) => request<Capabilities>('/api/files/capabilities', signal),
+  const capabilities = useCapabilities().data
+  const clipboard = useSyncExternalStore(subscribeClipboard, clipboardSnapshot)
+  const location = useQuery({
+    queryKey: ['file-location', folderId],
+    queryFn: ({ signal }) => request<Location>(`/api/files/location?folderId=${folderId}`, signal),
   })
-  const [open, setOpen] = useState(false)
-  const [trashOpen, setTrashOpen] = useState(false)
-  if (!capabilities.data?.accessConfigured || !capabilities.data.libraries.some(item => item.libraryId === libraryId))
-    return null
-  const writable = capabilities.data.libraries.some(item => item.libraryId === libraryId && item.writable)
+  const [dialog, setDialog] = useState<'mkdir' | 'delete' | 'upload' | null>(null)
+  const [name, setName] = useState('')
+  const permanentId = useId()
+  const [permanent, setPermanent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const client = useQueryClient()
+  const count = selected.size + selectedFolders.size
+  const writable =
+    capabilities?.accessConfigured &&
+    capabilities.libraries?.some(item => item.libraryId === libraryId && item.writable)
+  // Source entries keep their original location while browsing to the destination.
+  const canPaste = !!clipboard && clipboard.entries.every(item => item.libraryId === libraryId)
+  async function capture(kind: 'move' | 'copy') {
+    setBusy(true)
+    setError('')
+    try {
+      const entries = await request<components['schemas']['FileClipboardEntry'][]>(
+        '/api/files/clipboard',
+        undefined,
+        'POST',
+        { mediaIds: [...selected], folderIds: [...selectedFolders] },
+      )
+      setClipboard({ kind, entries })
+      setMessage(
+        `${entries.length} items ready to ${kind === 'move' ? 'move' : 'copy'}. Open a destination folder and choose Paste.`,
+      )
+      onClipboard?.()
+    } catch (error) {
+      setError(errorMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function execute(kind: 'mkdir' | 'delete' | 'paste') {
+    if (!location.data) return
+    setBusy(true)
+    setError('')
+    setMessage('')
+    let queued = 0
+    const failed: NonNullable<typeof clipboard>['entries'] = []
+    try {
+      if (kind === 'mkdir') {
+        if (!name.trim() || /[/\\]/.test(name) || name === '.' || name === '..')
+          throw new Error('Enter a folder name, not a path.')
+        await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
+          libraryId,
+          kind: 'mkdir',
+          source: [location.data.relativePath, name].filter(Boolean).join('/'),
+        })
+        queued++
+      } else if (kind === 'delete') {
+        for (const item of [...selected].map(mediaId => ({ mediaId }))) {
+          await request<OperationAccepted>('/api/files/items', undefined, 'POST', {
+            libraryId,
+            ...item,
+            kind: permanent ? 'delete' : 'recycle',
+          })
+          queued++
+        }
+        for (const folderId of selectedFolders) {
+          await request<OperationAccepted>('/api/files/items', undefined, 'POST', {
+            libraryId,
+            folderId,
+            kind: permanent ? 'delete' : 'recycle',
+          })
+          queued++
+        }
+      } else if (clipboard) {
+        for (const item of clipboard.entries) {
+          try {
+            const destination = [location.data.relativePath, item.relativePath.split('/').at(-1)]
+              .filter(Boolean)
+              .join('/')
+            await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
+              libraryId,
+              kind: clipboard.kind,
+              source: item.relativePath,
+              destination,
+            })
+            queued++
+          } catch (error) {
+            failed.push(item)
+            setError(errorMessage(error))
+          }
+        }
+        if (clipboard.kind === 'move') setClipboard(failed.length ? { ...clipboard, entries: failed } : null)
+      }
+      if (queued) {
+        setDialog(null)
+        setName('')
+        onQueued?.()
+      }
+    } catch (error) {
+      setError(errorMessage(error))
+    } finally {
+      if (queued)
+        setMessage(`${queued} operation${queued === 1 ? '' : 's'} queued. Follow progress in Background jobs.`)
+      void client.invalidateQueries({ queryKey: ['tasks'] })
+      setBusy(false)
+    }
+  }
+  useEffect(() => {
+    if (!writable || dialog) return
+    function shortcuts(event: KeyboardEvent) {
+      if (
+        busy ||
+        event.repeat ||
+        event.altKey ||
+        (event.target instanceof Element &&
+          event.target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) ||
+        window.getSelection()?.toString()
+      )
+        return
+      const key = event.key.toLowerCase()
+      if (event.ctrlKey || event.metaKey) {
+        if ((key === 'c' || key === 'x') && count) {
+          event.preventDefault()
+          void capture(key === 'x' ? 'move' : 'copy')
+        } else if (key === 'v' && canPaste) {
+          event.preventDefault()
+          void execute('paste')
+        }
+      } else if (event.key === 'Delete' && count) {
+        event.preventDefault()
+        setPermanent(false)
+        setDialog('delete')
+      }
+    }
+    document.addEventListener('keydown', shortcuts)
+    return () => document.removeEventListener('keydown', shortcuts)
+  })
+  if (!writable) return null
   return (
     <>
-      <QuietButton disabled={!writable} onClick={() => setOpen(true)}>
-        <FolderCog className="size-4" aria-hidden="true" />
-        Manage files
-      </QuietButton>
-      <QuietButton disabled={!writable} onClick={() => setTrashOpen(true)}>
-        <Trash2 className="size-4" aria-hidden="true" />
-        Recycle bin
-      </QuietButton>
-      {!writable && (
-        <p className="text-sm text-muted">
-          File changes disabled. Check Writable, the :rw mount and permissions in Settings → File management.
+      <div
+        role="group"
+        aria-label="File actions"
+        className="flex flex-wrap items-center gap-1 border-t border-line pt-2"
+      >
+        <QuietButton disabled={busy || !count} onClick={() => void capture('move')}>
+          <Scissors className="size-4" />
+          Cut
+        </QuietButton>
+        <QuietButton disabled={busy || !count} onClick={() => void capture('copy')}>
+          <Copy className="size-4" />
+          Copy
+        </QuietButton>
+        <QuietButton disabled={busy || !canPaste || !location.data} onClick={() => void execute('paste')}>
+          <ClipboardPaste className="size-4" />
+          Paste{clipboard ? ` (${clipboard.entries.length})` : ''}
+        </QuietButton>
+        <QuietButton
+          disabled={busy || !count}
+          onClick={() => {
+            setPermanent(false)
+            setDialog('delete')
+          }}
+        >
+          <Trash2 className="size-4" />
+          Delete
+        </QuietButton>
+        <QuietButton disabled={busy || !location.data} onClick={() => setDialog('mkdir')}>
+          <FolderPlus className="size-4" />
+          New folder
+        </QuietButton>
+        <QuietButton disabled={busy || !location.data} onClick={() => setDialog('upload')}>
+          <Upload className="size-4" />
+          Upload
+        </QuietButton>
+        {clipboard && (
+          <IconButton label="Clear file clipboard" onClick={() => setClipboard(null)}>
+            <X className="size-4" />
+          </IconButton>
+        )}
+      </div>
+      {clipboard && !canPaste && (
+        <p className="text-sm text-muted">Open a folder in the source library to paste these items.</p>
+      )}
+      {message && (
+        <p role="status" className="text-sm text-muted">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {error}
         </p>
       )}
       <Modal
-        open={open}
-        onOpenChange={setOpen}
-        title="Manage files"
-        description="Operations apply to this library. Destructive changes are confirmed before starting."
-        sheet
+        open={dialog !== null}
+        onOpenChange={open => {
+          if (!open) setDialog(null)
+        }}
+        title={dialog === 'mkdir' ? 'New folder' : dialog === 'delete' ? 'Delete selected items' : 'Upload'}
+        description={
+          dialog === 'delete'
+            ? `${count} selected items will be queued for deletion.`
+            : `In ${location.data?.relativePath || '/'}`
+        }
       >
-        {open && writable && <FileActions libraryId={libraryId} folderId={folderId} selected={selected} />}
-      </Modal>
-      <Modal
-        open={trashOpen}
-        onOpenChange={setTrashOpen}
-        title="Recycle bin"
-        description="Restore deleted content without overwriting existing files."
-        sheet
-      >
-        {trashOpen && writable && <RecycleBin libraryId={libraryId} />}
+        <div className="space-y-4 p-5">
+          {dialog === 'mkdir' && (
+            <form
+              onSubmit={event => {
+                event.preventDefault()
+                void execute('mkdir')
+              }}
+              className="space-y-3"
+            >
+              <Field label="Folder name">
+                <Input value={name} onChange={event => setName(event.target.value)} />
+              </Field>
+              <QuietButton type="submit" disabled={busy || !name.trim()}>
+                Create folder
+              </QuietButton>
+            </form>
+          )}
+          {dialog === 'delete' && (
+            <>
+              <label htmlFor={permanentId} className="flex items-center gap-2 text-sm">
+                <Checkbox id={permanentId} checked={permanent} onChange={event => setPermanent(event.target.checked)} />
+                Permanently delete. This cannot be undone.
+              </label>
+              <QuietButton disabled={busy} onClick={() => void execute('delete')}>
+                {busy ? 'Queuing…' : permanent ? 'Delete permanently' : 'Move to recycle bin'}
+              </QuietButton>
+            </>
+          )}
+          {dialog === 'upload' && location.data && (
+            <UploadPicker libraryId={libraryId} destination={location.data.relativePath} />
+          )}
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
+        </div>
       </Modal>
     </>
   )
 }
 
-function FileActions({
-  libraryId,
-  folderId,
-  selected,
-}: {
-  libraryId: number
-  folderId: number
-  selected: Set<number>
-}) {
-  const location = useQuery({
-    queryKey: ['file-location', folderId],
-    queryFn: ({ signal }) => request<Location>(`/api/files/location?folderId=${folderId}`, signal),
-  })
-  const [action, setAction] = useState('mkdir')
-  const [name, setName] = useState('')
-  const [permanent, setPermanent] = useState(false)
-  const [confirmed, setConfirmed] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const client = useQueryClient()
-  const permanentId = useId()
-  const destructive = action === 'delete'
-  const count = selected.size || 1
-  async function execute() {
-    if (!location.data) return
-    setBusy(true)
-    setMessage('')
-    try {
-      if (action === 'mkdir') {
-        const accepted = await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
-          libraryId,
-          kind: 'mkdir',
-          source: [location.data.relativePath, name].filter(Boolean).join('/'),
-        })
-        await waitForOperation(accepted.id)
-      } else {
-        const ids = selected.size ? [...selected].map(mediaId => ({ mediaId })) : [{ folderId }]
-        for (const item of ids) {
-          const accepted = await request<OperationAccepted>('/api/files/items', undefined, 'POST', {
-            libraryId,
-            ...item,
-            kind: destructive ? (permanent ? 'delete' : 'recycle') : 'move',
-            ...(destructive ? {} : { destination: name }),
-          })
-          await waitForOperation(accepted.id)
-        }
-      }
-      setMessage('Completed.')
-      setConfirmed(false)
-      setName('')
-      for (const key of ['media', 'folders', 'libraries', 'tasks']) void client.invalidateQueries({ queryKey: [key] })
-    } catch (error) {
-      setMessage(errorMessage(error))
-    } finally {
-      setBusy(false)
-    }
-  }
+export function RecycleBinSettings() {
+  const capabilities = useCapabilities().data
+  const libraries = useQuery({
+    queryKey: ['libraries'],
+    queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal),
+  }).data
+  const [open, setOpen] = useState(false)
+  const [chosen, setChosen] = useState<number>()
+  const available = capabilities?.libraries?.filter(item => item.writable) ?? []
+  const libraryId = chosen ?? available[0]?.libraryId
   return (
-    <div className="space-y-4 p-5">
-      {location.isError && (
-        <p role="alert" className="text-danger">
-          {errorMessage(location.error)} Enable file management in Settings.
-        </p>
-      )}
-      <p className="text-sm text-muted">
-        Current folder: {location.data?.relativePath || '/'} ·{' '}
-        {selected.size ? `${selected.size} selected media` : 'Folder actions'}
-      </p>
-      <Field label="Operation">
-        <Select
-          value={action}
-          disabled={busy}
-          onChange={event => {
-            setAction(event.target.value)
-            setConfirmed(false)
-          }}
-        >
-          <option value="mkdir">New folder</option>
-          <option value="move" disabled={selected.size > 1}>
-            Rename or move one selected item / current folder
-          </option>
-          <option value="delete">Delete selected media / current folder</option>
-        </Select>
-      </Field>
-      {!destructive && (
-        <Field label={action === 'mkdir' ? 'New folder name' : 'Destination path relative to library'}>
-          <Input value={name} disabled={busy} onChange={event => setName(event.target.value)} />
-        </Field>
-      )}
-      {destructive && (
-        <label htmlFor={permanentId} className="flex items-center gap-2 text-sm">
-          <Checkbox
-            id={permanentId}
-            checked={permanent}
-            disabled={busy}
-            onChange={event => {
-              setPermanent(event.target.checked)
-              setConfirmed(false)
-            }}
-          />
-          Permanently delete. This cannot be undone.
-        </label>
-      )}
-      {destructive && confirmed && (
-        <p role="alert" className="text-sm text-danger">
-          Delete {count} selected item{count === 1 ? '' : 's'}?{' '}
-          {permanent ? 'These files will be permanently deleted.' : 'These files will move to the recycle bin.'}
-        </p>
-      )}
-      <div className="flex gap-2">
-        <QuietButton
-          disabled={busy || !location.data || (!destructive && !name.trim())}
-          onClick={() => (destructive && !confirmed ? setConfirmed(true) : void execute())}
-        >
-          {busy ? 'Working…' : destructive ? (confirmed ? 'Confirm delete' : 'Review deletion') : 'Start operation'}
-        </QuietButton>
-        {confirmed && (
-          <QuietButton disabled={busy} onClick={() => setConfirmed(false)}>
-            Cancel
-          </QuietButton>
-        )}
-      </div>
-      {message && (
-        <p role="status" className="text-sm">
-          {message}
-        </p>
-      )}
-      {location.data && <UploadPicker libraryId={libraryId} destination={location.data.relativePath} />}
-    </div>
+    <>
+      <QuietButton disabled={!capabilities?.accessConfigured || !available.length} onClick={() => setOpen(true)}>
+        <Trash2 className="size-4" />
+        Recycle bin
+      </QuietButton>
+      <Modal
+        open={open}
+        onOpenChange={setOpen}
+        title="Recycle bin"
+        description="Restore deleted content or permanently remove it."
+      >
+        <div className="p-5">
+          <Field label="Library">
+            <Select value={libraryId ?? ''} onChange={event => setChosen(Number(event.target.value))}>
+              {available.map(item => (
+                <option key={item.libraryId} value={item.libraryId}>
+                  {libraries?.find(library => library.id === item.libraryId)?.name ?? `Library ${item.libraryId}`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        {open && libraryId && <RecycleBin key={libraryId} libraryId={libraryId} />}
+      </Modal>
+    </>
   )
 }
 
 function RecycleBin({ libraryId }: { libraryId: number }) {
+  const [queued, setQueued] = useState(false)
   const [before, setBefore] = useState<string>()
   const [alternate, setAlternate] = useState('')
   const [error, setError] = useState('')
@@ -223,7 +372,8 @@ function RecycleBin({ libraryId }: { libraryId: number }) {
         recycleId: item.id,
         ...(kind === 'restore' && alternate ? { destination: alternate } : {}),
       })
-      await waitForOperation(result.id)
+      void result
+      setQueued(true)
       setPurging(null)
       for (const key of ['trash', 'media', 'folders', 'tasks']) void client.invalidateQueries({ queryKey: [key] })
     } catch (error) {
@@ -234,6 +384,7 @@ function RecycleBin({ libraryId }: { libraryId: number }) {
   }
   return (
     <div className="space-y-4 p-5">
+      {queued && <p role="status">Queued. Follow progress in Background jobs.</p>}
       <Field label="Alternative restore path (optional; relative to library)">
         <Input value={alternate} onChange={event => setAlternate(event.target.value)} />
       </Field>

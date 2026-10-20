@@ -1,6 +1,6 @@
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IconButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { request, type IndexingStatus, type Scan } from '../browse/api'
@@ -36,6 +36,21 @@ export function BackgroundJobsButton({ libraryId, compact = false }: { libraryId
     queryFn: ({ signal }) => request<components['schemas']['BackgroundTask'][]>('/api/tasks', signal),
     refetchInterval: 3000,
   })
+  const client = useQueryClient()
+  const previous = useRef<Map<string, string> | null>(null)
+  useEffect(() => {
+    if (!tasks.data) return
+    const changed = tasks.data.some(
+      task =>
+        ['copy', 'move', 'mkdir', 'recycle', 'delete', 'restore', 'purge', 'upload'].includes(task.kind) &&
+        task.state === 'completed' &&
+        previous.current !== null &&
+        previous.current.get(task.id) !== 'completed',
+    )
+    previous.current = new Map(tasks.data.map(task => [task.id, task.state]))
+    if (changed)
+      for (const key of ['media', 'folders', 'libraries', 'trash']) void client.invalidateQueries({ queryKey: [key] })
+  }, [client, tasks.data])
   const busy =
     !!starting ||
     !!tasks.data?.some(task =>

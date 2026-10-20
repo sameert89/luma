@@ -1122,7 +1122,6 @@ it('organizes settings under consistent headings without an installation panel',
     'Metadata exchange',
     'Libraries',
     'Hidden folders',
-    'Help',
     'About',
   ]) {
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
@@ -1135,6 +1134,8 @@ it('organizes settings under consistent headings without an installation panel',
   expect(screen.getByTestId('desktop-version').closest('aside')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/sameert89/luma')
   expect(screen.queryByText('Install Luma')).not.toBeInTheDocument()
+  expect(screen.getAllByRole('heading').at(-1)).toHaveTextContent('About')
+  expect(screen.getByRole('button', { name: 'Recycle bin' })).toBeInTheDocument()
 })
 
 describe('help', () => {
@@ -1163,23 +1164,20 @@ describe('help', () => {
       .map(nav => nav.querySelectorAll('button').length)
   }
 
-  it('opens from a labeled button beside Your libraries and returns home', async () => {
+  it('opens Help from the top of Settings and returns to Settings', async () => {
     libraryApi()
     renderApp()
     await screen.findByRole('button', { name: 'Open Photos' })
     const navigation = navigationSize()
-    const entry = screen.getByRole('button', { name: 'Help' })
-    expect(entry).toHaveTextContent('Help')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
+    const entry = screen.getByRole('link', { name: 'Open the Help guide' })
     await userEvent.click(entry)
     expect(screen.getByRole('heading', { name: 'Help', level: 1 })).toBeVisible()
-    expect(new URLSearchParams(window.location.search).get('view')).toBe('help')
-    expect(new URLSearchParams(window.location.search).get('from')).toBe('library')
-    // Help is not another bottom-bar destination.
+    expect(new URLSearchParams(window.location.search).get('from')).toBe('settings')
     expect(navigationSize()).toEqual(navigation)
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
-    expect(await screen.findByRole('heading', { name: 'Your libraries' })).toBeVisible()
-    expect(window.location.search).toBe('')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Help' })).toHaveFocus())
+    expect(await screen.findByRole('heading', { name: 'General' })).toBeVisible()
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Open the Help guide' })).toHaveFocus())
   })
 
   it('opens from Settings without losing folder scope or filters, and Back returns to Settings', async () => {

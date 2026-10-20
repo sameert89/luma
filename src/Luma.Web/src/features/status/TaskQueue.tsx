@@ -13,6 +13,7 @@ const kindLabels: Record<string, string> = {
   comics: 'Comic discovery',
   mkdir: 'New folder',
   move: 'Move / rename',
+  copy: 'Copy',
   recycle: 'Recycle',
   restore: 'Restore',
   delete: 'Permanent deletion',
@@ -56,7 +57,7 @@ const label = (task: Task) => kindLabels[task.kind] ?? task.kind
 function progress(task: Task) {
   if (task.kind === 'upload')
     return `${task.processed.toLocaleString()} bytes uploaded · ${task.pending.toLocaleString()} bytes remaining`
-  if (['mkdir', 'move', 'recycle', 'restore', 'delete', 'purge'].includes(task.kind))
+  if (['mkdir', 'copy', 'move', 'recycle', 'restore', 'delete', 'purge'].includes(task.kind))
     return task.state === 'completed'
       ? 'Operation completed'
       : task.state === 'needsAttention'
