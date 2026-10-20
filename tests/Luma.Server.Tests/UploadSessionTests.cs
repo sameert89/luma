@@ -63,7 +63,7 @@ public sealed class UploadSessionTests
             catch (UnauthorizedAccessException error) { throw new IOException("Staging is not a file", error); }
         });
         Assert.Equal("waitingForClient", (await uploads.GetAsync(upload.Id, default)).State);
-        await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "mkdir", "new"), default));
+        await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "mkdir", "photo.jpg"), default));
         Directory.Delete(staging);
         await uploads.ChangeStateAsync(upload.Id, "cancel", default);
         Assert.Equal("cancelled", (await uploads.ChangeStateAsync(upload.Id, "cancel", default)).State);
@@ -138,12 +138,13 @@ public sealed class UploadSessionTests
     }
 
     [Fact]
-    public async Task Waiting_upload_reserves_the_library_without_consuming_a_worker()
+    public async Task Waiting_upload_reserves_only_its_target_without_consuming_a_worker()
     {
         await using var f = await PipelineFixture.CreateAsync();
         var (operations, uploads, _) = Services(f);
         var upload = await uploads.CreateAsync(new(1, "photo.jpg", 3), default);
-        await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "mkdir", "new"), default));
+        Assert.Equal("queued", (await operations.GetAsync((await operations.QueueAsync(new(1, "mkdir", "unrelated"), default)).Id, default)).State);
+        await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "mkdir", "photo.jpg"), default));
         await uploads.ChangeStateAsync(upload.Id, "pause", default);
         await Assert.ThrowsAsync<ApiRequestException>(() => uploads.AppendAsync(upload.Id, 0, new MemoryStream("abc"u8.ToArray()), 3, default));
         await uploads.ChangeStateAsync(upload.Id, "resume", default);
@@ -166,4 +167,32 @@ public sealed class UploadSessionTests
         await Assert.ThrowsAsync<ApiRequestException>(() => uploads.FinalizeAsync(upload.Id, default));
         Assert.Equal("replacement", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
     }
+    [Fact]
+    public async Task Distinct_uploads_can_start_and_finalize_while_other_publications_are_queued()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, uploads, _) = Services(f);
+        await operations.QueueAsync(new(1, "mkdir", "unrelated"), default);
+        var first = await uploads.CreateAsync(new(1, "first.jpg", 0), default);
+        var second = await uploads.CreateAsync(new(1, "second.jpg", 0), default);
+        Assert.Equal("finalizing", (await uploads.FinalizeAsync(first.Id, default)).State);
+        Assert.Equal("finalizing", (await uploads.FinalizeAsync(second.Id, default)).State);
+        Assert.Equal("waitingForClient", (await uploads.CreateAsync(new(1, "third.jpg", 0), default)).State);
+        var conflict = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "mkdir", "first.jpg"), default));
+        Assert.Equal("path_busy", conflict.Code);
+    }
+
+    [Fact]
+    public async Task Uploads_reject_overlapping_queued_subtrees_but_allow_sibling_paths()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, uploads, _) = Services(f);
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await operations.QueueAsync(new(1, "move", "album", "moved"), default);
+        var conflict = await Assert.ThrowsAsync<ApiRequestException>(() => uploads.CreateAsync(new(1, "album", 0), default));
+        Assert.Equal("path_busy", conflict.Code);
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "sibling"));
+        Assert.Equal("waitingForClient", (await uploads.CreateAsync(new(1, "sibling/new.jpg", 0), default)).State);
+    }
+
 }

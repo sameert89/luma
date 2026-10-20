@@ -43,7 +43,6 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"""
             SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@Id AND State='needsAttention')
               OR EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running'))
-              OR EXISTS(SELECT 1 FROM UploadSessions WHERE LibraryId=@Id AND State IN ('waitingForClient','paused','finalizing'))
               OR EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=@Id AND State IN ('queued','running'))
             """, root, tx, cancellationToken: ct)))
             throw new ApiRequestException(409, "library_busy", "Finish indexing or resolve the operation needing attention before changing this library.");
@@ -80,6 +79,9 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         var paths = new[] { operation.Source, operation.Destination }.OfType<string>().Select(root.Key).ToArray();
         if (active.Any(other => new[] { other.Source, other.Destination }.OfType<string>().Any(path => paths.Any(candidate => Overlaps(candidate, root.Key(path))))))
             throw new ApiRequestException(409, "path_busy", "A queued operation already uses this file or destination. Wait for it to finish.");
+        var uploads = await db.QueryAsync<string>(new CommandDefinition("SELECT Target FROM UploadSessions WHERE LibraryId=@Id AND State IN ('waitingForClient','paused','finalizing') LIMIT 129", root, tx, cancellationToken: ct));
+        if (uploads.Any(target => paths.Any(path => PathsOverlap(root, path, target))))
+            throw new ApiRequestException(409, "path_busy", "An upload already reserves this file or destination. Wait for it to finish.");
         var checkedDestination = operation.Kind == "mkdir" ? operation.Source : operation.Destination;
         if (checkedDestination is not null)
         {
@@ -122,6 +124,13 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
             return db;
         }
         catch { await db.DisposeAsync(); throw; }
+    }
+
+    internal static bool PathsOverlap(LibraryOptions root, string first, string second)
+    {
+        var a = root.Key(first);
+        var b = root.Key(second);
+        return a == b || a.StartsWith(b + '/', StringComparison.Ordinal) || b.StartsWith(a + '/', StringComparison.Ordinal);
     }
 
     internal static void EnsureDestination(LibraryOptions root, string relative)

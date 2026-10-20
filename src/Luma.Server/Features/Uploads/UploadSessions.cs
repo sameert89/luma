@@ -54,15 +54,15 @@ public sealed class UploadSessions(Database database, FileOperations operations,
             var (count, reserved) = await db.QuerySingleAsync<(long Count, long Reserved)>(new CommandDefinition(
                 "SELECT COUNT(*),COALESCE(SUM(SizeBytes),0) FROM UploadSessions WHERE State IN ('waitingForClient','paused','finalizing')", transaction: tx, cancellationToken: ct));
             if (count >= 128 || request.SizeBytes > stagingQuota - reserved) throw new ApiRequestException(409, "upload_capacity", "The upload session or staging-space limit has been reached.");
-            if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"""
-                SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@LibraryId AND State IN ({FileOperations.ActiveStates}))
-
-                """, new { request.LibraryId }, tx, cancellationToken: ct)))
-                throw new ApiRequestException(409, "library_busy", "A conflicting operation or upload is active.");
+            var active = (await db.QueryAsync<FileOperation>(new CommandDefinition($"SELECT * FROM FileOperations WHERE LibraryId=@LibraryId AND State IN ({FileOperations.ActiveStates}) LIMIT 501", request, tx, cancellationToken: ct))).ToArray();
+            if (active.Any(operation => operation.State == "needsAttention"))
+                throw new ApiRequestException(409, "library_busy", "Resolve the operation needing attention before uploading to this library.");
+            if (active.Any(operation => new[] { operation.Source, operation.Destination }.OfType<string>().Any(path => FileOperations.PathsOverlap(root, path, target))))
+                throw new ApiRequestException(409, "path_busy", "A queued operation already uses this upload destination. Wait for it to finish.");
             var activeTargets = await db.QueryAsync<string>(new CommandDefinition("SELECT Target FROM UploadSessions WHERE LibraryId=@LibraryId AND State IN ('waitingForClient','paused','finalizing')", request, tx, cancellationToken: ct));
             // Admission caps this list at 128. Apply the configured root's Unicode case policy,
             // rather than SQLite's ASCII-only upper/collation behavior.
-            if (activeTargets.Any(existing => root.Key(existing) == root.Key(target)))
+            if (activeTargets.Any(existing => FileOperations.PathsOverlap(root, existing, target)))
                 throw new ApiRequestException(409, "library_busy", "An upload already reserves this destination.");
             FileOperations.EnsureDestination(root, target);
             var now = DateTimeOffset.UtcNow.ToString("O");
@@ -176,8 +176,12 @@ public sealed class UploadSessions(Database database, FileOperations operations,
             FileOperations.EnsureDestination(root, session.Target);
             await using var db = await operations.OpenJournalAsync(ct);
             using var tx = db.BeginTransaction();
-            if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@LibraryId AND State IN ({FileOperations.ActiveStates}))", session, tx, cancellationToken: ct)))
-                throw new ApiRequestException(409, "library_busy", "Another file operation is active. Retry finalization when it finishes.");
+            var active = (await db.QueryAsync<FileOperation>(new CommandDefinition($"SELECT * FROM FileOperations WHERE LibraryId=@LibraryId AND State IN ({FileOperations.ActiveStates}) LIMIT 501", session, tx, cancellationToken: ct))).ToArray();
+            if (active.Length >= 500) throw new ApiRequestException(409, "queue_full", "Wait for queued file operations to finish before publishing more uploads.");
+            if (active.Any(operation => operation.State == "needsAttention"))
+                throw new ApiRequestException(409, "library_busy", "Resolve the operation needing attention before publishing to this library.");
+            if (active.Any(operation => new[] { operation.Source, operation.Destination }.OfType<string>().Any(candidate => FileOperations.PathsOverlap(root, candidate, session.Target))))
+                throw new ApiRequestException(409, "path_busy", "A queued operation already uses this upload destination. Wait for it to finish.");
             var operationId = Guid.NewGuid().ToString("N");
             await db.ExecuteAsync(new CommandDefinition("""
                 INSERT INTO FileOperations(Id,LibraryId,Kind,Source,Destination,UploadId,IsDirectory,SourceSize,SourceModifiedTicks,CreatedAt)
