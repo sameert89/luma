@@ -44,9 +44,7 @@ it('draws automatic covers in the Settings style, switching live, while a manual
   )
   expect(cover(container)).toBe('blurred-foreground')
   expect([...container.querySelectorAll('img')].every(image => image.getAttribute('src') === '/chosen')).toBe(true)
-  expect(
-    screen.getByText(/A cover you picked yourself for an album or folder always stays that photo/),
-  ).toBeInTheDocument()
+  expect(screen.getByText(/Your handpicked covers stay as they are/)).toBeInTheDocument()
 })
 
 it('shows a placeholder when a folder has no prepared cover', () => {

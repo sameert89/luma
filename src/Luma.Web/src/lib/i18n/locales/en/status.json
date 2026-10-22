@@ -1,15 +1,15 @@
 {
   "backgroundJobs": {
     "backgroundJobs": "Background jobs",
-    "uploadsFileOperationsIndexingAndMetadataJobsRescanA": "Uploads, file operations, indexing and metadata jobs. Rescan a folder or library from its ⋯ menu.",
+    "uploadsFileOperationsIndexingAndMetadataJobsRescanA": "Check uploads, file changes, scans and metadata tasks.",
     "backgroundJobsNeedsAttention": "Background jobs, needs attention",
     "backgroundJobsRunning": "Background jobs, running"
   },
   "connectionStatus": {
     "connection": "Connection",
     "connectingToLuma": "Connecting to Luma…",
-    "lumaIsUnavailableCheckThatTheServerIsRunning": "Luma is unavailable. Check that the server is running.",
-    "lumaIsConnectedAndReady": "Luma is connected and ready.",
+    "lumaIsUnavailableCheckThatTheServerIsRunning": "Can’t reach Luma. Check that the server is running.",
+    "lumaIsConnectedAndReady": "Connected to Luma.",
     "tryAgain": "Try again"
   },
   "taskQueue": {
@@ -41,19 +41,19 @@
     "interrupted": "Interrupted",
     "expired": "Expired",
     "operationCompleted": "Operation completed",
-    "inspectOperationEvidenceBeforeContinuingThisLibraryIsProtected": "Inspect operation evidence before continuing. This library is protected from further mutations.",
+    "inspectOperationEvidenceBeforeContinuingThisLibraryIsProtected": "Check the files in Review recovery. Other changes to this library are paused.",
     "operationInProgress": "Operation in progress",
     "taskQueue": "Task queue",
     "jobs": "Jobs",
     "active": " · {{running}} active",
     "clearing": "Clearing…",
     "clearFinished": "Clear finished",
-    "previewStorageIsFullSoPreviewPreparationIsPaused": "Preview storage is full, so preview preparation is paused.",
+    "previewStorageIsFullSoPreviewPreparationIsPaused": "Preview storage is full. Free up space to resume.",
     "startingOperation": "Starting operation…",
     "loadingTasks": "Loading tasks…",
     "noBackgroundTasks": "No background tasks.",
     "reviewRecovery": "Review recovery",
-    "filesFoundSoFarStayInYourLibraryAnd": "Files found so far stay in your library, and their previews are made as you view them. Each folder you open is finished then, including its tags if the library imports tags.",
+    "filesFoundSoFarStayInYourLibraryAnd": "Files already found will stay in your library. You can open any folder to finish indexing it, including tag imports if enabled.",
     "stopping": "Stopping…",
     "stopIndexing": "Stop indexing",
     "keepRunning": "Keep running",
@@ -73,11 +73,11 @@
     "exportProgress": "{{count, number}} exported{{failed}}"
   },
   "updateNotice": {
-    "lumaIsReadyRefreshToUpdate": "Luma {{serverVersion}} is ready. Refresh to update.",
+    "lumaIsReadyRefreshToUpdate": "Luma {{serverVersion}} is ready. Refresh to load it.",
     "refresh": "Refresh",
     "notNow": "Not now",
     "updates": "Updates",
-    "whichReleaseThisDeviceIsRunningAndWhetherThe": "Which release this device is running, and whether the server has a newer one.",
+    "whichReleaseThisDeviceIsRunningAndWhetherThe": "Your current version and available updates.",
     "refreshToUpdate": "Refresh to update",
     "whatSNew": "What’s new",
     "whatSNewInLumaV": "What’s new in Luma v{{value1}}",
@@ -85,7 +85,7 @@
     "lumaV": "Luma v{{value1}}",
     "v2": "v{{releaseVersion}} · {{releaseDate}}",
     "continue": "Continue",
-    "serverInstalled": "Luma <version>{{version}}</version> is installed on the server. Refresh to start using it; nothing is lost.",
+    "serverInstalled": "Luma <version>{{version}}</version> is on the server. Refresh to load it.",
     "upToDate": "Luma <version>v{{version}}</version> is up to date."
   }
 }

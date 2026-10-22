@@ -89,7 +89,7 @@ it('reports a track load failure without changing playback position', async () =
   await userEvent.click(screen.getByRole('button', { name: 'Captions' }))
   await waitFor(() => expect(container.querySelector('track')).not.toBeNull())
   fireEvent.error(container.querySelector('track')!)
-  expect(screen.getByRole('status')).toHaveTextContent('Playback can continue')
+  expect(screen.getByRole('status')).toHaveTextContent('Turn them off and on to try again')
   expect(player.currentTime).toBe(8)
 })
 it('keeps caption settings inside the fullscreen element', async () => {

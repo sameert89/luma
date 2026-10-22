@@ -1,6 +1,6 @@
 {
   "uploadPicker": {
-    "preparingUploadsYouCanCloseThisDialogUploadsContinue": "Preparing uploads… You can close this dialog; uploads continue in Background jobs.",
+    "preparingUploadsYouCanCloseThisDialogUploadsContinue": "Preparing uploads… Feel free to close this window.",
     "couldNotStartUpload": "Could not start upload.",
     "uploadFiles": "Upload files",
     "dropFilesOrFoldersHere": "Drop files or folders here",
@@ -9,24 +9,24 @@
     "chooseFolder": "Choose folder",
     "chooseUploadFiles": "Choose upload files",
     "chooseUploadFolder": "Choose upload folder",
-    "uploadsContinueWhenThisDialogClosesAfterRefreshingReselect": "Uploads continue when this dialog closes. After refreshing, reselect the same files or folder to resume.",
+    "uploadsContinueWhenThisDialogClosesAfterRefreshingReselect": "You can close this window while uploads run. If you refresh the browser, choose the same files or folder to resume.",
     "pause": "Pause",
     "resumeRetry": "Resume / retry",
     "cancel": "Cancel",
     "miBSSRemaining": " · {{value1}} MiB/s · {{value2}}s remaining",
-    "filesQueued_one": "{{count}} file queued for upload.{{skipped}} Follow progress in Background jobs.",
-    "filesQueued_other": "{{count}} files queued for upload.{{skipped}} Follow progress in Background jobs.",
+    "filesQueued_one": "{{count}} file queued for upload.{{skipped}} Check Background jobs for progress.",
+    "filesQueued_other": "{{count}} files queued for upload.{{skipped}} Check Background jobs for progress.",
     "uploadsInQueue_one": "{{count}} upload in queue",
     "uploadsInQueue_other": "{{count}} uploads in queue"
   },
   "droppedFiles": {
-    "folderUploadExceedsTheDepthLimit": "Folder upload exceeds the depth limit.",
+    "folderUploadExceedsTheDepthLimit": "There are too many nested folders in this upload.",
     "chooseAtMost10000FilesAtOnce": "Choose at most 10,000 files at once."
   },
   "uploadQueue": {
     "chooseAtMost10000FilesAtOnce": "Choose at most 10,000 files at once.",
-    "folderUploadExceedsTheDepthLimit": "Folder upload exceeds the depth limit.",
-    "thisServerUploadWasCancelledStartANewUpload": "This server upload was cancelled. Start a new upload.",
+    "folderUploadExceedsTheDepthLimit": "There are too many nested folders in this upload.",
+    "thisServerUploadWasCancelledStartANewUpload": "This upload was cancelled. Choose the file again to start over.",
     "uploadFailed": "Upload failed ({{value1}}).",
     "uploadInterrupted": "Upload interrupted.",
     "couldNotUpdateUpload": "Could not update upload."

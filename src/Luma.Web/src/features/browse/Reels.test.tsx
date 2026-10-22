@@ -48,7 +48,7 @@ it('shows a styled empty state with a direct route to filters', async () => {
   )
   const heading = await screen.findByRole('heading', { name: 'No reels to show' })
   expect(heading.closest('section')).toHaveClass('bg-canvas')
-  expect(heading.closest('section')).toHaveTextContent('No photos or videos match this view.')
+  expect(heading.closest('section')).toHaveTextContent('Nothing matches these filters.')
   await userEvent.click(screen.getByRole('button', { name: 'Adjust filters' }))
   expect(filters).toHaveBeenCalledOnce()
 })

@@ -108,6 +108,6 @@ it('keeps recovery evidence visible but disables mutations for an unavailable mo
   const retry = await screen.findByRole('button', { name: 'Retry from saved checkpoint' })
   await userEvent.click(screen.getByRole('checkbox'))
   expect(retry).toBeDisabled()
-  expect(screen.getByText(/File changes disabled/)).toBeInTheDocument()
+  expect(screen.getByText(/No write access/)).toBeInTheDocument()
   expect(screen.getByText(evidence.stagingPath)).toBeInTheDocument()
 })

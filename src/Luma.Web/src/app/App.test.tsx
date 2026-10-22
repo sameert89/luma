@@ -444,7 +444,7 @@ describe('browsing shell', () => {
     renderApp()
     await userEvent.click(await screen.findByRole('button', { name: 'Open Photos' }))
     const dialog = screen.getByRole('dialog', { name: 'Set up library' })
-    expect(dialog).toHaveTextContent('does not disable indexing, thumbnails, video posters or on-demand previews')
+    expect(dialog).toHaveTextContent('Choose which embedded tags to import for this library.')
     await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Automatic tag import' }), 'none')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Index folders as I open them' }))
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('folderId')).toBe('5'))
@@ -1335,7 +1335,7 @@ describe('folder actions', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Folder actions for Trips' }))
     await userEvent.click(screen.getByRole('button', { name: 'Rescan folder' }))
     const dialog = screen.getByRole('dialog', { name: 'Rescan folder' })
-    expect(dialog).toHaveTextContent('every folder inside it')
+    expect(dialog).toHaveTextContent('and its subfolders')
     expect(posted()).toHaveLength(0)
     // The choice starts from the library's own setting.
     await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Tag import' })).toHaveValue('xmp'))

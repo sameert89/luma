@@ -1,9 +1,9 @@
 {
   "metadataExchange": {
     "metadataExchange": "Metadata exchange",
-    "importsMergeEXIFXMPTagsIntoLuma": "Imports merge EXIF/XMP tags into Luma. ",
-    "exportsAreDownloadsOriginalsStayUnchanged": "Exports are downloads; originals stay unchanged.",
-    "originalsStayUnchanged": "Originals stay unchanged.",
+    "importsMergeEXIFXMPTagsIntoLuma": "Import tags from EXIF/XMP metadata. ",
+    "exportsAreDownloadsOriginalsStayUnchanged": "Download exports without changing your original files.",
+    "originalsStayUnchanged": "Your original files stay untouched.",
     "includeAdjacentXMPSidecars": "Include adjacent XMP sidecars",
     "importMetadataTags": "Import metadata tags",
     "importFolderMetadataTags": "Import folder metadata tags",

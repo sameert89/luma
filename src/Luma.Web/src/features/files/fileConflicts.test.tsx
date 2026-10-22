@@ -34,7 +34,7 @@ test('Skip all resolves simultaneous conflicts in one batch and does not affect 
   const first = withFileConflict(action, { batch, target: 'one.jpg' })
   const second = withFileConflict(action, { batch, target: 'two.jpg' })
   await screen.findByRole('dialog', { name: 'An item already exists' })
-  await userEvent.click(screen.getByRole('checkbox', { name: 'Apply to all remaining conflicts in this batch' }))
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts' }))
   await userEvent.click(screen.getByRole('button', { name: 'Skip' }))
   expect(await Promise.all([first, second])).toEqual([null, null])
   expect(await withFileConflict(action, { batch, target: 'three.jpg' })).toBeNull()
