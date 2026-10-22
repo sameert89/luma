@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -158,7 +159,7 @@ it('runs a slideshow at the chosen pace, preloads the next slide and stops at th
     expect(screen.getByRole('button', { name: 'Slideshow' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Slide duration, 3 seconds' })).toBeVisible()
     await waitFor(() => expect(preloads.some(image => image.getAttribute('src') === '/preview-2')).toBe(true))
-    expect(screen.queryByRole('button', { name: 'Watch on Reels' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Watch on Flick' })).not.toBeInTheDocument()
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2500)
     })
@@ -196,7 +197,7 @@ it('runs a slideshow at the chosen pace, preloads the next slide and stops at th
   }
 })
 
-it('offers Watch on Reels for videos and GIFs', async () => {
+it('offers Watch on Flick for videos and GIFs', async () => {
   window.history.replaceState(null, '', '/')
   const gif = {
     id: 9,
@@ -250,7 +251,7 @@ it('offers Watch on Reels for videos and GIFs', async () => {
       />
     </QueryClientProvider>,
   )
-  await userEvent.click(screen.getByRole('button', { name: 'Watch on Reels' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Watch on Flick' }))
   expect(onWatchReels).toHaveBeenCalledWith(expect.objectContaining({ id: 9 }))
 })
 
@@ -386,3 +387,137 @@ it('autoplays the next video when one ends only while Autoplay is on, and rememb
   await userEvent.click(screen.getByRole('button', { name: 'Next item' }))
   expect(stage.props.autoPlay).toBe(false)
 })
+
+it('does not navigate the video behind an open caption settings dialog', async () => {
+  const media: Media = {
+    id: 700,
+    libraryId: 1,
+    folderId: 1,
+    fileName: 'movie.mp4',
+    mediaType: 'video',
+    extension: '.mp4',
+    availability: 'present',
+    modifiedAt: '2026-01-01T00:00:00Z',
+    effectiveDate: '2026-01-01T00:00:00Z',
+    capturedAt: null,
+    width: null,
+    height: null,
+    durationMs: 1000,
+    sizeBytes: 100,
+    preference: 'neutral',
+    tags: [],
+    thumbnail: { status: 'ready', url: '/thumb', width: null, height: null },
+    preview: { status: 'ready', url: '/poster', width: null, height: null },
+  }
+  const next = { ...media, id: 701, fileName: 'next.mp4' }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url.includes('/neighbors?')
+              ? { previous: null, next }
+              : url === '/api/tasks' || url === '/api/libraries'
+                ? []
+                : media,
+          ),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+    ),
+  )
+  const changed = vi.fn()
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      <Viewer active={media} filters={{}} onChange={changed} onClose={vi.fn()} restoreFocus={vi.fn()} />
+    </QueryClientProvider>,
+  )
+  await userEvent.click(await screen.findByRole('button', { name: 'Viewer menu' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Next item' })).toBeEnabled())
+  const captionDialog = document.createElement('div')
+  captionDialog.setAttribute('role', 'dialog')
+  captionDialog.setAttribute('data-state', 'open')
+  document.body.append(captionDialog)
+  try {
+    await userEvent.keyboard('{ArrowRight}')
+    expect(changed).not.toHaveBeenCalled()
+  } finally {
+    captionDialog.remove()
+  }
+  await userEvent.keyboard('{ArrowRight}')
+  expect(changed).toHaveBeenCalledWith(next)
+})
+
+it.each(['image', 'video'])(
+  'deleting %s advances, falls back at the end and skips queued removals without closing',
+  async mediaType => {
+    window.history.replaceState(null, '', '/')
+    const items = [1, 2, 3].map(
+      id =>
+        ({
+          id,
+          libraryId: 1,
+          folderId: 1,
+          fileName: `${id}.${mediaType === 'video' ? 'mp4' : 'jpg'}`,
+          mediaType,
+          extension: mediaType === 'video' ? '.mp4' : '.jpg',
+          availability: 'present',
+          preference: 'neutral',
+          modifiedAt: '2026-01-01T00:00:00Z',
+          effectiveDate: '2026-01-01T00:00:00Z',
+          capturedAt: null,
+          width: null,
+          height: null,
+          durationMs: null,
+          sizeBytes: 100,
+          tags: [],
+          thumbnail: { status: 'ready', url: '/thumb', width: null, height: null },
+          preview: { status: 'ready', url: '/preview', width: null, height: null },
+        }) as Media,
+    )
+    const fetch = vi.fn(async (url: string) => {
+      const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
+      return new Response(
+        JSON.stringify(
+          url.includes('capabilities')
+            ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] }
+            : url.includes('/neighbors?')
+              ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+              : url === '/api/files/items'
+                ? { id: 'queued' }
+                : url === '/api/libraries'
+                  ? []
+                  : items[id - 1],
+        ),
+      )
+    })
+    vi.stubGlobal('fetch', fetch)
+    const closed = vi.fn()
+    function Controlled() {
+      const [active, setActive] = useState(items[1])
+      return <Viewer active={active} filters={{}} onChange={setActive} onClose={closed} restoreFocus={vi.fn()} />
+    }
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+        <Controlled />
+      </QueryClientProvider>,
+    )
+    const user = userEvent.setup()
+    async function remove() {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete file' })).toBeEnabled())
+      await user.click(screen.getByRole('button', { name: 'Delete file' }))
+      await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+    }
+    await remove()
+    await screen.findByRole('dialog', { name: items[2].fileName })
+    expect(closed).not.toHaveBeenCalled()
+    await remove()
+    await screen.findByRole('dialog', { name: items[0].fileName })
+    expect(closed).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next item' })).toBeDisabled())
+    await remove()
+    await waitFor(() => expect(closed).toHaveBeenCalledOnce())
+    const posts = fetch.mock.calls.filter(call => call[0] === '/api/files/items')
+    expect(posts).toHaveLength(3)
+  },
+)

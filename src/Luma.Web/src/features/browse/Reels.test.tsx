@@ -47,7 +47,7 @@ it('shows a styled empty state with a direct route to filters', async () => {
     </QueryClientProvider>,
   )
   const heading = await screen.findByRole('heading', { name: 'No reels to show' })
-  expect(heading.closest('section')).toHaveClass('bg-black')
+  expect(heading.closest('section')).toHaveClass('bg-canvas')
   expect(heading.closest('section')).toHaveTextContent('No photos or videos match this view.')
   await userEvent.click(screen.getByRole('button', { name: 'Adjust filters' }))
   expect(filters).toHaveBeenCalledOnce()
@@ -77,7 +77,7 @@ it('restores the current reel, mute and auto-scroll after leaving and returning,
     )
   try {
     const first = mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
     await userEvent.click(screen.getByRole('button', { name: 'Unmute' }))
     await userEvent.click(screen.getByRole('button', { name: 'Auto-scroll' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled())
@@ -87,7 +87,7 @@ it('restores the current reel, mute and auto-scroll after leaving and returning,
     const feedsBefore = fetch.mock.calls.filter(([url]) => url.startsWith('/api/media?')).length
     const returned = mount()
     expect(await screen.findByLabelText('2.mp4')).toHaveProperty('muted', false)
-    await userEvent.click(screen.getByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Flick menu' }))
     expect(screen.getByRole('button', { name: 'Mute' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Auto-scroll' })).toHaveAttribute('aria-pressed', 'true')
     expect(fetch.mock.calls.filter(([url]) => url.startsWith('/api/media?'))).toHaveLength(feedsBefore)
@@ -148,7 +148,7 @@ it('retains only current query data and one nearby preview during sequential bro
         />
       </QueryClientProvider>,
     )
-    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
     const next = await screen.findByRole('button', { name: /^Next$/ })
     await waitFor(() =>
       expect(
@@ -163,7 +163,12 @@ it('retains only current query data and one nearby preview during sequential bro
       await waitFor(() => expect(screen.getByLabelText(items[index + 1].fileName)).toBeVisible())
       expect(document.querySelectorAll('video')).toHaveLength(1)
     }
-    await waitFor(() => expect(client.getQueryCache().getAll().length).toBeLessThanOrEqual(4))
+    const queries = client.getQueryCache()
+    await waitFor(() => {
+      const retained = queries.findAll({ predicate: query => query.queryKey[0] !== 'file-capabilities' })
+      expect(retained.length).toBeLessThanOrEqual(4)
+    })
+    expect(queries.findAll({ queryKey: ['file-capabilities'] })).toHaveLength(1)
     expect(preloads.filter(image => image.hasAttribute('src'))).toHaveLength(1)
     unmount()
     expect(preloads.filter(image => image.hasAttribute('src'))).toHaveLength(0)
@@ -197,17 +202,17 @@ it('consolidates view options and closes tags with the cross, outside click and 
         <Reels filters={{}} onFilters={vi.fn()} onOpenViewer={vi.fn()} />
       </QueryClientProvider>,
     )
-    const menu = await screen.findByRole('button', { name: 'Reels menu' })
+    const menu = await screen.findByRole('button', { name: 'Flick menu' })
     expect(menu).toHaveAttribute('aria-expanded', 'false')
     expect(menu.querySelector('svg')).toHaveClass('lucide-ellipsis-vertical')
     expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'View options' }).closest('[inert]')).not.toBeNull()
     fireEvent(screen.getByLabelText('1.mp4'), new Event('webkitbeginfullscreen'))
-    expect(screen.queryByRole('button', { name: 'Reels menu' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Flick menu' })).not.toBeInTheDocument()
     fireEvent(screen.getByLabelText('1.mp4'), new Event('webkitendfullscreen'))
-    expect(screen.getByRole('button', { name: 'Reels menu' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Flick menu' })).toBeVisible()
     await userEvent.click(menu)
-    const closeMenu = screen.getByRole('button', { name: 'Close reels menu' })
+    const closeMenu = screen.getByRole('button', { name: 'Close flick menu' })
     expect(closeMenu).toHaveAttribute('aria-expanded', 'true')
     expect(closeMenu.querySelector('svg')).toHaveClass('lucide-x')
     const viewOptions = screen.getByRole('button', { name: 'View options' })
@@ -241,7 +246,7 @@ it('consolidates view options and closes tags with the cross, outside click and 
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tags' })).not.toBeInTheDocument())
     await userEvent.click(closeMenu)
-    expect(screen.getByRole('button', { name: 'Reels menu' }).querySelector('svg')).toHaveClass(
+    expect(screen.getByRole('button', { name: 'Flick menu' }).querySelector('svg')).toHaveClass(
       'lucide-ellipsis-vertical',
     )
     expect(screen.getByRole('button', { name: 'View options' }).closest('[inert]')).not.toBeNull()
@@ -287,7 +292,7 @@ it('keeps like and dislike on the stage beside a bottom menu, loops by default a
     // Rating is always one tap away; the menu toggle sits beside it rather than at the top.
     const like = screen.getByRole('button', { name: 'Like' })
     const dislike = screen.getByRole('button', { name: 'Dislike' })
-    const menu = screen.getByRole('button', { name: 'Reels menu' })
+    const menu = screen.getByRole('button', { name: 'Flick menu' })
     expect(like.closest('[inert]')).toBeNull()
     expect(dislike.parentElement).toBe(menu.parentElement)
     expect(like.parentElement).toBe(menu.parentElement)
@@ -316,6 +321,107 @@ it('keeps like and dislike on the stage beside a bottom menu, loops by default a
   } finally {
     vi.restoreAllMocks()
     vi.useRealTimers()
+    client.clear()
+  }
+})
+
+it('deletes reels through next, previous and empty while skipping queued items', async () => {
+  window.history.replaceState(null, '', '/flick')
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const items = [1, 2, 3].map(clip)
+  const fetch = vi.fn().mockImplementation((url: string) => {
+    const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
+    const data = url.includes('capabilities')
+      ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] }
+      : url === '/api/files/items'
+        ? { id: 'queued' }
+        : url.includes('/neighbors?')
+          ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+          : /media\/\d+$/.test(url)
+            ? items[id - 1]
+            : { items: [items[0]] }
+    return Promise.resolve(new Response(JSON.stringify(data)))
+  })
+  vi.stubGlobal('fetch', fetch)
+  const changed = vi.fn()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <Reels
+          filters={{ mediaType: 'video' }}
+          startId={2}
+          onFilters={vi.fn()}
+          onOpenViewer={vi.fn()}
+          onItemChange={changed}
+        />
+      </QueryClientProvider>,
+    )
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Flick menu' }))
+    await user.click(screen.getByRole('button', { name: 'Auto-scroll' }))
+    const stage = screen.getByRole('region', { name: 'Flick' })
+    expect(within(stage).queryByRole('button', { name: 'Filters' })).not.toBeInTheDocument()
+    async function remove() {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete file' })).toBeEnabled())
+      await user.click(screen.getByRole('button', { name: 'Delete file' }))
+      await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+    }
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete file' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Delete file' }))
+    fireEvent.ended(screen.getByLabelText('2.mp4'))
+    expect(screen.getByLabelText('2.mp4')).toBeInTheDocument()
+    expect(fetch.mock.calls.some(([url]) => url === '/api/files/items')).toBe(false)
+    await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
+    await screen.findByLabelText('3.mp4')
+    expect(stage).toBeInTheDocument()
+    await remove()
+    await screen.findByLabelText('1.mp4')
+    expect(stage).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled())
+    await remove()
+    await screen.findByRole('heading', { name: 'No reels to show' })
+    expect(changed).toHaveBeenLastCalledWith(null)
+    expect(JSON.parse(localStorage.getItem('luma-reels-state')!).mediaId).toBeNull()
+    const posts = fetch.mock.calls.filter(([url]) => url === '/api/files/items')
+    expect(posts.map(([, init]) => JSON.parse(init.body).mediaId)).toEqual([2, 3, 1])
+    expect(fetch.mock.calls.some(([url]) => url.startsWith('/api/files/operations/'))).toBe(false)
+  } finally {
+    vi.restoreAllMocks()
+    client.clear()
+  }
+})
+
+it('disables Delete in the Flick menu for a read-only library', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string) => {
+      const data = url.includes('capabilities')
+        ? { accessConfigured: true, libraries: [{ libraryId: 1, writable: false }] }
+        : url.includes('/neighbors?')
+          ? { previous: null, next: null }
+          : /media\/\d+$/.test(url)
+            ? clip(1)
+            : { items: [clip(1)] }
+      return Promise.resolve(new Response(JSON.stringify(data)))
+    }),
+  )
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <Reels filters={{ mediaType: 'video' }} onFilters={vi.fn()} onOpenViewer={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
+    expect(await screen.findByRole('button', { name: 'Delete file' })).toBeDisabled()
+  } finally {
+    vi.restoreAllMocks()
     client.clear()
   }
 })

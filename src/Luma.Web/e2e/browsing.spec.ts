@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { galleryAction, viewerAction } from './helpers'
-import { DatabaseSync } from 'node:sqlite'
+import { openHeaderSearch, galleryAction, viewerAction, openFixtureDatabase } from './helpers'
 import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -30,34 +29,73 @@ test.beforeEach(async ({ page }) => {
     .toBeGreaterThan(0)
 })
 
-test('anchors mobile search to its icon and closes it with the cross', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile', 'Mobile search reveal')
-  const open = page.getByRole('button', { name: 'Open search' })
+test('phone search is collapsed until clicked, groups actions on the right, and stays out of Settings', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile', 'Mobile header layout')
+  await expect(page.getByRole('combobox', { name: 'Search media' })).toBeHidden()
+  const header = page.locator('header').first()
+  const initialHeight = (await header.boundingBox())!.height
+  const open = page.getByRole('button', { name: 'Open search', exact: true })
   const filters = page.getByRole('button', { name: 'Filters', exact: true })
-  const filterPosition = await filters.boundingBox()
-  const buttonPosition = await open.boundingBox()
-  expect(buttonPosition!.x).toBeGreaterThan(page.viewportSize()!.width / 2)
+  const settings = page.getByRole('button', { name: 'Settings', exact: true })
+  const a = (await open.boundingBox())!,
+    b = (await filters.boundingBox())!,
+    c = (await settings.boundingBox())!
+  expect(a.y).toBe(b.y)
+  expect(b.y).toBe(c.y)
+  expect(b.x - a.x).toBeLessThan(60)
+  expect(c.x - b.x).toBeLessThan(60)
   await open.click()
-  const search = page.getByRole('combobox', { name: 'Search media' })
-  await expect(search).toBeFocused()
-  await expect(page.getByRole('button', { name: 'Close search' })).toBeVisible()
-  await expect.poll(async () => (await filters.boundingBox())?.x).toBe(filterPosition!.x)
+  await expect(page.getByRole('combobox', { name: 'Search media' })).toBeFocused()
+  expect((await header.boundingBox())!.height).toBe(initialHeight)
+  await expect(filters).toBeHidden()
+  await expect(settings).toBeHidden()
+  await page.getByRole('button', { name: 'Close search', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Search media' })).toBeHidden()
+  expect((await header.boundingBox())!.height).toBe(initialHeight)
+  const search = await openHeaderSearch(page)
+  await expect(search).toBeVisible()
   await search.fill('holiday')
-  await page.screenshot({ animations: 'disabled', path: 'test-results/search-mobile.png' })
-  // With text entered the cross clears it first; the next cross closes the field.
-  await expect(page.getByRole('button', { name: 'Close search' })).toBeHidden()
-  await page.getByRole('button', { name: 'Clear search' }).click()
-  await expect(search).toHaveValue('')
-  await page.getByRole('button', { name: 'Close search' }).click()
-  await expect(open).toBeVisible()
-  await expect(search).toBeHidden()
+  await expect
+    .poll(async () => (await search.boundingBox())?.width ?? 0)
+    .toBeGreaterThan(page.viewportSize()!.width * 0.6)
+  await expect(page.getByRole('button', { name: /^Switch application,/ })).toBeHidden()
+  await page.route('**/api/search/suggestions?**', route =>
+    route.fulfill({
+      json: [
+        {
+          kind: 'file',
+          id: 1,
+          label: 'A long holiday filename that should have room in the suggestions',
+          detail: 'Photos / holiday',
+        },
+      ],
+    }),
+  )
+  await search.fill('holiday width')
+  const suggestions = page.getByRole('listbox', { name: 'Search suggestions' })
+  await expect(suggestions).toBeVisible()
+  const listBounds = (await suggestions.boundingBox())!
+  expect(listBounds.width).toBeGreaterThan(page.viewportSize()!.width * 0.9)
+  expect(listBounds.x).toBeGreaterThanOrEqual(0)
+  expect(listBounds.x + listBounds.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+  await page.getByRole('button', { name: 'Close search', exact: true }).click()
+  const nav = page.getByRole('navigation', { name: 'Primary navigation' })
+  await expect(nav.getByRole('button', { name: 'Search', exact: true })).toHaveCount(0)
+  await expect(nav.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0)
+  await nav.getByRole('button', { name: 'Collections', exact: true }).click()
+  await openHeaderSearch(page)
+  await expect(search).toBeVisible()
+  await page.getByRole('button', { name: 'Close search', exact: true }).click()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await expect(page.getByRole('search')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toHaveCount(0)
 })
 
 test('previews distinct light and dark themes and scrolls settings clear of navigation', async ({ page }, testInfo) => {
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
   const settings = page.getByRole('region', { name: 'Theme settings' })
   for (const [name, theme] of [
     ['White', 'light'],
@@ -83,7 +121,7 @@ test('previews distinct light and dark themes and scrolls settings clear of navi
         animations: 'disabled',
         path: `test-results/gallery-${theme}-${testInfo.project.name}.png`,
       })
-      await navigation.getByRole('button', { name: 'Settings', exact: true }).click()
+      await page.getByRole('button', { name: 'Settings', exact: true }).click()
     }
   }
   const last = settings.getByRole('button', { name: 'Red & white', exact: true })
@@ -170,7 +208,7 @@ test('Collections favourites clear browse filters and keeps a persisted like acr
   await expect(saved).toBeVisible()
   await (await galleryAction(page, 'Refresh collection')).click()
   await expect(saved).toBeVisible()
-  await nav.getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await nav.getByRole('button', { name: 'Collections', exact: true }).click()
   await page.getByRole('button', { name: 'Open favourites', exact: true }).click()
   await expect(saved).toBeVisible()
@@ -207,10 +245,9 @@ test('opening an unindexed folder discovers its files and prepares previews with
   const relative = `On-demand-${testInfo.project.name}-${Date.now()}`
   await mkdir(path.join(fixture, 'media', relative), { recursive: true })
   await copyFile(path.join(fixture, 'cache', 'palette-1.jpg'), path.join(fixture, 'media', relative, 'new-photo.jpg'))
-  const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   let folderId: number
   try {
-    db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON')
     const row = db
       .prepare(
         `INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)
@@ -287,7 +324,7 @@ test('rescans from the folder menu after confirmation and shows progress in Back
   await page.screenshot({ animations: 'disabled', path: `test-results/scanning-${testInfo.project.name}.png` })
 })
 
-test('browses cached media, navigates the viewer, and restores position and focus', async ({ page }) => {
+test('browses cached media and returns focus to the last viewed item', async ({ page }) => {
   const errors: string[] = []
   const cacheFailures: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -302,16 +339,14 @@ test('browses cached media, navigates the viewer, and restores position and focu
     element.dispatchEvent(new Event('scroll'))
   })
   await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
-  const opened = await scroller.evaluate(element => {
+  await scroller.evaluate(element => {
     const viewport = element.getBoundingClientRect()
     const trigger = [...element.querySelectorAll<HTMLButtonElement>('button[data-media-id]')].find(button => {
       const rect = button.getBoundingClientRect()
       return rect.top >= viewport.top && rect.bottom <= viewport.bottom
     })
     if (!trigger) throw new Error('No fully visible media item')
-    const result = { id: trigger.dataset.mediaId!, position: element.scrollTop }
     trigger.click()
-    return result
   })
   const viewer = page.getByRole('dialog')
   await expect(viewer).toBeVisible()
@@ -333,10 +368,12 @@ test('browses cached media, navigates the viewer, and restores position and focu
   await expect(viewer.locator('.motion-media')).toHaveAttribute('data-direction', 'next')
   await expect(viewer.locator('.motion-media')).toHaveCSS('animation-duration', '0.18s')
   await expect(viewer.locator('img,video')).toHaveCount(1)
+  const lastTitle = (await viewer.locator('header').textContent())!.trim()
   await page.keyboard.press('Escape')
   await expect(viewer).toBeHidden()
-  await expect(page.locator(`button[data-media-id="${opened.id}"]`)).toBeFocused()
-  expect(Math.abs((await scroller.evaluate(element => element.scrollTop)) - opened.position)).toBeLessThan(5)
+  const lastViewed = page.getByRole('button', { name: `Open ${lastTitle}`, exact: true })
+  await expect(lastViewed).toBeFocused()
+  await expect(lastViewed).toBeInViewport()
   expect(errors).toEqual([])
   expect(cacheFailures).toEqual([])
   await page.screenshot({
@@ -388,8 +425,7 @@ test('keeps the virtualized gallery and retained summaries bounded', async ({ pa
 })
 
 test('searches and edits tags with keyboard-accessible controls', async ({ page }, testInfo) => {
-  if (testInfo.project.name === 'mobile') await page.getByRole('button', { name: 'Open search' }).click()
-  const search = page.getByRole('combobox', { name: 'Search media' })
+  const search = await openHeaderSearch(page)
   await search.fill('holiday')
   await search.press('Enter')
   await expect(page).toHaveURL(/q=holiday/)

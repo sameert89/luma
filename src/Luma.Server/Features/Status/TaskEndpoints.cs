@@ -1,4 +1,7 @@
 using Dapper;
+using Luma.Server.Features.Files;
+using Luma.Server.Features.Uploads;
+using Luma.Server.Features.Panels;
 using Luma.Server.Data;
 using Luma.Server.Features.Tags;
 using Luma.Server.Features.Indexing;
@@ -19,33 +22,81 @@ public static class TaskEndpoints
             await using var db = await database.OpenAsync(ct);
             using var tx = db.BeginTransaction();
             await db.ExecuteAsync(new CommandDefinition($"""
+                UPDATE ComicJobs SET QueueDismissed=1 WHERE State IN ('completed','failed','cancelled');
+                UPDATE UploadSessions SET QueueDismissed=1 WHERE State IN ('completed','cancelled');
+                UPDATE FileOperations SET QueueDismissed=1 WHERE State IN ('completed','cancelled') AND QueueDismissed=0;
                 UPDATE MetadataJobs SET QueueDismissed=1 WHERE QueueDismissed=0 AND {MetadataFinished};
                 UPDATE Scans SET QueueDismissed=1 WHERE QueueDismissed=0 AND {ScanFinished};
                 """, transaction: tx, cancellationToken: ct));
             tx.Commit();
             return TypedResults.NoContent();
         }).WithName("ClearFinishedBackgroundTasks");
-        app.MapPost("/api/tasks/{id}/clear", async (string id, Database database, CancellationToken ct) =>
+        app.MapPost("/api/tasks/{id}/clear", async (string id, Database database, MutationAccess access, HttpContext context, CancellationToken ct) =>
         {
+            if (id.StartsWith("upload-", StringComparison.Ordinal))
+            {
+                access.Authorize(context);
+                await using var uploadDb = await database.OpenAsync(ct);
+                if (await uploadDb.ExecuteAsync(new CommandDefinition("UPDATE UploadSessions SET QueueDismissed=1 WHERE Id=@key AND State IN ('completed','cancelled')", new { key = id[7..] }, cancellationToken: ct)) == 0)
+                    throw new ApiRequestException(409, "upload_unresolved", "Only completed or cancelled uploads can be cleared.");
+                return TypedResults.NoContent();
+            }
+            if (id.StartsWith("file-", StringComparison.Ordinal))
+            {
+                access.Authorize(context);
+                await using var filesDb = await database.OpenAsync(ct);
+                if (await filesDb.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET QueueDismissed=1 WHERE Id=@key AND State IN ('completed','cancelled')", new { key = id[5..] }, cancellationToken: ct)) == 0)
+                    throw new ApiRequestException(409, "operation_unresolved", "Only completed or cancelled file operations can be cleared.");
+                return TypedResults.NoContent();
+            }
             var (kind, key) = Parse(id);
-            var (table, finished) = kind == "scan" ? ("Scans", ScanFinished) : ("MetadataJobs", MetadataFinished);
+            var (table, finished) = kind == "scan" ? ("Scans", ScanFinished) : kind == "comic" ? ("ComicJobs", "State IN ('completed','failed','cancelled')") : ("MetadataJobs", MetadataFinished);
             await using var db = await database.OpenAsync(ct);
             if (!await db.ExecuteScalarAsync<bool>(new CommandDefinition($"SELECT EXISTS(SELECT 1 FROM {table} WHERE Id=@key)", new { key }, cancellationToken: ct))) throw ApiRequestException.Missing();
             if (await db.ExecuteAsync(new CommandDefinition($"UPDATE {table} SET QueueDismissed=1 WHERE Id=@key AND {finished}", new { key }, cancellationToken: ct)) == 0)
                 throw new ApiRequestException(409, "conflict", "Only finished tasks can be cleared. Cancel it first.");
             return TypedResults.NoContent();
         }).WithName("ClearBackgroundTask");
-        app.MapPost("/api/tasks/{id}/cancel", async (string id, MetadataJobs jobs, CancellationToken ct) =>
+        app.MapPost("/api/tasks/{id}/cancel", async (string id, MetadataJobs jobs, Database database, FileOperations operations, UploadSessions uploads, MutationAccess access, HttpContext context, CancellationToken ct) =>
         {
+            if (id.StartsWith("upload-", StringComparison.Ordinal))
+            {
+                access.Authorize(context);
+                await uploads.ChangeStateAsync(id[7..], "cancel", ct);
+                return Results.NoContent();
+            }
+            if (id.StartsWith("file-", StringComparison.Ordinal))
+            {
+                access.Authorize(context);
+                await operations.CancelAsync(id[5..], ct);
+                return Results.NoContent();
+            }
             var (kind, key) = Parse(id);
+            if (kind == "comic")
+            {
+                MutationAccess.CheckOrigin(context.Request);
+                await using var comicDb = await database.OpenAsync(ct);
+                await comicDb.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET State='cancelled' WHERE Id=@key AND State IN ('queued','running')", new { key }, cancellationToken: ct));
+                return Results.NoContent();
+            }
             if (kind == "scan") return Results.Redirect($"/api/scans/{key}/cancel", preserveMethod: true);
             await jobs.CancelAsync(key, ct);
             return Results.Accepted($"/api/jobs/{key}", new JobAccepted(key));
         }).WithName("CancelBackgroundTask");
         // Queue again always creates a new task; the old record stays terminal and leaves the list.
-        app.MapPost("/api/tasks/{id}/queue", async (string id, Database database, MetadataJobs jobs, ScanWorker worker, CancellationToken ct) =>
+        app.MapPost("/api/tasks/{id}/queue", async (string id, Database database, MetadataJobs jobs, ScanWorker worker, ComicLibrary comics, MutationAccess access, HttpContext context, CancellationToken ct) =>
         {
             var (kind, key) = Parse(id);
+            if (kind == "comic")
+            {
+                MutationAccess.CheckOrigin(context.Request);
+                await using var comicDb = await database.OpenAsync(ct);
+                var old = await comicDb.QuerySingleOrDefaultAsync<ComicJob>(new CommandDefinition("SELECT * FROM ComicJobs WHERE Id=@key", new { key }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
+                if (old.State is "queued" or "running") throw new ApiRequestException(409, "comic_job_active", "The comic task is still active.");
+                var queued = await comics.QueueAsync(new(old.LibraryId, old.Source), ct);
+                await comicDb.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET QueueDismissed=1 WHERE Id=@key", new { key }, cancellationToken: ct));
+                return Results.Accepted(value: queued);
+            }
             if (kind == "metadata") return Results.Accepted(value: await jobs.QueueAgainAsync(key, ct));
             await using var db = await database.OpenAsync(ct);
             using var tx = db.BeginTransaction();
@@ -86,6 +137,18 @@ public static class TaskEndpoints
                 FROM (SELECT * FROM Scans WHERE QueueDismissed=0 OR State='completed' AND
                   EXISTS(SELECT 1 FROM ProcessingJobs WHERE ScanId=Scans.Id AND State IN ('pending','running')) ORDER BY Id DESC LIMIT 50) s
                 LEFT JOIN Libraries l ON l.Id=s.LibraryId LEFT JOIN Folders f ON f.Id=s.FolderId
+                UNION ALL
+                SELECT 'file-'||Id,Kind,State,CreatedAt,CASE WHEN State='completed' THEN 1 ELSE 0 END,
+                  CASE WHEN State='needsAttention' THEN 1 ELSE 0 END,CASE WHEN State='queued' THEN 1 ELSE 0 END,
+                  Source||CASE WHEN Destination IS NULL THEN '' ELSE ' → '||Destination END
+                FROM (SELECT * FROM FileOperations WHERE QueueDismissed=0 ORDER BY CASE WHEN State IN ('completed','cancelled') THEN 1 ELSE 0 END,CreatedAt DESC LIMIT 50)
+                UNION ALL
+                SELECT 'upload-'||u.Id,'upload',COALESCE(CASE WHEN o.State='needsAttention' THEN o.State END,u.State),u.CreatedAt,u.CommittedOffset,0,u.SizeBytes-u.CommittedOffset,u.Target
+                FROM (SELECT * FROM UploadSessions WHERE QueueDismissed=0 ORDER BY CreatedAt DESC LIMIT 50) u
+                LEFT JOIN FileOperations o ON o.Id=u.OperationId
+                UNION ALL
+                SELECT 'comic-'||Id,'comics',State,CreatedAt,Processed,Failed,0,COALESCE(Source,'Comic archive discovery')
+                FROM (SELECT * FROM ComicJobs WHERE QueueDismissed=0 ORDER BY Id DESC LIMIT 50)
                 ORDER BY CreatedAt DESC LIMIT 100
                 """, cancellationToken: ct))).Select(x => new BackgroundTask(x.Id, x.Kind, x.State, x.CreatedAt, x.Processed, x.Failed, x.Pending, x.Scope)).ToArray());
         }).WithName("GetBackgroundTasks");
@@ -106,7 +169,7 @@ public static class TaskEndpoints
     private static (string Kind, long Id) Parse(string id)
     {
         var parts = id.Split('-');
-        if (parts.Length != 2 || parts[0] is not ("scan" or "metadata") || !long.TryParse(parts[1], out var key) || key <= 0) throw ApiRequestException.Invalid();
+        if (parts.Length != 2 || parts[0] is not ("scan" or "metadata" or "comic") || !long.TryParse(parts[1], out var key) || key <= 0) throw ApiRequestException.Invalid();
         return (parts[0], key);
     }
 }

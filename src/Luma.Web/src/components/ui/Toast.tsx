@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IconButton } from './Controls'
+import { IconButton, QuietButton } from './Controls'
 
 export type ToastTone = 'info' | 'danger'
 type Message = { id: number; text: string; tone: ToastTone }
@@ -27,18 +27,33 @@ export function useToast() {
   return { toast, show, dismiss }
 }
 
-export function Toast({ toast, onDismiss }: { toast: Message | null; onDismiss: () => void }) {
+export function Toast({
+  toast,
+  onDismiss,
+  action,
+  passThrough = false,
+}: {
+  toast: Message | null
+  onDismiss: () => void
+  action?: { label: string; onClick: () => void }
+  passThrough?: boolean
+}) {
   if (!toast) return null
   return (
     <div
       key={toast.id}
       role={toast.tone === 'danger' ? 'alert' : 'status'}
-      className={`motion-rise fixed inset-x-4 bottom-20 z-50 flex items-center gap-3 rounded-2xl border bg-surface p-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:w-96 sm:-translate-x-1/2 md:bottom-6 ${toast.tone === 'danger' ? 'border-danger' : 'border-line'}`}
+      className={`${passThrough ? 'pointer-events-none' : ''} motion-rise fixed inset-x-4 bottom-20 z-50 flex items-center gap-3 rounded-2xl border bg-surface p-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:w-96 sm:-translate-x-1/2 md:bottom-6 ${toast.tone === 'danger' ? 'border-danger' : 'border-line'}`}
     >
       <p className={`min-w-0 flex-1 text-sm leading-relaxed ${toast.tone === 'danger' ? 'text-danger' : 'text-ink'}`}>
         {toast.text}
       </p>
-      <IconButton label="Dismiss" onClick={onDismiss}>
+      {action && (
+        <QuietButton className="pointer-events-auto" onClick={action.onClick}>
+          {action.label}
+        </QuietButton>
+      )}
+      <IconButton className="pointer-events-auto" label="Dismiss" onClick={onDismiss}>
         <X className="size-4" />
       </IconButton>
     </div>

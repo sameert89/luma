@@ -73,6 +73,7 @@ Original media may be accessed for:
 - incremental re-indexing
 - explicit original-file viewing or downloading
 - video streaming
+- explicit, opt-in caption discovery and SRT extraction/conversion during playback
 - metadata import/export
 - explicit administrative operations
 
@@ -218,9 +219,9 @@ Orientation
 
 Presentation modes are views over a query result.
 
-Gallery and Reels reuse the same query contract and applicable filter/sort semantics. Their selected query values are explicit shared UI filters. Switching modes carries those values; all folder/tag/search scope is visible and clearing filters removes that scope. A viewer navigates within the active query of the mode that opened it.
+Gallery and Flick reuse the same query contract, filter components and sort semantics, but each experience owns its active filters and navigation state. Switching applications restores that application's state; it does not copy the other application's active query. Explicit contextual actions (such as playing a selected item in Flick) may supply a scope. A viewer navigates within the query of the experience that opened it.
 
-They should not implement separate search/filter systems.
+Share search/filter implementation, not active state. Panels maintains comic-specific indexed queries. See `docs/v2/IMPLEMENTATION.md` for the v2 migration and recovery plan.
 
 ## Pagination
 

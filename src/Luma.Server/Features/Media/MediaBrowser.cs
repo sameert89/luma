@@ -254,7 +254,8 @@ public sealed class MediaBrowser(Database database, CursorSigner cursors)
         }
         var previous = await ListAsync(query with { Limit = 1, Cursor = cursors.Encode(query.Fingerprint(), ordering.Tuple(row), id, true) }, ct);
         var next = await ListAsync(query with { Limit = 1, Cursor = cursors.Encode(query.Fingerprint(), ordering.Tuple(row), id, false) }, ct);
-        return new(previous.Items.FirstOrDefault(), next.Items.FirstOrDefault());
+        // The forward cursor after the previous item starts a bounded page at the current item.
+        return new(previous.Items.FirstOrDefault(), next.Items.FirstOrDefault(), previous.NextCursor);
     }
     private static async Task<IReadOnlyList<MediaSummary>> SummariesAsync(SqliteConnection db, SqliteTransaction tx, IReadOnlyList<MediaRow> rows, CancellationToken ct)
     {

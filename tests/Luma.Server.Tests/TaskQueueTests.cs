@@ -96,7 +96,10 @@ public sealed class TaskQueueTests
         await using var f = await PipelineFixture.CreateAsync();
         await BrowsingTests.SeedAsync(f, 1);
         await using (var db = await f.Database.OpenAsync(default))
-            await db.ExecuteAsync("INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt,FailureCode) VALUES(40,1,'interrupted','2026-01-02','2026-01-02','interrupted')");
+            await db.ExecuteAsync("""
+                INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt,FailureCode) VALUES(40,1,'interrupted','2026-01-02','2026-01-02','interrupted');
+                INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt) VALUES(41,1,'completed','2026-01-03','2026-01-03');
+                """);
         await using var host = Host(f);
         using var client = host.CreateClient();
 
@@ -197,7 +200,7 @@ public sealed class TaskQueueTests
         await db.ExecuteAsync("""
             INSERT INTO Scans(Id,LibraryId,State,StartedAt,FinishedAt) VALUES(50,1,'completed',@now,@now),(51,1,'completed',@now,@now);
             INSERT INTO ProcessingJobs(MediaId,SourceRevision,EncoderVersion,ScanId,MediaType,State,NextAttemptAt)
-            SELECT Id,SourceRevision,@version,50,'image','pending','2026' FROM Media;
+            SELECT Id,SourceRevision,@version,50,'image','pending','9999' FROM Media;
             """, new { version = IndexingOptions.EncoderVersion, now = DateTimeOffset.UtcNow.ToString("O") });
         Assert.Equal("pending=3", await CountsAsync(50));
 
@@ -217,6 +220,7 @@ public sealed class TaskQueueTests
         await db.ExecuteAsync("DELETE FROM ProcessingJobs WHERE MediaId=1");
         Assert.Equal("pending=1", await CountsAsync(51));
 
+        // Jobs are not due: the host must not process them between the endpoint and SQL reads.
         // What the endpoint reports matches counting the jobs the slow way.
         await using var host = Host(f);
         var progress = await host.CreateClient().GetFromJsonAsync<ScanProgress>("/api/scans/50");

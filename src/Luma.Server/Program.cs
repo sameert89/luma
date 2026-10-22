@@ -1,4 +1,7 @@
+using Luma.Server.Features.Settings;
 using Luma.Server.Data;
+using Luma.Server.Features.Panels;
+using Luma.Server.Features.Files;
 using Luma.Server.Features.Status;
 using Luma.Server.Http;
 using Luma.Server.Features.Indexing;
@@ -7,6 +10,11 @@ using Luma.Server.Features.Media;
 using Luma.Server.Features.Tags;
 using Luma.Server.Features.Libraries;
 
+if (args.FirstOrDefault() is "--comic-inspect" or "--comic-page")
+{
+    await Luma.Server.Features.Panels.ComicSources.RunWorkerAsync(args, CancellationToken.None);
+    return;
+}
 if (args.FirstOrDefault() == "--image-worker")
 {
     await ImageProcessCommand.RunWorkerAsync(CancellationToken.None);
@@ -23,6 +31,18 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton<Database>();
+builder.Services.AddSingleton<UiConfiguration>();
+builder.Services.AddSingleton<MutationAccess>();
+builder.Services.AddSingleton<FileWriteAvailability>();
+builder.Services.AddSingleton<FileOperations>();
+builder.Services.AddSingleton<FileRecovery>();
+builder.Services.AddSingleton<Luma.Server.Features.Uploads.UploadSessions>();
+builder.Services.AddSingleton<FileOperationWorker>();
+builder.Services.AddSingleton<ComicLibrary>();
+builder.Services.AddSingleton<PanelSources>();
+builder.Services.AddSingleton<ComicPageContent>();
+builder.Services.AddSingleton<ComicProgress>();
+builder.Services.AddSingleton<ComicWorker>();
 builder.Services.AddSingleton<MigrationRunner>();
 builder.Services.AddSingleton<CursorSigner>();
 builder.Services.AddSingleton<MediaBrowser>();
@@ -30,6 +50,7 @@ builder.Services.AddSingleton<RandomImage>();
 builder.Services.AddSingleton<LibraryBrowser>();
 builder.Services.AddSingleton<CacheContent>();
 builder.Services.AddSingleton<OriginalContent>();
+builder.Services.AddSingleton<Luma.Server.Features.Captions.CaptionContent>();
 builder.Services.AddSingleton<CacheAccessLog>();
 builder.Services.AddSingleton<TagService>();
 builder.Services.AddSingleton<MetadataJobs>();
@@ -47,6 +68,9 @@ builder.Services.AddSingleton<ScanWorker>();
 builder.Services.AddSingleton<AutomaticLibraryRefresh>();
 if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
 {
+    builder.Services.AddHostedService<FileStorageMonitor>();
+    builder.Services.AddHostedService(services => services.GetRequiredService<FileOperationWorker>());
+    builder.Services.AddHostedService(services => services.GetRequiredService<ComicWorker>());
     builder.Services.AddHostedService(services => services.GetRequiredService<ScanWorker>());
     builder.Services.AddHostedService(services => services.GetRequiredService<AutomaticLibraryRefresh>());
     builder.Services.AddHostedService<ProcessingWorker>();
@@ -73,10 +97,15 @@ app.UseStatusCodePages(async context =>
 // Interactive writes take priority over background work and retry briefly on contention.
 var api = app.MapGroup("").AddEndpointFilter<ForegroundWriteFilter>();
 api.MapStatus();
+api.MapUiConfiguration();
 api.MapIndexing();
 api.MapMedia();
 api.MapPlayback();
 api.MapTasks();
+api.MapFileOperations();
+api.MapPanels();
+Luma.Server.Features.Uploads.UploadEndpoints.MapUploads(app);
+Luma.Server.Features.Captions.CaptionEndpoints.MapCaptions(app);
 api.MapSearchSuggestions();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseRouting();
@@ -119,6 +148,9 @@ if (Environment.GetEnvironmentVariable("LUMA_EXPORT_OPENAPI") != "1")
     }
     await app.Services.GetRequiredService<CursorSigner>().InitializeAsync(app.Lifetime.ApplicationStopping);
     await app.Services.GetRequiredService<IndexingSetup>().InitializeAsync(app.Lifetime.ApplicationStopping);
+    await app.Services.GetRequiredService<MutationAccess>().InitializeAsync(app.Services.GetRequiredService<Database>(), app.Lifetime.ApplicationStopping);
+    await app.Services.GetRequiredService<UiConfiguration>().InitializeAsync(app.Lifetime.ApplicationStopping);
+    await app.Services.GetRequiredService<PanelSources>().InitializeAsync(app.Lifetime.ApplicationStopping);
 }
 await app.RunAsync();
 

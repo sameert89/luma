@@ -6,6 +6,120 @@ export type Release = { version: string; date: string; headline: string; changes
 
 export const releases: Release[] = [
   {
+    version: '2.0.0-beta.10',
+    date: '2026-10-21',
+    headline: 'Independent uploads and clear destination conflicts',
+    changes: [
+      'Uploads reserve their own paths instead of blocking unrelated file work across the library. Temporary path reservations wait automatically and remain cancellable.',
+      'Upload, Move and Copy ask before replacing an existing destination. Choose Replace or Skip for one conflict or apply the choice to all remaining conflicts in that batch. The dialog works even after closing the upload window.',
+      'Replacement journals the old destination into the recycle bin before publication. Existing tags and identities remain attached to the recycled item; the incoming copy or upload receives a separate identity.',
+      'Database schema advances to 34 for replacement dependencies. Back up the database before upgrading; returning to an earlier release requires its matching pre-upgrade database and media backup.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.9',
+    date: '2026-10-21',
+    headline: 'Delete directly from Flick',
+    changes: [
+      'The Flick three-dot menu now offers Delete file for writable libraries. Confirm to queue recycling, or explicitly choose permanent deletion.',
+      'Filters stays in the top bar; its duplicate button has been removed from the Flick menu.',
+      'After deletion, Flick keeps playing the next reel or the previous one at the end. Queued deletions are skipped; deleting the final item shows the empty view. Playback and auto-scroll pause while confirmation is open.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.8',
+    date: '2026-10-20',
+    headline: 'Keep viewing after deletion, and rename in place',
+    changes: [
+      'Deleting from the Gallery viewer keeps the player open and advances to the next item, or the previous one at the end. Items already queued for deletion are skipped. The viewer closes only when no items remain.',
+      'Rename is available for a single selected file or folder in the file toolbar and for the current item in the expanded viewer menu. Enter a name to queue the change in its current folder.',
+      'File management stays available in search and tag-filtered results. Cut, Copy, Rename and Delete work on the selected items; open a destination folder for Paste, Upload or New folder.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.7',
+    date: '2026-10-20',
+    headline: 'Viewer deletion and returning to the last photo',
+    changes: [
+      'The expanded Gallery viewer menu now offers Delete file for writable libraries. Recycling is the default; permanent deletion requires an explicit choice. Deletion queues immediately and returns to Gallery without waiting for filesystem work.',
+      'After navigating in the viewer, closing it reveals and focuses the last viewed item. Deep navigation uses a bounded cursor window, preserving your filters and sort without scanning the collection. Closing without navigating keeps the original scroll position.',
+      'Viewer confirmation and closing wait for their browser-history entries to finish, preventing stale file URLs or an extra Back step.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.6',
+    date: '2026-10-20',
+    headline: 'Browse, cut, copy and paste',
+    changes: [
+      'The file-management icon beside Select reveals a compact toolbar. Select photos, videos or folders, cut or copy, browse to the destination and paste. No destination path typing is needed. Keyboard shortcuts work too.',
+      'Delete and new-folder actions submit background jobs and return immediately. Independent operations queue together instead of waiting for each file to finish. Paste never overwrites existing destinations.',
+      'Completed file changes no longer cause redundant watcher scans. Copied and uploaded files are indexed directly, without rescanning their siblings.',
+      'Upload opens a dedicated dialog with file/folder pickers and drag-and-drop. Transfers continue after closing it.',
+      'Recycle bin and Help are at the top of Settings; About is at the end. Read-only libraries disable file management.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.5',
+    date: '2026-10-19',
+    headline: 'Reliable comic reading and Gallery-style shelves',
+    changes: [
+      'Comic lists no longer fail when unread and previously read books have different SQLite number types. Saved progress is fetched before reopening a book, and Exit reader finishes the latest checkpoint first. Progress also works on HTTP LAN hosts.',
+      'Panels starts with up to five recent unfinished books in a horizontally scrollable Continue reading row. Comic cards show their saved page progress.',
+      'Comic folders reuse Gallery’s rectangular smart covers and cover-style setting. Covers are selected in bounded SQLite queries from generated cache entries.',
+      'Pinch zoom keeps its scale, and continuous pages flow together without artificial padding or resetting every page measurement after each load.',
+      'Gallery background jobs moves to the header, matching Panels. Panels keeps one Comic locations action and shows initial loading in the center without flashing during background refreshes. Dropdown arrows have an inset.',
+      'Phone search expands in the same header row, temporarily replacing the logo and other actions. Suggestions span the header width; Close search restores the normal header. No database migration is added.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.4',
+    date: '2026-10-19',
+    headline: 'Restore phone search reveal',
+    changes: [
+      'Phone search starts collapsed in Gallery, Collections, Flick and Panels. Search, Filters and Settings stay grouped on the right; tap Search to reveal and focus the field below them, and Close search to tuck it away.',
+      'Search suggestions remain inline. Desktop search stays visible. No database migration is added.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.3',
+    date: '2026-10-19',
+    headline: 'Organized comic shelves and a quieter reader',
+    changes: [
+      'Search input follows the header actions on phones. Comic locations always opens in a dialog with icons for its main actions.',
+      'Panels shows discovery progress and Background jobs in its header. Open saved locations and browse their subfolders; search also matches series names.',
+      'Reader settings opens from an icon button. A compact page counter opens page jump and a progress slider without stretching the footer.',
+      'Tag comics from Details using the shared tag editor. Comic-only tags stay out of Gallery collections and suggestions; shared tags retain their normal merge and rename behavior.',
+      'Comic locations default to Exclude from Gallery. This skips Gallery indexing and hides existing comic images, their exclusive tags and XMP exports while preserving indexed identities, metadata and reading progress. Uncheck to include them again.',
+      'Database schema advances to 33. Back up SQLite before upgrading; returning to beta.2 or an older release requires restoring its matching pre-upgrade database.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.2',
+    date: '2026-10-19',
+    headline: 'Simpler single-user setup and consistent search',
+    changes: [
+      'Administrator tokens are gone. Enable file management with the saved Settings switch or its initial Luma__Files__Enabled environment default. Writable libraries still need a :rw mount.',
+      'Flick and Panels default to enabled and their switches work independently of file management.',
+      'Gallery, Collections, Flick and Panels share a visible header search with inline suggestions. Flick searches videos; Panels suggests comic titles only. Settings moves to the header and hides search and filters; bottom navigation contains Library and Collections.',
+      'The logo’s superscript icon identifies the active app. Settings has distinct group headings without a floating section bar, and read-only warnings are brief floating notices.',
+      'Choose comic folders by browsing mounted libraries, including folders not indexed yet, or search indexed folder names. Typing a full path is optional.',
+    ],
+  },
+  {
+    version: '2.0.0-beta.1',
+    date: '2026-10-18',
+    headline: 'Luma 2.0 preview: Gallery, Flick and Panels',
+    changes: [
+      'Click the Luma logo to switch between Gallery, Flick and Panels. Each application keeps its own search and filters.',
+      'Manage writable libraries with uploads, folders, moves and a recycle bin. Configure an administrator access token, then enter it in Settings → General → File management to unlock this tab. Read-only media keeps browsing, playback, captions and tagging available.',
+      'Startup checks warn when a writable library still has a read-only mount. Correct the :rw mount and permissions, then recheck it in Settings.',
+      'Captions are opt-in: turn on CC for matching same-folder SRT or embedded SubRip. Styled subtitles are unsupported; extraction and conversion files stay in the Luma cache.',
+      'Panels saves your selected comic folders, scans them recursively and opens your bookshelf on later visits. Search by title or author and resume reading where you left off.',
+      'Settings is grouped by app and returns to the app you came from. Administrators can disable Flick or Panels globally; environment defaults reproduce preferences while in-app choices take priority.',
+      'The updated help guide includes setup examples and can be deployed independently to GitHub Pages. This is a beta: back up SQLite and original/staging media before upgrading; rollback requires the matching pre-upgrade backup.',
+    ],
+  },
+  {
     version: '1.0.11',
     date: '2026-10-01',
     headline: 'Pull to refresh just refreshes, and Reels opens your way',

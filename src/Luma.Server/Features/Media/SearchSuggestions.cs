@@ -14,9 +14,9 @@ public static class SearchSuggestions
     private const int MaximumFolders = 3;
 
     // Tags by prefix on their unique key; only tags that still label something are offered.
-    public const string TagQuery = """
+    public const string TagQuery = $"""
         SELECT t.Id,t.Name Label,NULL Detail FROM Tags t
-        WHERE t.NormalizedKey>=@key AND t.NormalizedKey<@end AND EXISTS(SELECT 1 FROM MediaTags mt WHERE mt.TagId=t.Id)
+        WHERE t.NormalizedKey>=@key AND t.NormalizedKey<@end AND EXISTS(SELECT 1 FROM MediaTags mt JOIN Media m ON m.Id=mt.MediaId JOIN Libraries l ON l.Id=m.LibraryId WHERE mt.TagId=t.Id AND l.Enabled=1 AND m.Availability='present' AND m.FolderId NOT IN ({HiddenFolders.Descendants}))
         ORDER BY t.NormalizedKey,t.Id LIMIT @count
         """;
     // Folders by their own name: a prefix seek on IX_Folders_Name, then (from three characters) names
@@ -52,32 +52,34 @@ public static class SearchSuggestions
         """;
 
     public static void MapSearchSuggestions(this IEndpointRouteBuilder app) =>
-        app.MapGet("/api/search/suggestions", async (string? q, int? limit, Database database, CancellationToken ct) =>
-            TypedResults.Ok(await SuggestAsync(database, q, limit ?? 8, ct))).WithName("GetSearchSuggestions");
+        app.MapGet("/api/search/suggestions", async (string? q, int? limit, string? mediaType, Database database, CancellationToken ct) =>
+            TypedResults.Ok(await SuggestAsync(database, q, limit ?? 8, ct, mediaType))).WithName("GetSearchSuggestions");
 
-    public static async Task<IReadOnlyList<SearchSuggestion>> SuggestAsync(Database database, string? q, int limit, CancellationToken ct)
+    public static async Task<IReadOnlyList<SearchSuggestion>> SuggestAsync(Database database, string? q, int limit, CancellationToken ct, string? mediaType = null)
     {
+        if (mediaType is not (null or "video")) throw ApiRequestException.Invalid();
         if (limit is < 1 or > 20 || q?.Length > 200) throw ApiRequestException.Invalid();
         var text = q?.Trim() ?? "";
         if (text.Length == 0) return [];
         var key = SearchText.Key(text);
         var end = key + "\U0010FFFF";
         await using var db = await database.OpenAsync(ct);
+        var typePredicate = mediaType is null ? "" : " AND m.MediaType='video'";
         var substring = text.EnumerateRunes().Count() >= 3;
         var fts = "NameKey:\"" + key.Replace("\"", "\"\"") + "\"";
-        var tags = (await db.QueryAsync<SuggestionRow>(new CommandDefinition(TagQuery, new { key, end, count = Math.Min(MaximumTags, limit) }, cancellationToken: ct))).ToList();
+        var tags = (await db.QueryAsync<SuggestionRow>(new CommandDefinition(mediaType is null ? TagQuery : TagQuery.Replace("WHERE mt.TagId=t.Id", "WHERE mt.TagId=t.Id AND m.MediaType='video'"), new { key, end, count = Math.Min(MaximumTags, limit) }, cancellationToken: ct))).ToList();
         var folderCount = Math.Min(MaximumFolders, limit - tags.Count);
-        var folders = folderCount <= 0 ? [] : (await db.QueryAsync<FolderRow>(new CommandDefinition(FolderPrefixQuery, new { key, end, count = folderCount }, cancellationToken: ct))).ToList();
+        var folders = folderCount <= 0 ? [] : (await db.QueryAsync<FolderRow>(new CommandDefinition(VideoFolders(FolderPrefixQuery, mediaType), new { key, end, count = folderCount }, cancellationToken: ct))).ToList();
         if (substring && folders.Count < folderCount)
-            folders.AddRange(await db.QueryAsync<FolderRow>(new CommandDefinition(FolderSubstringQuery, new { key, fts, count = folderCount - folders.Count }, cancellationToken: ct)));
+            folders.AddRange(await db.QueryAsync<FolderRow>(new CommandDefinition(VideoFolders(FolderSubstringQuery, mediaType), new { key, fts, count = folderCount - folders.Count }, cancellationToken: ct)));
         var remaining = limit - tags.Count - folders.Count;
         var files = new List<SuggestionRow>();
         if (remaining > 0)
         {
             // Names that start with the text first, then (from three characters) names containing it.
-            files.AddRange(await db.QueryAsync<SuggestionRow>(new CommandDefinition(PrefixQuery, new { key, end, remaining }, cancellationToken: ct)));
+            files.AddRange(await db.QueryAsync<SuggestionRow>(new CommandDefinition(PrefixQuery.Replace("m.Availability='present'", "m.Availability='present'" + typePredicate), new { key, end, remaining }, cancellationToken: ct)));
             if (substring && files.Count < remaining)
-                files.AddRange(await db.QueryAsync<SuggestionRow>(new CommandDefinition(SubstringQuery, new { key, fts, more = remaining - files.Count }, cancellationToken: ct)));
+                files.AddRange(await db.QueryAsync<SuggestionRow>(new CommandDefinition(SubstringQuery.Replace("m.Availability='present'", "m.Availability='present'" + typePredicate), new { key, fts, more = remaining - files.Count }, cancellationToken: ct)));
         }
         return [.. tags.Select(x => new SearchSuggestion("tag", x.Label, x.Id)),
             // A folder's detail is where it lives: its library, then its parent folders.
@@ -85,6 +87,8 @@ public static class SearchSuggestions
                 string.Join(" / ", new[] { x.LibraryName, FolderOf(x.RelativePath)?.Replace("/", " / ") }.Where(part => !string.IsNullOrEmpty(part))), x.LibraryId)),
             .. files.Select(x => new SearchSuggestion("file", x.Label, x.Id, FolderOf(x.Detail)))];
     }
+
+    private static string VideoFolders(string sql, string? mediaType) => mediaType is null ? sql : sql.Replace("AND l.Enabled=1", "AND l.Enabled=1 AND EXISTS(SELECT 1 FROM Media vm WHERE vm.LibraryId=f.LibraryId AND vm.MediaType='video' AND vm.Availability='present' AND (vm.FolderId=f.Id OR (vm.PathKey>=f.PathKey||'/' AND vm.PathKey<f.PathKey||'0')))");
 
     // Where the file lives, so identical names in different folders can be told apart.
     private static string? FolderOf(string? relativePath)

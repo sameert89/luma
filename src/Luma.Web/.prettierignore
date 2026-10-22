@@ -5,3 +5,5 @@ package-lock.json
 src/lib/api/generated.ts
 test-results
 playwright-report
+
+help-dist

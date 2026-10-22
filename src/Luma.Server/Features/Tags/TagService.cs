@@ -25,14 +25,15 @@ public sealed record BulkTagsRequest(long[] MediaIds, long[] AddTagIds, long[] R
 public sealed record PreferenceRequest(string Preference);
 public sealed class TagService(Database database)
 {
+    internal const string GalleryVisible = "(NOT EXISTS(SELECT 1 FROM MediaTags mt WHERE mt.TagId=Tags.Id) AND NOT EXISTS(SELECT 1 FROM ComicTags ct WHERE ct.TagId=Tags.Id) OR EXISTS(SELECT 1 FROM MediaTags mt JOIN Media m ON m.Id=mt.MediaId JOIN Libraries l ON l.Id=m.LibraryId WHERE mt.TagId=Tags.Id AND l.Enabled=1 AND m.Availability='present' AND m.FolderId NOT IN (" + Luma.Server.Features.Libraries.HiddenFolders.Descendants + ")))";
     public async Task<CollectionTagPage> PageAsync(string? cursor, CursorSigner signer, CancellationToken ct)
     {
         const string scope = "collection-tags";
         var position = cursor is null ? null : signer.Decode(cursor, scope);
         var backward = position?.Backward == true;
         await using var db = await database.OpenAsync(ct);
-        var seek = position is null ? "" : $"WHERE Id {(backward ? "<" : ">")} @id";
-        var rows = (await db.QueryAsync<TagSummary>(new CommandDefinition($"SELECT Id,Name FROM Tags {seek} ORDER BY Id {(backward ? "DESC" : "ASC")} LIMIT 51", new { id = position?.Id }, cancellationToken: ct))).ToList();
+        var seek = position is null ? "" : $"AND Id {(backward ? "<" : ">")} @id";
+        var rows = (await db.QueryAsync<TagSummary>(new CommandDefinition($"SELECT Id,Name FROM Tags WHERE {GalleryVisible} {seek} ORDER BY Id {(backward ? "DESC" : "ASC")} LIMIT 51", new { id = position?.Id }, cancellationToken: ct))).ToList();
         var more = rows.Count > 50;
         if (more) rows.RemoveAt(50);
         if (backward) rows.Reverse();
@@ -65,6 +66,8 @@ public sealed class TagService(Database database)
         // instead of failing on the unique key, so fixing a typo can also deduplicate.
         await db.ExecuteAsync(new CommandDefinition("""
             INSERT INTO MediaTags(MediaId,TagId) SELECT MediaId,@target FROM MediaTags WHERE TagId=@id ON CONFLICT DO NOTHING;
+            INSERT INTO ComicTags(ComicId,TagId) SELECT ComicId,@target FROM ComicTags WHERE TagId=@id ON CONFLICT DO NOTHING;
+            DELETE FROM ComicTags WHERE TagId=@id;
             DELETE FROM MediaTags WHERE TagId=@id;
             DELETE FROM Tags WHERE Id=@id;
             """, new { id, target }, tx, cancellationToken: ct));
@@ -76,7 +79,7 @@ public sealed class TagService(Database database)
     {
         await using var db = await database.OpenAsync(ct);
         using var tx = db.BeginTransaction();
-        await db.ExecuteAsync(new CommandDefinition("DELETE FROM MediaTags WHERE TagId=@id", new { id }, tx, cancellationToken: ct));
+        await db.ExecuteAsync(new CommandDefinition("DELETE FROM ComicTags WHERE TagId=@id; DELETE FROM MediaTags WHERE TagId=@id", new { id }, tx, cancellationToken: ct));
         if (await db.ExecuteAsync(new CommandDefinition("DELETE FROM Tags WHERE Id=@id", new { id }, tx, cancellationToken: ct)) == 0) throw ApiRequestException.Missing();
         tx.Commit();
     }
@@ -85,7 +88,7 @@ public sealed class TagService(Database database)
         if (limit is < 1 or > 50 || prefix?.Length > 400) throw ApiRequestException.Invalid();
         var key = string.IsNullOrWhiteSpace(prefix) ? "" : SearchText.Key(prefix.Trim());
         await using var db = await database.OpenAsync(ct);
-        return (await db.QueryAsync<TagSummary>(new CommandDefinition("SELECT Id,Name FROM Tags WHERE NormalizedKey>=@key AND NormalizedKey<@end AND instr(NormalizedKey,@key)=1 ORDER BY NormalizedKey,Id LIMIT @limit",
+        return (await db.QueryAsync<TagSummary>(new CommandDefinition($"SELECT Id,Name FROM Tags WHERE {GalleryVisible} AND NormalizedKey>=@key AND NormalizedKey<@end AND instr(NormalizedKey,@key)=1 ORDER BY NormalizedKey,Id LIMIT @limit",
             new { key, end = key + "\U0010FFFF", limit = limit ?? 20 }, cancellationToken: ct))).ToArray();
     }
     public async Task BulkAsync(BulkTagsRequest request, CancellationToken ct)

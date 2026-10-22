@@ -57,7 +57,7 @@ function Keys({ keys }: { keys: string[] }) {
   )
 }
 
-export function Help({ onBack }: { onBack: () => void }) {
+export function Help({ onBack }: { onBack?: () => void }) {
   const title = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
     title.current?.focus({ preventScroll: true })
@@ -74,10 +74,12 @@ export function Help({ onBack }: { onBack: () => void }) {
     <div className="min-h-0 flex-1 overflow-auto" data-testid="help-scroll" data-scroll-restore>
       <div className="sticky top-0 z-10 border-b border-line bg-canvas px-5 py-3">
         <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
-          <QuietButton onClick={onBack}>
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            Back
-          </QuietButton>
+          {onBack && (
+            <QuietButton onClick={onBack}>
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              Back
+            </QuietButton>
+          )}
         </div>
       </div>
       <div className="mx-auto w-full max-w-5xl space-y-10 p-5">
@@ -123,6 +125,11 @@ export function Help({ onBack }: { onBack: () => void }) {
                         <p className="text-sm font-semibold">{entry.name}</p>
                         <p className="text-xs text-muted">{entry.where}</p>
                         <p className="mt-1 text-sm leading-relaxed">{entry.what}</p>
+                        {entry.code && (
+                          <pre className="mt-3 max-w-full overflow-auto rounded-xl border border-line bg-canvas p-3 text-xs">
+                            <code>{entry.code}</code>
+                          </pre>
+                        )}
                       </div>
                     </li>
                   ))}

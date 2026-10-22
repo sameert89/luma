@@ -1,3 +1,6 @@
+import { RenameFileAction } from '../files/RenameFileAction'
+import { DeleteMediaAction } from '../files/DeleteMediaAction'
+import { readSetting } from '../../app/uiDefaults'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronLeft,
@@ -12,7 +15,7 @@ import {
   HeartCrack,
   X,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MediaInformation } from './MediaInformation'
 import { MediaStage } from './MediaStage'
 import { MediaActions, actionButton } from './MediaActions'
@@ -39,7 +42,7 @@ const slideSecondsKey = 'luma-slideshow-seconds'
 const slideChoices = [3, 5, 10, 20]
 function storedSlideSeconds() {
   try {
-    const value = Number(localStorage.getItem(slideSecondsKey))
+    const value = Number(readSetting(slideSecondsKey))
     return slideChoices.includes(value) ? value : 5
   } catch {
     return 5
@@ -49,7 +52,7 @@ function storedSlideSeconds() {
 const autoplayKey = 'luma-video-autoplay'
 function storedAutoplay() {
   try {
-    return localStorage.getItem(autoplayKey) === '1'
+    return readSetting(autoplayKey) === '1'
   } catch {
     return false
   }
@@ -63,6 +66,9 @@ export function Viewer({
   onClose,
   onWatchReels,
   restoreFocus,
+  onDeleteQueued,
+  onRenameQueued,
+  onExitComplete,
 }: {
   active: Media
   filters: Filters
@@ -71,7 +77,11 @@ export function Viewer({
   onClose: () => void
   onWatchReels?: (item: Media) => void
   restoreFocus: () => void
+  onRenameQueued?: () => void
+  onDeleteQueued?: (fallback: Media | null) => void
+  onExitComplete?: () => void
 }) {
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [slideshow, setSlideshow] = useState(startSlideshow)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -106,8 +116,20 @@ export function Viewer({
     queryFn: ({ signal }) => request<Neighbors>(`/api/media/${active.id}/neighbors?${queryString(filters)}`, signal),
     gcTime: 0,
   })
-  const previous = neighbors.data?.previous
-  const next = neighbors.data?.next
+  // Queued removals can remain in SQLite until the worker finishes. Retain their
+  // known links so repeated deletion/navigation never reopens a queued item.
+  const removed = useRef(new Map<number, { previous: Media | null; next: Media | null }>())
+  function remaining(candidate: Media | null | undefined, side: 'previous' | 'next') {
+    const seen = new Set<number>()
+    while (candidate && removed.current.has(candidate.id)) {
+      if (seen.has(candidate.id)) return null
+      seen.add(candidate.id)
+      candidate = removed.current.get(candidate.id)?.[side]
+    }
+    return candidate ?? null
+  }
+  const previous = remaining(neighbors.data?.previous, 'previous')
+  const next = remaining(neighbors.data?.next, 'next')
   usePreviewPriority([item, next, previous], true)
   const motion = item.mediaType === 'video' || isGif(item)
   useEffect(() => {
@@ -125,6 +147,7 @@ export function Viewer({
     }
   }, [autoplayNext])
   function videoEnded() {
+    if (deleteOpen) return
     if (slideshow) {
       if (next) navigate(next, 'next')
       else setSlideshow(false)
@@ -136,13 +159,13 @@ export function Viewer({
   // Photos and GIFs advance on a timer; videos advance when they end (see onEnded).
   // The last item ends the slideshow rather than wrapping to a different place.
   useEffect(() => {
-    if (!slideshow || detailsOpen || item.mediaType === 'video' || !neighbors.isSuccess) return
+    if (!slideshow || detailsOpen || deleteOpen || item.mediaType === 'video' || !neighbors.isSuccess) return
     const timer = window.setTimeout(() => {
       if (next) navigate(next, 'next')
       else setSlideshow(false)
     }, slideSeconds * 1000)
     return () => window.clearTimeout(timer)
-  }, [slideshow, detailsOpen, item.id, item.mediaType, next, neighbors.isSuccess, slideSeconds, navigate])
+  }, [slideshow, detailsOpen, deleteOpen, item.id, item.mediaType, next, neighbors.isSuccess, slideSeconds, navigate])
   // Decode the next slide ahead of time so each advance is instant.
   const nextSlide = slideshow && next && next.mediaType !== 'video' ? imageUrl(next) : null
   useEffect(() => {
@@ -171,7 +194,13 @@ export function Viewer({
   const prefer = (value: 'liked' | 'disliked' | 'neutral') => preference.mutate({ id: item.id, value })
   useEffect(() => {
     function key(event: KeyboardEvent) {
-      if (!open || detailsOpen) return
+      if (
+        !open ||
+        detailsOpen ||
+        deleteOpen ||
+        document.querySelectorAll('[role="dialog"][data-state="open"]').length > 1
+      )
+        return
       if (
         event.target instanceof HTMLElement &&
         (event.target.closest('input,select,textarea,video,[contenteditable="true"]') ||
@@ -206,13 +235,16 @@ export function Viewer({
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [previous, next, navigate, open, detailsOpen])
+  }, [previous, next, navigate, open, detailsOpen, deleteOpen])
   return (
     <>
       <Modal
         open={open}
         onOpenChange={setOpen}
         onClosed={onClose}
+        onHistoryClosed={() => {
+          if (!open) onExitComplete?.()
+        }}
         title={item.fileName}
         description="Media viewer. Use Left and Right arrows to navigate, I for details, and Escape to close."
         wide
@@ -291,11 +323,39 @@ export function Viewer({
             <IconButton label="View options" className={actionButton} onClick={() => setOptionsOpen(true)}>
               <Settings2 className="size-4" />
             </IconButton>
+            <RenameFileAction
+              mediaIds={[item.id]}
+              libraryId={item.libraryId}
+              onQueued={onRenameQueued}
+              iconOnly
+              className={actionButton}
+              disabled={item.availability === 'missing'}
+              onOpenChange={value => {
+                setDeleteOpen(value)
+                if (value) setSlideshow(false)
+              }}
+            />
+            <DeleteMediaAction
+              item={item}
+              disabled={neighbors.isPending}
+              className={actionButton}
+              onOpenChange={open => {
+                setDeleteOpen(open)
+                if (open) setSlideshow(false)
+              }}
+              onQueued={() => {
+                removed.current.set(item.id, { previous, next })
+                const fallback = next ?? previous ?? null
+                onDeleteQueued?.(fallback)
+                if (fallback) navigate(fallback, next ? 'next' : 'previous')
+                else setOpen(false)
+              }}
+            />
             <IconButton label="Media details" className={actionButton} onClick={() => setDetailsOpen(true)}>
               <Info className="size-4" />
             </IconButton>
             {motion && onWatchReels && (
-              <IconButton label="Watch on Reels" className={actionButton} onClick={() => onWatchReels(item)}>
+              <IconButton label="Watch on Flick" className={actionButton} onClick={() => onWatchReels(item)}>
                 <Clapperboard className="size-4" />
               </IconButton>
             )}

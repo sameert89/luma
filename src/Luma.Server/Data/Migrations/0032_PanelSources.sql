@@ -1,0 +1,9 @@
+CREATE TABLE PanelSources (
+    LibraryId INTEGER NOT NULL REFERENCES Libraries(Id),
+    RelativePath TEXT NOT NULL,
+    PathKey TEXT NOT NULL,
+    ImageFolders INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(LibraryId,PathKey)
+);
+ALTER TABLE ComicJobs ADD COLUMN Recursive INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE ComicJobs ADD COLUMN ImageFolders INTEGER NOT NULL DEFAULT 0;

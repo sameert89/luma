@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Luma.Server.Tests;
 
+[Collection("HTTP timing")]
 public sealed class DatabaseContentionTests
 {
     [Fact]

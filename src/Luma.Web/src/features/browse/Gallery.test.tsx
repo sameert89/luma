@@ -270,3 +270,89 @@ it('leaves scrolling alone when the gallery has no refresh action', async () => 
   fireEvent.touchMove(scroller, { touches: [{ clientY: 200 }] })
   expect(screen.queryByText('Release to refresh')).not.toBeInTheDocument()
 })
+
+it('seeks a bounded window around an item beyond the retained pages and scrolls it into view', async () => {
+  const item = (id: number) => ({
+    id,
+    libraryId: 1,
+    folderId: 1,
+    fileName: `photo-${id}.jpg`,
+    mediaType: 'image',
+    extension: '.jpg',
+    sizeBytes: 1,
+    modifiedAt: '2026-01-01',
+    effectiveDate: '2026-01-01',
+    preference: 'neutral',
+    availability: 'present',
+    thumbnail: { status: 'ready', url: `/thumb/${id}` },
+    preview: { status: 'ready', url: `/preview/${id}` },
+    tags: [],
+  })
+  const page = (start: number) => Array.from({ length: 60 }, (_, index) => item(start + index))
+  const fetch = vi.fn(async (url: string) => {
+    if (url.endsWith('/priority')) return new Response(null, { status: 204 })
+    if (url.includes('/neighbors?'))
+      return new Response(JSON.stringify({ previous: item(799), next: item(801), pageCursor: 'near-800' }))
+    const cursor = new URL(url, 'http://localhost').searchParams.get('cursor')
+    return new Response(
+      JSON.stringify(
+        cursor === 'near-800'
+          ? { items: page(800), previousCursor: 'before-800', nextCursor: 'after-859' }
+          : cursor === 'before-800'
+            ? { items: page(740), previousCursor: 'before-740', nextCursor: 'near-800' }
+            : { items: page(1), previousCursor: null, nextCursor: 'initial-next' },
+      ),
+    )
+  })
+  vi.stubGlobal('fetch', fetch)
+  const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+    width: 800,
+    height: 600,
+    top: 0,
+    left: 0,
+    right: 800,
+    bottom: 600,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect)
+  const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.dataset.testid === 'gallery-scroll' ? 600 : 0
+    },
+  })
+  try {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    const filters = { sort: 'name', order: 'asc' }
+    const complete = vi.fn()
+    const props = {
+      filters,
+      selected: new Set<number>(),
+      selecting: false,
+      onSelect: vi.fn(),
+      onOpen: vi.fn(),
+      scrollerRef: createRef<HTMLDivElement>(),
+      onRevealComplete: complete,
+    }
+    const ui = (revealMediaId: number | null) => (
+      <QueryClientProvider client={client}>
+        <Gallery {...props} revealMediaId={revealMediaId} />
+      </QueryClientProvider>
+    )
+    const view = render(ui(null))
+    await waitFor(() => expect(client.getQueryState(['media', filters])?.status).toBe('success'))
+    view.rerender(ui(800))
+    await waitFor(() => expect(screen.getByTestId('gallery-scroll').scrollTop).toBeGreaterThan(0))
+    await waitFor(() => expect(complete).toHaveBeenCalled())
+    const urls = fetch.mock.calls.map(call => call[0]).filter(url => url.startsWith('/api/media?'))
+    expect(urls).toHaveLength(3)
+    expect(urls.some(url => url.includes('cursor=near-800'))).toBe(true)
+    expect(urls.some(url => url.includes('cursor=before-800'))).toBe(true)
+    expect(urls.some(url => url.includes('initial-next'))).toBe(false)
+  } finally {
+    rect.mockRestore()
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height)
+  }
+})

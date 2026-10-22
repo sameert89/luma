@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 
 namespace Luma.Server.Http;
 
@@ -26,11 +25,14 @@ public static class SlowRequestLog
 {
     public const int DefaultThresholdMs = 500;
 
-    public static IApplicationBuilder UseSlowRequestLog(this WebApplication app)
+    public static IApplicationBuilder UseSlowRequestLog(this WebApplication app) =>
+        ((IApplicationBuilder)app).UseSlowRequestLog(app.Configuration.GetValue("Luma:SlowRequestMs", DefaultThresholdMs));
+
+    internal static IApplicationBuilder UseSlowRequestLog(this IApplicationBuilder app, int threshold, TimeProvider? timeProvider = null)
     {
-        var threshold = app.Configuration.GetValue("Luma:SlowRequestMs", DefaultThresholdMs);
         if (threshold <= 0) return app;
-        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Luma.SlowRequest");
+        var clock = timeProvider ?? TimeProvider.System;
+        var logger = app.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("Luma.SlowRequest");
         // Counted per application rather than per process, so what the log reports is this server's
         // own load and two hosts in one process cannot inflate each other's numbers.
         var inFlight = 0;
@@ -41,7 +43,7 @@ public static class SlowRequestLog
         var inFlightByPath = new ConcurrentDictionary<string, int>();
         return app.Use(async (context, next) =>
         {
-            var started = Stopwatch.GetTimestamp();
+            var started = clock.GetTimestamp();
             var path = context.Request.Path.Value ?? "";
             var total = Interlocked.Increment(ref inFlight);
             // What this request found already running when it arrived, which is the number that
@@ -52,7 +54,7 @@ public static class SlowRequestLog
             {
                 Interlocked.Decrement(ref inFlight);
                 inFlightByPath.AddOrUpdate(path, 0, (_, count) => count - 1);
-                var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                var elapsed = clock.GetElapsedTime(started).TotalMilliseconds;
                 if (elapsed >= threshold)
                 {
                     ThreadPool.GetAvailableThreads(out var freeWorkers, out _);

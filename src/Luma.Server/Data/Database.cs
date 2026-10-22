@@ -67,6 +67,10 @@ public sealed class Database(IConfiguration configuration, IHostEnvironment envi
     /// <summary>Called by background workers before taking the write lock.</summary>
     public async ValueTask YieldToForegroundAsync(CancellationToken cancellationToken)
     {
+        // SQLite operations often complete synchronously. Hand the thread back between
+        // batches so an incoming request can run and register its foreground priority.
+        await Task.Yield();
+        cancellationToken.ThrowIfCancellationRequested();
         for (var waited = 0; ForegroundWritePending && waited < MaximumYieldMs; waited += 10)
             await Task.Delay(10, cancellationToken);
     }

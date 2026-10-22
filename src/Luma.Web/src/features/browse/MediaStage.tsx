@@ -1,3 +1,4 @@
+import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
   ChevronsLeft,
@@ -23,6 +24,7 @@ import { useIdle } from './useIdle'
 import { useWatchProgress } from './useWatchProgress'
 import { ReelsSeek, ViewerVideoControls, formatTime } from './VideoControls'
 import { isGif, originalStandsIn, type Media } from './api'
+import { CaptionControls, useCaptions } from './useCaptions'
 
 const fillKeys = { viewer: 'luma-viewer-fill', reels: 'luma-reels-fill' }
 
@@ -125,7 +127,7 @@ export function MediaStage({
   const [rotation, setRotation] = useState(0)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [fill, setFill] = useState(() => {
-    const stored = localStorage.getItem(reels ? fillKeys.reels : fillKeys.viewer)
+    const stored = readSetting(reels ? fillKeys.reels : fillKeys.viewer)
     return stored === null ? reels : stored === '1'
   })
   const [originalId, setOriginalId] = useState<number | null>(null)
@@ -152,6 +154,7 @@ export function MediaStage({
   const [skip, setSkip] = useState<{ forward: boolean; key: number } | null>(null)
   const [flash, setFlash] = useState<{ playing: boolean; key: number } | null>(null)
   const isVideo = item.mediaType === 'video'
+  const captions = useCaptions(item.id, isVideo)
   // Zoom, pan and rotate belong to the viewer. In Reels a photo or GIF keeps Reels' own
   // gestures (double tap likes, swipes move on) instead of picture controls.
   const zoomable = !isVideo && !reels
@@ -597,7 +600,7 @@ export function MediaStage({
     <div className="relative flex h-full min-h-0 w-full flex-col">
       <div
         ref={host}
-        className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden bg-black ${chromeHidden ? 'cursor-none' : ''}`}
+        className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden ${reels ? 'bg-canvas' : 'bg-black'} ${chromeHidden ? 'cursor-none' : ''}`}
         onWheel={event => {
           if (reels && Math.abs(event.deltaY) > 40 && Date.now() - lastWheel.current > 500) {
             lastWheel.current = Date.now()
@@ -708,9 +711,8 @@ export function MediaStage({
           endHold()
         }}
       >
-        {/* Personal source videos have no generated caption tracks; preserve native playback capabilities. */}
         {isVideo ? (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
+          // eslint-disable-next-line jsx-a11y/media-has-caption -- The real track is inserted by useCaptions only after explicit CC opt-in.
           <video
             key={item.id}
             data-axis={reels ? 'vertical' : 'horizontal'}
@@ -758,7 +760,9 @@ export function MediaStage({
               )
             }}
             className={`motion-media pointer-events-none h-full w-full ${displayFill ? 'object-cover' : 'object-contain'}`}
-          />
+          >
+            {captions.track}
+          </video>
         ) : (
           <div
             key={item.id}
@@ -868,10 +872,30 @@ export function MediaStage({
             onRate={cycleRate}
             onFullscreen={() => void fullscreen()}
             onPictureInPicture={() => void pictureInPicture()}
+            captions={<CaptionControls captions={captions} />}
           />
         )}
         {isVideo && reels && (
-          <ReelsSeek video={video} mediaId={item.id} visible={seekVisible} stripRef={seekStrip} onReveal={revealSeek} />
+          <>
+            <div data-chrome className="absolute bottom-14 left-3 flex gap-2">
+              <CaptionControls captions={captions} />
+            </div>
+            <ReelsSeek
+              video={video}
+              mediaId={item.id}
+              visible={seekVisible}
+              stripRef={seekStrip}
+              onReveal={revealSeek}
+            />
+          </>
+        )}
+        {isVideo && captions.enabled && captions.message && (
+          <p
+            role="status"
+            className="pointer-events-none absolute inset-x-4 bottom-28 rounded-lg bg-canvas/90 p-2 text-center text-sm text-ink"
+          >
+            {captions.message}
+          </p>
         )}
         {/* Liking is a universal, brand-independent gesture: it stays red in every theme,
           like the persistent Liked heart elsewhere would if it needed the same emphasis. */}

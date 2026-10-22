@@ -112,8 +112,9 @@ public sealed class AutomaticLibraryRefresh(
         }
     }
 
-    private void Observe(LibraryOptions library, string fullPath, WatcherChangeTypes changeType)
+    internal void Observe(LibraryOptions library, string fullPath, WatcherChangeTypes changeType)
     {
+        if (Luma.Server.Features.Files.MutationPaths.IsInternal(Path.GetRelativePath(library.Path, fullPath))) return;
         if (!settings.TryGetValue(library.Id, out var mode) || mode.Mode != "watcher") return;
         try
         {
@@ -123,7 +124,7 @@ public sealed class AutomaticLibraryRefresh(
             if (affected is null || !SourcePaths.IsInside(library, affected)) return;
             var relative = Path.GetRelativePath(library.Path, affected).Replace(Path.DirectorySeparatorChar, '/');
             if (relative == ".") relative = "";
-            var key = $"{library.Id}:{library.Key(relative)}";
+            var key = $"{library.Id}:{library.Key(Path.GetRelativePath(library.Path, fullPath).Replace(Path.DirectorySeparatorChar, '/'))}";
             pending.AddOrUpdate(key,
                 _ => new(library, fullPath, relative, createdDirectory, DateTimeOffset.UtcNow.AddSeconds(mode.WatcherDebounceSeconds)),
                 (_, previous) => new(library, fullPath, relative, previous.Recursive || createdDirectory,
@@ -135,12 +136,19 @@ public sealed class AutomaticLibraryRefresh(
         }
     }
 
-    private async Task FlushStableChangesAsync(CancellationToken ct)
+    internal async Task FlushStableChangesAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         foreach (var (key, change) in pending)
         {
             if (change.NotBefore > now || !pending.TryGetValue(key, out var current) || !ReferenceEquals(change, current)) continue;
+            var managed = await ManagedChangeAsync(change, ct);
+            if (managed is 1) continue; // A mutation still owns this notification; check again after commit.
+            if (managed is 2)
+            {
+                ((ICollection<KeyValuePair<string, PendingChange>>)pending).Remove(new(key, change));
+                continue;
+            }
             var sample = Sample(change.FullPath);
             var stabilitySeconds = settings.TryGetValue(change.Library.Id, out var mode) ? mode.FileStabilitySeconds : 10;
             if (sample is not null && change.Sample != sample)
@@ -152,6 +160,48 @@ public sealed class AutomaticLibraryRefresh(
             await QueueDirtyFolderAsync(change.Library.Id, change.RelativePath, change.Library.Key(change.RelativePath),
                 change.Recursive, priority: 1, ct);
         }
+    }
+
+    private async Task<int> ManagedChangeAsync(PendingChange change, CancellationToken ct)
+    {
+        var relative = Path.GetRelativePath(change.Library.Path, change.FullPath).Replace(Path.DirectorySeparatorChar, '/');
+        var key = change.Library.Key(relative == "." ? "" : relative);
+        await using var db = await database.OpenAsync(ct);
+        var operations = await db.QueryAsync<Luma.Server.Features.Files.FileOperation>(new CommandDefinition("""
+            SELECT * FROM FileOperations WHERE LibraryId=@Id
+              AND (State IN ('running','reserved','published','deleting','finalizing','needsAttention')
+                OR State='completed' AND FinishedAt>=@since)
+            ORDER BY CreatedAt DESC LIMIT 500
+            """, new { change.Library.Id, since = DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O") }, cancellationToken: ct));
+        foreach (var operation in operations)
+        {
+            bool Under(string? path) => path is not null && (key == change.Library.Key(path) || key.StartsWith(change.Library.Key(path) + '/', StringComparison.Ordinal));
+            var sourceChanged = operation.Kind is not ("copy" or "upload") && Under(operation.Source);
+            var destinationChanged = Under(operation.Destination);
+            var parentChanged = Directory.Exists(change.FullPath) && new[] { operation.Source, operation.Destination }.OfType<string>()
+                .Any(path => change.Library.Key(path.Contains('/') ? path[..path.LastIndexOf('/')] : "") == key);
+            if (!sourceChanged && !destinationChanged && !parentChanged) continue;
+            if (operation.State != "completed") return 1;
+            // Suppress only notifications whose current on-disk state matches our reconciliation.
+            // Later external replacements/edits still go through ordinary watcher discovery.
+            var sample = Sample(change.FullPath);
+            if (sample is null && sourceChanged) return 2;
+            if (sample is null) return 0;
+            if (sample.Size == -1)
+            {
+                var ticks = await db.ExecuteScalarAsync<long?>(new CommandDefinition("SELECT SourceModifiedTicks FROM Folders WHERE LibraryId=@Id AND PathKey=@key",
+                    new { change.Library.Id, key }, cancellationToken: ct));
+                if (ticks == sample.ModifiedTicks) return 2;
+            }
+            else if (destinationChanged)
+            {
+                var matches = await db.ExecuteScalarAsync<bool>(new CommandDefinition("SELECT EXISTS(SELECT 1 FROM Media WHERE LibraryId=@Id AND PathKey=@key AND SizeBytes=@Size AND ModifiedTicks=@ModifiedTicks AND Availability='present')",
+                    new { change.Library.Id, key, sample.Size, sample.ModifiedTicks }, cancellationToken: ct));
+                if (matches) return 2;
+            }
+            return 0;
+        }
+        return 0;
     }
 
     private static FileSample? Sample(string path)

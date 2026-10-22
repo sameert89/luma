@@ -1,5 +1,5 @@
+import { openHeaderSearch, switchExperience, openFixtureDatabase } from './helpers'
 import { test, expect, type Page } from '@playwright/test'
-import { DatabaseSync } from 'node:sqlite'
 import { execFileSync } from 'node:child_process'
 import { copyFile, mkdir, utimes } from 'node:fs/promises'
 import path from 'node:path'
@@ -28,14 +28,7 @@ test.beforeAll(() => {
     '+faststart',
     path.join(fixture, 'media/feedback-clip.mp4'),
   ])
-  const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
-  db.function('luma_key', { deterministic: true }, (value: string) => value.normalize('NFC').toUpperCase())
-  db.function('luma_reverse', { deterministic: true }, (value: string) => [...value].reverse().join(''))
-  db.function(
-    'luma_ticks',
-    { deterministic: true },
-    (value: string) => BigInt(Date.parse(value)) * 10000n + 621355968000000000n,
-  )
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   try {
     db.prepare(
       `UPDATE Media SET FolderId=2,FileName='feedback-clip.mp4',RelativePath='feedback-clip.mp4',
@@ -96,10 +89,9 @@ test('prepares an unindexed folder starting from what is on screen', async ({ pa
     const stamp = new Date(Date.UTC(2026, 0, 1 + index))
     await utimes(file, stamp, stamp)
   }
-  const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   let folderId: number
   try {
-    db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON')
     const row = db
       .prepare(
         `INSERT INTO Folders(LibraryId,ParentId,RelativePath,PathKey,LastSeenScanId)
@@ -125,12 +117,8 @@ test('prepares an unindexed folder starting from what is on screen', async ({ pa
 })
 
 test('reels reveal seeking from its strip and fade it again', async ({ page }) => {
-  await page.goto('/?q=feedback&order=desc')
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await page.goto('/flick?q=feedback&order=desc')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   const strip = reels.getByTestId('reels-seek')
   const seek = reels.getByRole('slider', { name: 'Seek video', exact: true })
@@ -154,12 +142,8 @@ test('reels reveal seeking from its strip and fade it again', async ({ page }) =
 })
 
 test('double tapping a reel likes it without toggling playback', async ({ page }) => {
-  await page.goto('/?mediaType=video&preference=neutral')
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await page.goto('/flick?mediaType=video&preference=neutral')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   const like = reels.getByRole('button', { name: 'Like', exact: true })
   await expect(like).toHaveAttribute('aria-pressed', 'false')
@@ -173,6 +157,7 @@ test('double tapping a reel likes it without toggling playback', async ({ page }
   await page.mouse.up()
   await expect(like).toHaveAttribute('aria-pressed', 'true')
   // The like is persisted, not only reflected in the reels control.
+  await switchExperience(page, 'Gallery')
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
     .getByRole('button', { name: 'Collections', exact: true })
@@ -181,13 +166,12 @@ test('double tapping a reel likes it without toggling playback', async ({ page }
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 })
 
-test('reels carry the active filters when switching modes', async ({ page }) => {
-  const navigation = page.getByRole('navigation', { name: 'Primary navigation' })
+test('Flick restores its own filters when switching applications', async ({ page }) => {
   await page.goto('/?libraryId=1&folderId=1')
-  await navigation.getByRole('button', { name: 'Reels', exact: true }).click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
-  await reels.getByRole('button', { name: 'Reels menu' }).click()
-  await reels.getByRole('button', { name: 'Filters', exact: true }).click()
+  await switchExperience(page, 'Flick')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
+  await reels.getByRole('button', { name: 'Flick menu' }).click()
+  await page.getByRole('button', { name: 'Filters', exact: true }).click()
   const sheet = page.getByRole('dialog', { name: 'Filters and sorting' })
   await sheet.getByLabel('Media type').selectOption('image')
   await sheet.getByLabel('Sort direction').selectOption('asc')
@@ -195,14 +179,15 @@ test('reels carry the active filters when switching modes', async ({ page }) => 
   await expect(page).toHaveURL(/mediaType=image/)
   await expect(page).toHaveURL(/order=asc/)
 
-  await navigation.getByRole('button', { name: 'Search', exact: true }).click()
+  await switchExperience(page, 'Gallery')
+  await openHeaderSearch(page, 'Search media')
   await page.getByRole('combobox', { name: 'Search media' }).fill('photo')
   await page.getByRole('combobox', { name: 'Search media' }).press('Enter')
   await expect(page).toHaveURL(/q=photo/)
   await expect(page.getByTestId('media-cell').first()).toBeVisible()
 
-  await navigation.getByRole('button', { name: 'Reels', exact: true }).click()
+  await switchExperience(page, 'Flick')
   await expect(page).toHaveURL(/mediaType=image/)
   await expect(page).toHaveURL(/order=asc/)
-  await expect(page).toHaveURL(/q=photo/)
+  await expect(page).not.toHaveURL(/q=photo/)
 })

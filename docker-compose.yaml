@@ -4,6 +4,9 @@ services:
     ports:
       - "5080:5080"
     environment:
+      Luma__Files__Enabled: "${LUMA_FILES_ENABLED:-false}"
+      Luma__Ui__FlickEnabled: "${LUMA_FLICK_ENABLED:-true}"
+      Luma__Ui__PanelsEnabled: "${LUMA_PANELS_ENABLED:-true}"
       Luma__Indexing__Libraries__0__Id: "1"
       Luma__Indexing__Libraries__0__Name: "Media"
       Luma__Indexing__Libraries__0__Path: /media

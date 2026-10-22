@@ -9,6 +9,8 @@ let markerSeed = 0
 // opens before that traversal lands (a slideshow opening the viewer right after its menu
 // closes) must wait for it, or the traversal would pop the new modal's entry and close it.
 let leaving: Promise<void> | null = null
+// The page router must not treat our asynchronous history disposal as page navigation.
+export const isModalHistoryClosing = () => leaving !== null
 function leaveEntry() {
   const done = new Promise<void>(resolve => {
     const finish = () => {
@@ -22,6 +24,7 @@ function leaveEntry() {
   })
   leaving = done
   window.history.back()
+  return done
 }
 function createHistoryMarker() {
   markerSeed += 1
@@ -39,6 +42,8 @@ export function Modal({
   hideHeader = false,
   restoreFocus,
   onClosed,
+  onHistoryClosed,
+  portalContainer,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -50,8 +55,12 @@ export function Modal({
   hideHeader?: boolean
   restoreFocus?: () => void
   onClosed?: () => void
+  onHistoryClosed?: () => void
+  portalContainer?: HTMLElement
 }) {
   const previousFocus = useRef<HTMLElement | null>(null)
+  const historyClosed = useRef(onHistoryClosed)
+  historyClosed.current = onHistoryClosed
   const change = useRef(onOpenChange)
   const historyMarker = useRef<string | null>(null)
   const historyCleanup = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -83,14 +92,17 @@ export function Modal({
       const marker = historyMarker.current
       // Delay disposal so StrictMode's immediate setup can retain the same entry.
       historyCleanup.current = setTimeout(() => {
-        if (marker && window.history.state?.lumaModal === marker) leaveEntry()
-        historyMarker.current = null
+        const finished = marker && window.history.state?.lumaModal === marker ? leaveEntry() : Promise.resolve()
+        void finished.then(() => {
+          historyMarker.current = null
+          historyClosed.current?.()
+        })
       }, 0)
     }
   }, [open])
   return (
     <Primitive.Root open={open} onOpenChange={onOpenChange}>
-      <Primitive.Portal>
+      <Primitive.Portal container={portalContainer}>
         {open && (
           <>
             <Primitive.Overlay className="motion-overlay fixed inset-0 z-40 bg-black/70" />

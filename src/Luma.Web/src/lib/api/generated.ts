@@ -16,6 +16,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ui-configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetUiConfiguration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateApplications"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/libraries/{id}/refresh-settings": {
         parameters: {
             query?: never;
@@ -624,6 +656,262 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/storage-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileStorageStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileManagementSettings"];
+        put: operations["UpdateFileManagementSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/continue-reading": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetContinueReading"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicSources"];
+        put: operations["UpdateComicSources"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/source-folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicSourceFolders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicLibrary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicFolders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicTags"];
+        put?: never;
+        post: operations["UpdateComicTags"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FindComicTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComic"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/pages/{page}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetComicCover"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateReadingProgress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetReadingStatistics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search/suggestions": {
         parameters: {
             query?: never;
@@ -632,6 +920,310 @@ export interface paths {
             cookie?: never;
         };
         get: operations["GetSearchSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/storage-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CheckFileStorage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CheckMutationAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileLocation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/clipboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["GetFileClipboardEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateFileItemOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateFileOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations/{id}/recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetFileRecoveryEvidence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations/{id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ResolveFileOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/operations/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CancelFileOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRecycledFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DiscoverComics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panels/comics/{id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateComicMetadata"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateUploadSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetUploadSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["AppendUploadChunk"];
+        trace?: never;
+    };
+    "/api/files/uploads/{id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["FinalizeUploadSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/uploads/{id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ChangeUploadSessionState"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{id}/captions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DiscoverCaptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{id}/captions/{trackId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetCaptionTrack"];
         put?: never;
         post?: never;
         delete?: never;
@@ -653,6 +1245,12 @@ export interface components {
             instance?: string | null;
             code: string;
             traceId: string;
+        };
+        ApplicationFlags: {
+            /** @default true */
+            flickEnabled: boolean;
+            /** @default true */
+            panelsEnabled: boolean;
         };
         BackgroundTask: {
             id: string;
@@ -680,10 +1278,89 @@ export interface components {
             /** Format: int32 */
             height: number | null;
         };
+        CaptionList: {
+            sourceKey: string;
+            tracks: components["schemas"]["CaptionTrack"][];
+            warning: string | null;
+        };
+        CaptionTrack: {
+            id: string;
+            label: string;
+            language: string;
+            kind: string;
+        };
         CollectionTagPage: {
             items: components["schemas"]["TagSummary"][];
             nextCursor: string | null;
             previousCursor: string | null;
+        };
+        ComicFolder: {
+            name: string;
+            relativePath: string;
+            coverUrls?: string[] | null;
+        };
+        ComicFolderPage: {
+            items: components["schemas"]["ComicFolder"][];
+            nextCursor: string | null;
+        };
+        ComicJobAccepted: {
+            /** Format: int64 */
+            id: number;
+        };
+        ComicList: {
+            items: components["schemas"]["ComicSummary"][];
+            /** Format: int64 */
+            nextCursor: number | null;
+        };
+        ComicMetadataUpdate: {
+            title: string;
+            /** @default  */
+            series: string;
+            /** @default  */
+            author: string;
+            /** @default  */
+            description: string;
+            /** @default false */
+            favourite: boolean;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            coverPage: number;
+        };
+        ComicRegistration: {
+            /** Format: int64 */
+            libraryId: number;
+            relativePath?: string | null;
+        };
+        ComicSummary: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            libraryId: number;
+            title: string;
+            series: string;
+            author: string;
+            description: string;
+            format: string;
+            /** Format: int32 */
+            pageCount: number;
+            /** Format: int32 */
+            pageIndex: number;
+            state: string;
+            /** Format: double */
+            readingSeconds: number;
+            direction: string;
+            settings: string;
+            lastReadAt: string | null;
+            favourite: boolean;
+            coverUrl: string | null;
+            /** Format: int32 */
+            coverPage: number;
+        };
+        ComicTagUpdate: {
+            addTagIds: number[];
+            removeTagIds: number[];
         };
         CoverImage: {
             url: string;
@@ -698,6 +1375,113 @@ export interface components {
         };
         CreateTagRequest: {
             name: string;
+        };
+        FileCapabilities: {
+            accessConfigured: boolean;
+            libraries: components["schemas"]["FileCapability"][];
+        };
+        FileCapability: {
+            /** Format: int64 */
+            libraryId: number;
+            writable: boolean;
+        };
+        FileClipboardEntry: {
+            /** Format: int64 */
+            libraryId: number;
+            relativePath: string;
+            /** Format: int64 */
+            mediaId: number | null;
+            /** Format: int64 */
+            folderId: number | null;
+        };
+        FileItemRequest: {
+            /** Format: int64 */
+            libraryId: number;
+            kind: string;
+            /** Format: int64 */
+            mediaId?: number | null;
+            /** Format: int64 */
+            folderId?: number | null;
+            destination?: string | null;
+            /** @default false */
+            replaceExisting: boolean;
+        };
+        FileLocation: {
+            /** Format: int64 */
+            libraryId: number;
+            relativePath: string;
+        };
+        FileManagementSettings: {
+            enabled: boolean;
+        };
+        FileOperation: {
+            id?: string;
+            /** Format: int64 */
+            libraryId?: number;
+            kind?: string;
+            source?: string;
+            destination?: string | null;
+            recycleId?: string | null;
+            replacementId?: string | null;
+            uploadId?: string | null;
+            isDirectory?: boolean;
+            /** Format: int64 */
+            sourceSize?: number;
+            /** Format: int64 */
+            sourceModifiedTicks?: number;
+            state?: string;
+            createdAt?: string;
+            finishedAt?: string | null;
+            failureCode?: string | null;
+            recoveryState?: string | null;
+            recoveryRequested?: boolean;
+            restored?: boolean;
+        };
+        FileOperationAccepted: {
+            id: string;
+        };
+        FileOperationRequest: {
+            /** Format: int64 */
+            libraryId: number;
+            kind: string;
+            source: string;
+            destination?: string | null;
+            recycleId?: string | null;
+            /** @default false */
+            replaceExisting: boolean;
+        };
+        FileRecoveryEvidence: {
+            operation: components["schemas"]["FileOperation"];
+            stagingPath: string;
+            sourceExists: boolean;
+            sourceMatches: boolean;
+            stagingExists: boolean;
+            destinationExists: boolean;
+            destinationMatches: boolean;
+            actions: string[];
+        };
+        FileRecoveryRequest: {
+            action: string;
+            confirmed: boolean;
+            expectedFailureCode: string | null;
+            destination?: string | null;
+        };
+        FileSelectionRequest: {
+            mediaIds: number[];
+            folderIds: number[];
+        };
+        FileStorageReport: {
+            bootId: string;
+            accessConfigured: boolean;
+            libraries: components["schemas"]["FileStorageStatus"][];
+        };
+        FileStorageStatus: {
+            /** Format: int64 */
+            libraryId: number;
+            name: string;
+            configuredWritable: boolean;
+            canWrite: boolean;
+            warning: string | null;
         };
         FolderPage: {
             current: components["schemas"]["FolderSummary"];
@@ -808,6 +1592,7 @@ export interface components {
         MediaNeighbors: {
             previous: components["schemas"]["MediaSummary"] | null;
             next: components["schemas"]["MediaSummary"] | null;
+            pageCursor?: string | null;
         };
         MediaPage: {
             items: components["schemas"]["MediaSummary"][];
@@ -938,8 +1723,49 @@ export interface components {
              */
             skipped: number;
         };
+        PanelSourceConfiguration: {
+            configured: boolean;
+            locations: components["schemas"]["PanelSourceLocation"][];
+        };
+        PanelSourceLocation: {
+            /** Format: int64 */
+            libraryId: number;
+            /** @default  */
+            relativePath: string;
+            /** @default false */
+            imageFolders: boolean;
+            /** @default true */
+            excludeFromGallery: boolean;
+            coverUrls?: string[] | null;
+        };
+        PanelSourceUpdate: {
+            locations: components["schemas"]["PanelSourceLocation"][];
+        };
         PreferenceRequest: {
             preference: string;
+        };
+        ReadingStatistics: {
+            /** Format: int64 */
+            started: number;
+            /** Format: int64 */
+            completed: number;
+            /** Format: double */
+            readingSeconds: number;
+            /** Format: int64 */
+            pagesRead: number;
+        };
+        ReadingUpdate: {
+            sessionId: string;
+            /** Format: int64 */
+            sequence: number;
+            /** Format: int32 */
+            pageIndex: number;
+            /** Format: double */
+            activeSeconds: number;
+            /** @default ltr */
+            direction: string;
+            /** @default {} */
+            settings: string;
         };
         ScanAccepted: {
             /** Format: int64 */
@@ -987,6 +1813,15 @@ export interface components {
             /** Format: int64 */
             libraryId?: number | null;
         };
+        SourceFolderChoice: {
+            name: string;
+            relativePath: string;
+        };
+        SourceFolderPage: {
+            items: components["schemas"]["SourceFolderChoice"][];
+            /** Format: int32 */
+            nextOffset: number | null;
+        };
         StartScanRequest: {
             /** @default false */
             force: boolean;
@@ -1014,6 +1849,36 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
+        };
+        UiConfigurationResponse: {
+            applications: components["schemas"]["ApplicationFlags"];
+            defaults: {
+                [key: string]: string;
+            };
+        };
+        UploadRequest: {
+            /** Format: int64 */
+            libraryId: number;
+            target: string;
+            /** Format: int64 */
+            sizeBytes: number;
+            requestId?: string | null;
+            /** @default false */
+            replaceExisting: boolean;
+        };
+        UploadSession: {
+            id?: string;
+            /** Format: int64 */
+            libraryId?: number;
+            target?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            /** Format: int64 */
+            committedOffset?: number;
+            state?: string;
+            createdAt?: string;
+            updatedAt?: string;
+            operationId?: string | null;
         };
         WatchState: {
             /** Format: int64 */
@@ -1070,6 +1935,48 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ApiProblem"];
                 };
+            };
+        };
+    };
+    GetUiConfiguration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UiConfigurationResponse"];
+                };
+            };
+        };
+    };
+    UpdateApplications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationFlags"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2406,7 +3313,151 @@ export interface operations {
             };
         };
     };
-    GetSearchSuggestions: {
+    GetFileCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileCapabilities"];
+                };
+            };
+        };
+    };
+    GetFileStorageStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileStorageReport"];
+                };
+            };
+        };
+    };
+    GetFileManagementSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileManagementSettings"];
+                };
+            };
+        };
+    };
+    UpdateFileManagementSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileManagementSettings"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetContinueReading: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicSummary"][];
+                };
+            };
+        };
+    };
+    GetComicSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelSourceConfiguration"];
+                };
+            };
+        };
+    };
+    UpdateComicSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PanelSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetComicSuggestions: {
         parameters: {
             query?: {
                 q?: string;
@@ -2426,6 +3477,742 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SearchSuggestion"][];
                 };
+            };
+        };
+    };
+    GetComicSourceFolders: {
+        parameters: {
+            query: {
+                libraryId: number;
+                path?: string;
+                q?: string;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceFolderPage"];
+                };
+            };
+        };
+    };
+    GetComicLibrary: {
+        parameters: {
+            query?: {
+                q?: string;
+                state?: string;
+                series?: string;
+                favourite?: boolean;
+                cursor?: number;
+                libraryId?: number;
+                path?: string;
+                tag?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicList"];
+                };
+            };
+        };
+    };
+    GetComicFolders: {
+        parameters: {
+            query: {
+                libraryId: number;
+                path?: string;
+                after?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicFolderPage"];
+                };
+            };
+        };
+    };
+    GetComicTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSummary"][];
+                };
+            };
+        };
+    };
+    UpdateComicTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicTagUpdate"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FindComicTags: {
+        parameters: {
+            query?: {
+                prefix?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSummary"][];
+                };
+            };
+        };
+    };
+    GetComic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicSummary"];
+                };
+            };
+        };
+    };
+    GetComicPage: {
+        parameters: {
+            query?: {
+                original?: boolean;
+            };
+            header?: never;
+            path: {
+                id: number;
+                page: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetComicCover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateReadingProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingUpdate"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetReadingStatistics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingStatistics"];
+                };
+            };
+        };
+    };
+    GetSearchSuggestions: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                mediaType?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchSuggestion"][];
+                };
+            };
+        };
+    };
+    CheckFileStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileStorageStatus"][];
+                };
+            };
+        };
+    };
+    CheckMutationAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetFileLocation: {
+        parameters: {
+            query?: {
+                folderId?: number;
+                mediaId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileLocation"];
+                };
+            };
+        };
+    };
+    GetFileClipboardEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileClipboardEntry"][];
+                };
+            };
+        };
+    };
+    CreateFileItemOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperationAccepted"];
+                };
+            };
+        };
+    };
+    CreateFileOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperationAccepted"];
+                };
+            };
+        };
+    };
+    GetFileOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperation"];
+                };
+            };
+        };
+    };
+    GetFileRecoveryEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileRecoveryEvidence"];
+                };
+            };
+        };
+    };
+    ResolveFileOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileRecoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperationAccepted"];
+                };
+            };
+        };
+    };
+    CancelFileOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetRecycledFiles: {
+        parameters: {
+            query: {
+                libraryId: number;
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOperation"][];
+                };
+            };
+        };
+    };
+    DiscoverComics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicRegistration"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicJobAccepted"];
+                };
+            };
+        };
+    };
+    UpdateComicMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicMetadataUpdate"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CreateUploadSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    GetUploadSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    AppendUploadChunk: {
+        parameters: {
+            query: {
+                offset: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    FinalizeUploadSession: {
+        parameters: {
+            query?: {
+                replaceExisting?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    ChangeUploadSessionState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                action: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSession"];
+                };
+            };
+        };
+    };
+    DiscoverCaptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptionList"];
+                };
+            };
+        };
+    };
+    GetCaptionTrack: {
+        parameters: {
+            query: {
+                key: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+                trackId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

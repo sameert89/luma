@@ -68,16 +68,16 @@ Either terminate TLS in Luma itself or put it behind a reverse proxy.
 Compose, add to the `luma` service:
 
 ```yaml
-    ports:
-      - "5443:5443"
-    environment:
-      ASPNETCORE_URLS: "https://+:5443;http://+:5080"
-      ASPNETCORE_Kestrel__Certificates__Default__Path: /certs/luma.crt
-      ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /certs/luma.key
-      # Optional: send plain-HTTP visitors to HTTPS.
-      Luma__Https__RedirectHttp: "true"
-    volumes:
-      - /path/to/certs:/certs:ro
+ports:
+  - "5443:5443"
+environment:
+  ASPNETCORE_URLS: "https://+:5443;http://+:5080"
+  ASPNETCORE_Kestrel__Certificates__Default__Path: /certs/luma.crt
+  ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /certs/luma.key
+  # Optional: send plain-HTTP visitors to HTTPS.
+  Luma__Https__RedirectHttp: "true"
+volumes:
+  - /path/to/certs:/certs:ro
 ```
 
 The certificate must be trusted by every device that opens Luma (for example from a
@@ -112,6 +112,74 @@ Its service worker only caches the app shell for offline start; media and API re
 always go to the server. Video keeps playing with the screen off or in another app where
 the platform allows it, and exposes lock-screen/headset controls through Media Session;
 picture-in-picture is offered where the browser supports it.
+
+## Optional file management and uploads
+
+The default media mount remains read-only. File management is a single-user
+preference, disabled by default. Turn on **Settings → General → File management →
+Enable file management**. There is no administrator token or per-tab unlock.
+The saved server choice overrides `Luma__Files__Enabled` on later boots. Old
+`Luma__Files__AccessToken` values are ignored and can be removed.
+
+Each editable library also needs Writable enabled and a writable media mount.
+For example, create `compose.files.yaml` alongside `docker-compose.yaml`:
+
+```yaml
+services:
+  luma:
+    environment:
+      Luma__Files__Enabled: "true"
+      Luma__Indexing__Libraries__0__Writable: "true"
+      Luma__Uploads__Concurrency: "2"
+      Luma__Uploads__MaxFileBytes: "107374182400"
+      Luma__Uploads__StagingQuotaBytes: "214748364800"
+    volumes:
+      - "${LUMA_MEDIA_PATH:?Set LUMA_MEDIA_PATH}:/media:rw"
+```
+
+```sh
+docker compose -f docker-compose.yaml -f compose.files.yaml config
+docker compose -f docker-compose.yaml -f compose.files.yaml up -d
+```
+
+Startup and explicit mount checks disable file changes on read-only or failed
+roots. A brief floating notice explains that browsing/playback still work. Full
+mount details remain in File management; after correcting permissions, select
+**Check media mounts**. Indexed capability reads never access originals.
+
+The example allows 100 GiB files and 200 GiB of active upload reservations. The
+default for each limit is 1 TiB. Reservations do not reserve physical disk space;
+monitor actual media-volume space. Uploads allow at most 128 active sessions and
+1–4 concurrent chunk transfers. Native folder picking preserves relative paths.
+After refresh, reselect the matching files to resume durable upload offsets.
+
+Preserve same-origin browser headers behind a proxy. Cross-site requests remain
+rejected. Allow PATCH bodies of at least 8 MiB (for nginx, `client_max_body_size
+9m;`) and pass Range/If-Range headers unchanged. Do not automatically retry write
+requests. The upload protocol is `/api/files/uploads`, not tus.
+
+Gallery's Manage files and Recycle bin controls expose same-library moves,
+directory creation, recycling, explicit permanent deletion, restore and purge.
+Destinations are never overwritten. Cross-library moves are not supported.
+Recycle retention and automatic cleanup are not implemented yet: use explicit
+purge and monitor space. A recycle bin is not a backup.
+
+### Interrupted file operations and backup consistency
+
+Background jobs shows unresolved file operations as needing attention. Open their
+recovery dialog to review source, staging and destination evidence before choosing
+a supported action. Retries continue from durable checkpoints; alternate restore
+destinations must be unused. A missing mount, changed source or collision can keep
+the library reserved. Restore the original mount or inspect the files before
+retrying. Do not remove journal rows or internal directories to clear a reservation.
+
+The media volume contains `.luma-trash`, `.luma-operations` and `.luma-uploads`.
+They hold recoverable content, operation staging and upload bytes, respectively;
+they are not generated cache. Back them up along with originals and SQLite from
+the same stopped-service checkpoint. Pause uploads and let operations finish when
+possible, then stop Luma before copying either volume. Restoring SQLite without
+matching media-volume state can leave operations needing explicit recovery.
+Never restore just a pre-deletion database over media that has since been purged.
 
 ## Upgrade and consistent cold backup
 
@@ -202,7 +270,8 @@ Metadata exports use a separate 1 GiB quota and expire after 24 hours. Failed qu
 jobs are visible; download needed exports before expiry, then retry after retention
 cleanup frees space. Imports merge application tags and never write originals.
 XMP archives include external merge instructions; disliked-path exports include
-missing records and are for user review. Luma does not delete media.
+missing records and are for user review. Metadata imports and exports do not
+delete originals; explicitly enabled file management can recycle or delete them.
 
 Target acceptance must exercise restart, an upgrade from the previous schema,
 backup/restore, cache loss and unavailable sources on the Pi with the real mounts.
@@ -244,3 +313,126 @@ ASP.NET Core can report the same timing for every request via
 `Logging:LogLevel:Microsoft.AspNetCore.Hosting.Diagnostics=Information`, but a
 gallery requests hundreds of thumbnails per screen, so that writes far more to the
 log than the requests being investigated cost. Prefer the threshold.
+
+## Captions in 2.0
+
+Captions work with a read-only media mount. CC is off by default and no subtitle
+inspection or extraction runs until the viewer enables it. For `movie.mkv` or
+`movie.mp4`, use `movie.srt` in the same folder (`.SRT` is also recognized), or an
+embedded SubRip/SRT stream. A container's other text/image subtitle codecs are
+not automatically converted to SRT. ASS/SSA, image subtitles, author fonts,
+colors, markup, positioning and effects are unsupported; the player renders
+plain captions. There is no OCR, speech recognition or external subtitle search.
+
+FFprobe discovers supported streams and FFmpeg copies only the chosen embedded
+SRT stream; the video itself is not transcoded. Both binaries must be installed
+(the container already includes them). SRT input accepts UTF-8 and BOM-marked
+UTF-16 up to 4 MiB. Native browser text tracks display converted WebVTT above the
+playback bar. Caption settings selects between available tracks. Changing videos
+starts with captions off. An error preparing subtitles does not stop playback.
+
+Everything generated lives in `Luma:Indexing:CachePath/captions`: temporary
+extraction files, retained raw SRT, converted VTT and manifests. The dedicated
+cache is limited to 128 MiB and 512 entries, and uses least-recently-used eviction;
+missing captions are rebuilt only after explicit CC use. A missing VTT can be
+rebuilt from retained SRT without re-extraction. This cache is disposable and may
+be omitted from backups. No generated subtitle is written beside source media.
+
+## Application defaults and comic locations
+
+A library is a configured media root. Give every root a unique stable ID, mount
+its directory, and configure consecutive `Luma__Indexing__Libraries__0`, `__1`,
+`__2`, etc. entries with `Id`, `Name` and container `Path`. See the multiple-root
+example in [README](../README.md#luma-20-file-management-and-multiple-libraries).
+
+Panels' first visit asks for comic locations within those libraries. An empty
+relative path selects a whole root. Saving locations queues a recursive scan for
+supported archives; image folders are included only when explicitly selected.
+Later visits open the saved bookshelf. Use **Comic locations** to change or
+rescan sources. This needs read access to originals and write access to Luma's
+data/cache directory; it does not require a writable media mount or file management to be enabled. Removing a source hides its books while preserving metadata and reading
+progress for re-adding it.
+
+```yaml
+environment:
+  Luma__Ui__FlickEnabled: "true"
+  Luma__Ui__PanelsEnabled: "true"
+  Luma__Ui__Preferences__luma-theme: "forest"
+  Luma__Ui__Preferences__luma-reels-sort: '{"sort":"modified","order":"desc"}'
+  Luma__Ui__Preferences__luma-reels-state: '{"muted":true,"autoScroll":false}'
+  Luma__Ui__Preferences__luma-panels-reader-defaults: '{"mode":"single","fit":"screen","direction":"ltr"}'
+  Luma__Panels__Sources__0__LibraryId: "2"
+  Luma__Panels__Sources__0__RelativePath: "Manga"
+  Luma__Panels__Sources__0__ImageFolders: "false"
+  Luma__Panels__Sources__0__ExcludeFromGallery: "true"
+```
+
+**In-app choices take precedence.** Global Flick/Panels switches are in Settings
+→ General → Applications independently of file management; they are stored in SQLite
+and override environment flags on subsequent boots. Disabling Panels pauses new
+comic jobs. Source environment entries seed a fresh installation only; saved
+Comic locations override them thereafter. Other UI choices are per-browser and
+use the environment value only when no local choice exists. These defaults do
+not overwrite existing users' preferences. Restart after editing environment
+configuration.
+
+Supported `Luma__Ui__Preferences__` keys and values:
+
+| Key                                            | Value                                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `luma-theme`                                   | Theme ID, for example `forest`                                                                               |
+| `luma-appearance-v2`                           | JSON appearance object: `background`, `blur`, `opacity`, `darkness`, `motion`, `splashes`                    |
+| `luma-album-covers`                            | `smart` or `cropped`                                                                                         |
+| `luma-reels-sort`                              | JSON `sort` and `order`                                                                                      |
+| `luma-slideshow-seconds`                       | Slideshow interval in seconds                                                                                |
+| `luma-video-autoplay`                          | `true` or `false`                                                                                            |
+| `luma-viewer-fill`, `luma-reels-fill`          | `true` or `false`                                                                                            |
+| `luma-show-filters`, `luma-reels-show-filters` | `true` or `false`                                                                                            |
+| `luma-reels-state`                             | JSON `muted` and `autoScroll`                                                                                |
+| `luma-panels-reader-defaults`                  | JSON `mode` (`single`/`continuous`), `fit` (`screen`/`width`/`height`/`original`), `direction` (`ltr`/`rtl`) |
+
+Use the JSON shape stored under the matching browser storage key to reproduce
+complex appearance/cover settings. Uploaded background image bytes remain local
+to that browser; environment configuration selects built-in backgrounds. Saved
+per-book reader preferences override reader defaults. Secrets are never exposed
+through UI defaults.
+
+When an HTTPS reverse proxy changes the internal origin, modern browsers send
+`Sec-Fetch-Site: same-origin`, which captions and file operations accept. For
+clients without Fetch Metadata, set `Luma__PublicOrigin` to the exact trusted
+browser-facing origin, for example `https://luma.example.com`. Cross-site
+requests remain rejected.
+
+## Standalone help deployment
+
+Run `npm ci` and `npm run build:help` in `src/Luma.Web`. Upload the generated
+`help-dist/` directory to a static host. It contains the same guide as the app,
+with relative assets, no API connection and no server/data dependencies.
+The **Publish user guide** GitHub Actions workflow builds and deploys it to Pages
+on manual dispatch. After merging, select **GitHub Actions** as the repository's
+Pages source and run that workflow. Rebuild/redeploy whenever the guide changes.
+CI builds the guide on every change so both copies stay buildable.
+
+### Comic visibility and beta.3 rollback
+
+Comic locations always open in a dialog. Each source defaults to **Exclude from
+Gallery**, including sources created before beta.3. Exclusion skips Gallery scans
+and hides existing media and exclusive tags from Gallery results and XMP export.
+It preserves stable media IDs, tags and reading progress; it does not move files.
+Uncheck to include images in Gallery again, then rescan to discover new images.
+Existing manual hidden-folder choices are independent. For overlapping comic
+sources, any containing source with exclusion enabled hides that subtree. Two
+locations in the same library queue separately and use the same comic path IDs.
+Server-configured library roots must remain non-overlapping.
+
+Beta.3 adds migration 33 (comic tags and source visibility). Stop Luma and back up
+SQLite before upgrading. Returning to beta.2 or older requires restoring the
+matching database backup; the migration guard rejects newer schemas. Keep a
+matching original-media backup when rolling back file operations as well.
+
+
+### Schema 34 and replacement upgrades
+
+Beta.10 adds schema 34 for durable replacement dependencies. Stop Luma and back up SQLite together with the matching originals, trash and staging before upgrading. An older binary refuses schema 34; rollback requires restoring its matching pre-upgrade database and media-volume backup.
+
+Upload, Move and Copy present Replace/Skip decisions for real destination conflicts. Replace preserves the previous item in the recycle bin; it does not merge an existing destination folder's contents. A batch choice applies only to that batch. Independent uploads no longer reserve the entire library, while overlapping paths and unresolved operation evidence remain protected.

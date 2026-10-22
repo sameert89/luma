@@ -9,6 +9,7 @@ permissions:
 jobs:
   verify:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -16,17 +17,28 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: src/Luma.Web/package-lock.json
       - run: dotnet restore Luma.slnx --locked-mode
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
         if: runner.os == 'Linux'
-      - run: choco install ffmpeg --no-progress -y
+      - name: Install and verify FFmpeg
         if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            choco install ffmpeg --no-progress -y
+            if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+              ffmpeg -version
+              if ($LASTEXITCODE -eq 0) { exit 0 }
+            }
+            if ($attempt -lt 3) { Start-Sleep -Seconds 5 }
+          }
+          throw "FFmpeg is unavailable after three installation attempts."
       - run: dotnet format Luma.slnx --verify-no-changes --no-restore
       - run: dotnet build Luma.slnx -c Release --no-restore
       - run: dotnet test Luma.slnx -c Release --no-build
@@ -41,6 +53,8 @@ jobs:
         working-directory: src/Luma.Web
       - run: npm run build
         working-directory: src/Luma.Web
+      - run: npm run build:help
+        working-directory: src/Luma.Web
       - run: npm test
         working-directory: src/Luma.Web
       - run: npx playwright install --with-deps chromium
@@ -49,3 +63,9 @@ jobs:
       - run: npm run test:e2e
         if: runner.os == 'Linux'
         working-directory: src/Luma.Web
+      - uses: actions/upload-artifact@v4
+        if: failure() && runner.os == 'Linux'
+        with:
+          name: browser-test-results
+          path: src/Luma.Web/test-results
+          retention-days: 7

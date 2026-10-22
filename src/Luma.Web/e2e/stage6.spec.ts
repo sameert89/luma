@@ -1,6 +1,6 @@
+import { switchExperience, openFixtureDatabase } from './helpers'
 import { test, expect } from '@playwright/test'
 import { viewerAction } from './helpers'
-import { DatabaseSync } from 'node:sqlite'
 import { execFileSync } from 'node:child_process'
 import { copyFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -29,14 +29,7 @@ test.beforeAll(async () => {
   ])
   await writeFile(path.join(fixture, 'media/stage6-broken.mkv'), 'unsupported fixture')
   await copyFile(path.join(fixture, 'cache/palette-1.jpg'), path.join(fixture, 'media/stage6-image.jpg'))
-  const db = new DatabaseSync(path.join(fixture, 'fixture.db'))
-  db.function('luma_key', { deterministic: true }, (value: string) => value.normalize('NFC').toUpperCase())
-  db.function('luma_reverse', { deterministic: true }, (value: string) => [...value].reverse().join(''))
-  db.function(
-    'luma_ticks',
-    { deterministic: true },
-    (value: string) => BigInt(Date.parse(value)) * 10000n + 621355968000000000n,
-  )
+  const db = openFixtureDatabase(path.join(fixture, 'fixture.db'))
   try {
     for (const [id, name, type, mime, extension, date] of [
       [1499, 'stage6-image.jpg', 'image', 'image/jpeg', '.jpg', '03'],
@@ -86,6 +79,7 @@ test('native video plays, seeks, changes speed and offers external access on fai
   await page.goto('/?q=stage6-video')
   await page.getByTestId('media-cell').first().click()
   const video = page.locator('video')
+  const viewerMarker = await page.evaluate(() => history.state?.lumaModal)
   await expect.poll(() => video.evaluate(v => v.readyState)).toBeGreaterThanOrEqual(2)
   // Upright phones leave volume to the hardware keys, so the slider is desktop-only.
   if (test.info().project.name === 'desktop') {
@@ -109,12 +103,20 @@ test('native video plays, seeks, changes speed and offers external access on fai
     v.currentTime = 2
   })
   await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThanOrEqual(2)
-  await page.getByRole('button', { name: 'Playback speed' }).click()
+  if (test.info().project.name === 'mobile') {
+    await (await viewerAction(page, 'View options')).click()
+    await page.getByRole('dialog', { name: 'View options' }).getByLabel('Playback speed').selectOption('1.5')
+    await page.keyboard.press('Escape')
+    await expect.poll(() => page.evaluate(() => history.state?.lumaModal)).toBe(viewerMarker)
+  } else await page.getByRole('button', { name: 'Playback speed' }).click()
   expect(await video.evaluate(v => v.playbackRate)).toBe(1.5)
   await page.getByRole('button', { name: 'Close viewer', exact: true }).click()
   await expect(video).toHaveCount(0)
+  // Modal disposal leaves its history entry asynchronously; settle it before a full navigation.
+  await expect(page).not.toHaveURL(/media=/)
   await page.goto('/?q=stage6-broken')
-  await page.getByTestId('media-cell').first().click()
+  await page.getByRole('button', { name: 'Open stage6-broken.mkv', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'stage6-broken.mkv', exact: true })).toBeVisible()
   await expect(page.getByRole('status')).toContainText('external player')
   await (await viewerAction(page, 'View options')).click()
   await expect(page.getByRole('button', { name: 'Copy stream URL' })).toBeVisible()
@@ -122,21 +124,16 @@ test('native video plays, seeks, changes speed and offers external access on fai
   await expect(page.getByRole('link', { name: 'Open original' })).toHaveCount(0)
 })
 
-test('reels preserve query, bound media, auto-scroll, stop inactive playback and return to gallery', async ({
-  page,
-}) => {
+test('scoped reels bound media, auto-scroll, stop inactive playback and restore Gallery filters', async ({ page }) => {
   await page.goto('/?q=stage6&order=desc')
   await expect(page.getByTestId('media-cell')).toHaveCount(3)
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await page.goto('/flick?q=stage6&order=desc&mediaType=motion')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveCount(1)
   await expect(page).toHaveURL(/mediaType=motion/)
   await expect(page).toHaveURL(/q=stage6/)
-  await expect(reels.getByText('luma')).toBeVisible()
-  await reels.getByRole('button', { name: 'Reels menu' }).click()
+  await expect(page.getByRole('button', { name: 'Switch application, Flick', exact: true })).toBeVisible()
+  await reels.getByRole('button', { name: 'Flick menu' }).click()
   await reels.getByRole('button', { name: 'Auto-scroll' }).click()
   await expect(reels.getByRole('button', { name: 'Auto-scroll' })).toHaveAttribute('aria-pressed', 'true')
   const old = await reels.locator('video').elementHandle()
@@ -154,13 +151,10 @@ test('reels preserve query, bound media, auto-scroll, stop inactive playback and
   expect(await reels.locator('img,video').count()).toBeLessThanOrEqual(1)
   expect(await reels.locator('link[rel=preload]').count()).toBeLessThanOrEqual(1)
   await page.screenshot({ path: `test-results/stage6-reels-${test.info().project.name}.png` })
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Library', exact: true })
-    .click()
-  await expect(page.getByTestId('media-cell')).toHaveCount(2)
+  await switchExperience(page, 'Gallery')
+  await expect(page.getByTestId('media-cell')).toHaveCount(3)
   await expect(page).toHaveURL(/q=stage6/)
-  await expect(page).toHaveURL(/mediaType=motion/)
+  await expect(page).not.toHaveURL(/mediaType=motion/)
 })
 
 test('Back closes nested details then viewer then returns to libraries', async ({ page }) => {
@@ -184,8 +178,17 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await page.getByTestId('media-cell').first().click()
   const viewer = page.getByRole('dialog')
   const bounds = await viewer.getByRole('img').boundingBox()
-  const x = bounds!.x + bounds!.width / 2
-  const y = bounds!.y + bounds!.height / 2
+  let x = bounds!.x + bounds!.width / 2
+  let y = bounds!.y + bounds!.height / 2
+  const viewerMarker = await page.evaluate(() => history.state?.lumaModal)
+  async function closeOptions() {
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog', { name: 'View options' })).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => history.state?.lumaModal)).toBe(viewerMarker)
+    const current = (await viewer.getByRole('img').boundingBox())!
+    x = current.x + current.width / 2
+    y = current.y + current.height / 2
+  }
   const session = await page.context().newCDPSession(page)
   await session.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
@@ -205,8 +208,7 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await (await viewerAction(page, 'View options')).click()
   const options = page.getByRole('dialog', { name: 'View options' })
   await expect(options.getByRole('button', { name: 'Reset zoom' })).not.toHaveText('100%')
-  await page.keyboard.press('Escape')
-  await expect(options).toHaveCount(0)
+  await closeOptions()
   await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 0 }] })
   await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + 40, y: y + 40, id: 0 }] })
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
@@ -215,8 +217,7 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
     .not.toContain('translate(0px, 0px)')
   await (await viewerAction(page, 'View options')).click()
   await options.getByRole('button', { name: 'Reset zoom' }).click()
-  await page.keyboard.press('Escape')
-  await expect(options).toHaveCount(0)
+  await closeOptions()
   await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x + 80, y, id: 0 }] })
   await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - 80, y, id: 0 }] })
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
@@ -227,11 +228,9 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await expect(viewer.locator('video')).toHaveAttribute('src', '/api/media/1490/original')
   await viewer.getByRole('button', { name: 'Close viewer', exact: true }).click()
   await expect(viewer).toBeHidden()
-  await page
-    .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('button', { name: 'Reels', exact: true })
-    .click()
-  const reels = page.getByRole('region', { name: 'Reels', exact: true })
+  await expect(page).not.toHaveURL(/media=/)
+  await page.goto('/flick?q=stage6&mediaType=motion&order=desc')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
   await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1495/original')
   const reelBounds = await reels.locator('video').boundingBox()
   const reelX = reelBounds!.x + reelBounds!.width / 2

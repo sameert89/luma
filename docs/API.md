@@ -184,3 +184,65 @@ Queueing a task also dismisses finished tasks beyond the ten most recent of its 
 (migration 0021), so the queue cannot grow without bound between manual clears. Active
 tasks, completed traversals still preparing previews, and the underlying scan and job rows
 are never touched.
+
+## Opt-in SRT captions (2.0)
+
+`POST /api/media/{id}/captions` discovers same-folder/same-basename `.srt` (or `.SRT`)
+and embedded SubRip tracks only after the viewer turns CC on. It returns
+`CaptionList { sourceKey, tracks: [{ id, label, language, kind }], warning }`.
+This explicit playback request may inspect originals and invoke ffprobe; normal
+browse, detail, indexing and video requests do not discover captions. Cross-origin
+requests are rejected. Caption access follows existing read/playback access and
+works with a read-only media mount; administrator file-management unlock is not needed.
+
+`GET /api/media/{id}/captions/{trackId}?key={sourceKey}` returns plain `text/vtt`
+for a discovered track. It extracts only the selected embedded SRT, or reads the
+matching sidecar, then strips author styling and converts timestamps to WebVTT.
+Unsupported tracks are absent from discovery. The original video is not transcoded.
+The source key binds the selection to indexed revision, source location/size/mtime
+and sidecar size/mtime; changed sources return `409 captions_changed`.
+
+All temporary, extracted SRT and converted VTT files live below the configured
+`Luma:Indexing:CachePath/captions` directory. A separate 128 MiB/512-entry LRU bounds
+caption assets and manifests; raw cached SRT can regenerate an evicted/missing VTT
+without re-extraction. Cache loss triggers on-demand recovery. Source media directories
+are never modified. Limits: 16 listed tracks, 4 MiB SRT input, 8 MiB VTT output,
+one caption preparation at a time, shared processing slots, a 30-second deadline
+and a two-second admission wait. FFmpeg output/logs and allocation sizes are bounded.
+Errors leave video playback independent (`422 invalid_srt`/`captions_unavailable`,
+`503 captions_busy`/`captions_unavailable`, `504 captions_timeout`). No styled
+ASS/SSA, image subtitles, OCR, auto-translation or speech recognition is supported.
+UTF-8 and BOM-marked UTF-16 SRT are accepted.
+
+### Media write availability
+
+`POST /api/files/storage-check` (administrator access) updates the in-memory
+write availability of each library. `GET /api/files/capabilities` reports
+`writable: false` for configured read-only libraries and libraries whose last
+check failed, without probing source storage. Until the first check, configured
+writability is reported for API compatibility; the web unlock flow runs the check.
+A failed check rejects new file operations, upload writes and recovery mutations
+with `media_not_writable` (409). A successful recheck restores availability.
+The last check resets on server restart. Existing operation recovery and journals
+are retained; a mount changing after a successful check can still fail an active
+operation through the existing recovery flow.
+
+## File selection and queued mutations (beta.6)
+
+`POST /api/files/clipboard` accepts `{mediaIds: number[], folderIds: number[]}` with 1–500 total IDs and returns indexed `{libraryId, relativePath, mediaId, folderId}` entries. Selecting a folder subsumes selected descendants. Library roots are not clipboard entries. This endpoint requires file management to be enabled and applies the existing same-origin checks; it reads SQLite only.
+
+`POST /api/files/operations` additionally accepts kind `copy`, with the same source/destination rules as `move`. Both return 202 once the intent is journaled; clients must not wait for completion before sending independent work. Queue capacity is 500 active intents per library. Conflicting source/destination subtrees return `path_busy`; active discovery or unresolved evidence return `library_busy`; uploads reserve only overlapping source/destination paths. Copy/move defaults to refusing physical or retained indexed destinations. Explicit `replaceExisting: true` journals a dependent recycle operation for the old destination, preserves its metadata and identity under a reserved key, and publishes the incoming item only after that step completes. File/folder type mismatches and overlapping source/destination trees are rejected. `mkdir`, recycle, delete, restore and purge retain their existing contracts. Follow `/api/tasks` or the operation-status endpoint for completion, cancellation or recovery evidence.
+
+Copy publishes only after a flushed private payload becomes complete staging. Partial-copy recovery rebuilds private payload from a verified source. New media receive new IDs and copied database tags; source IDs and bytes are retained. Copy/upload indexing touches only the published path. Moves, recycling and deletion reconcile existing IDs without rescanning sibling files.
+
+
+`GET /api/media/{id}/neighbors` adds nullable `pageCursor`: a signed forward cursor immediately before the requested item, using the same normalized filters, ordering, grouping and shuffle seed. Passing it to `GET /api/media` starts a bounded page at that item; null means the start of the results. Gallery return restoration can also request that page's previous cursor to retain earlier context. This path uses SQLite/cache only and does not walk intervening pages or original directories.
+
+
+### Upload and replacement reservations (schema 34)
+
+Distinct upload destinations and file operations can be admitted and finalized concurrently; the mutation worker remains serialized. Overlapping paths return `path_busy`, queue saturation returns `queue_full`, and upload admission limits return `upload_capacity`. Clients can wait and retry these responses with cancellation. They are not destination-existence decisions.
+
+`UploadRequest` accepts optional `replaceExisting: true` after user confirmation. `POST /api/files/uploads/{id}/finalize?replaceExisting=true` explicitly authorizes replacement at publication. By default, existing physical or indexed destinations return a conflict. A skipped session that already has uploaded bytes must be cancelled to release staging and reservations.
+
+`FileOperation.ReplacementId` is the persisted dependent operation for replacement. A replacement's recycle step cannot be claimed independently or cancelled separately; cancelling an unstarted parent also cancels its queued dependent step. Older databases gain this field through migration 34. Recycled identities remain distinct from the incoming file and can be restored to an unused alternative path. Missing media IDs do not serve original content from a reused path.

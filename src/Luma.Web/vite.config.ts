@@ -39,14 +39,17 @@ function themeManifests(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === 'help' ? './' : '/',
+  build: mode === 'help' ? { outDir: 'help-dist', rollupOptions: { input: 'help.html' } } : {},
   plugins: [react(), tailwindcss(), themeManifests()],
-  server: { proxy: { '/api': apiTarget } },
-  preview: { proxy: { '/api': apiTarget } },
+  // Preserve the browser-facing host for the API's same-origin checks.
+  server: { proxy: { '/api': { target: apiTarget, changeOrigin: false } } },
+  preview: { proxy: { '/api': { target: apiTarget, changeOrigin: false } } },
   test: {
     include: ['src/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     clearMocks: true,
   },
-})
+}))

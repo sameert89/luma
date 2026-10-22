@@ -12,8 +12,8 @@ function resetStorage() {
   localStorage.clear()
   localStorage.setItem('luma-version-seen', packageJson.version)
 }
-function renderApp() {
-  window.history.replaceState(null, '', '/')
+function renderApp(url = '/') {
+  window.history.replaceState(null, '', url)
   resetStorage()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   return render(
@@ -31,7 +31,7 @@ function emptyApi() {
         Promise.resolve(
           new Response(
             JSON.stringify(
-              url === '/api/tasks' || url.startsWith('/api/libraries')
+              url === '/api/tasks' || url.includes('/suggestions') || url.startsWith('/api/libraries')
                 ? []
                 : { items: [], nextCursor: null, previousCursor: null },
             ),
@@ -55,12 +55,25 @@ function browsingApi() {
               ? { libraries: [] }
               : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
     }),
   )
+}
+
+async function switchApp(name: 'Gallery' | 'Flick' | 'Panels') {
+  await userEvent.click(await screen.findByRole('button', { name: /^Switch application,/ }))
+  await userEvent.click(await screen.findByRole('button', { name }))
+}
+async function visitGallery() {
+  if (
+    screen.queryByRole('button', { name: 'Switch application, Flick' }) ||
+    screen.queryByRole('button', { name: 'Switch application, Panels' })
+  )
+    await switchApp('Gallery')
+  await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
 }
 
 describe('browsing shell', () => {
@@ -76,35 +89,33 @@ describe('browsing shell', () => {
       )
 
     mount()
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await switchApp('Flick')
     await waitFor(() => expect(window.location.search).toContain('view=reels'))
-    expect(window.location.search).toContain('preference=liked')
+    expect(window.location.search).not.toContain('preference=liked')
     cleanup()
 
     // Android commonly relaunches an installed PWA at `/`, without the closed tab's URL/history.
     window.history.replaceState(null, '', '/')
     mount()
 
-    await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Reels' })[0]).toHaveAttribute('aria-current', 'page'),
-    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Switch application, Flick' })).toBeVisible())
     await waitFor(() => expect(window.location.search).toContain('view=reels'))
-    expect(window.location.search).toContain('libraryId=1')
-    expect(window.location.search).toContain('folderId=2')
-    expect(window.location.search).toContain('preference=liked')
+    expect(window.location.search).not.toContain('libraryId=1')
+    expect(window.location.search).not.toContain('folderId=2')
+    expect(window.location.search).not.toContain('preference=liked')
   })
 
   it('selects shuffle and reshuffles without randomUUID on HTTP hosts', async () => {
     vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
     browsingApi()
     renderApp()
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'shuffle')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     const firstSeed = new URLSearchParams(window.location.search).get('seed')
     expect(firstSeed).toMatch(/^[0-9a-f]{32}$/)
     expect(screen.getByTestId('gallery-scroll')).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.click(screen.getByRole('button', { name: 'Reshuffle' }))
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(new URLSearchParams(window.location.search).get('seed')).not.toBe(firstSeed)
@@ -140,7 +151,7 @@ describe('browsing shell', () => {
     expect(screen.getByRole('button', { name: 'Done selecting' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Select all' })).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Done selecting' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     expect(screen.queryByRole('textbox', { name: 'Keyword' })).not.toBeInTheDocument()
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'name')
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort direction' }), 'asc')
@@ -159,9 +170,7 @@ describe('browsing shell', () => {
     )
     expect(window.location.search).toContain('folderId=2')
     expect(screen.getAllByRole('button', { name: 'Library' })[0]).toHaveAttribute('aria-current', 'page')
-    expect(
-      screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search')),
-    ).not.toHaveAttribute('aria-current', 'page')
+    expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1)
     await userEvent.click(screen.getByRole('button', { name: 'Folder actions for Trips' }))
     await userEvent.click(screen.getByRole('button', { name: 'Folder information' }))
     expect(screen.getByRole('dialog', { name: 'Folder information' })).toHaveTextContent('Trips')
@@ -174,7 +183,7 @@ describe('browsing shell', () => {
     await userEvent.click(
       screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))!,
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'name')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(screen.queryByRole('heading', { name: 'Search your media' })).not.toBeInTheDocument()
@@ -190,7 +199,7 @@ describe('browsing shell', () => {
       ).toBe(true),
     )
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Beach{Enter}')
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
     expect(window.location.search).toBe('?view=search')
     expect(screen.getByRole('combobox', { name: 'Search media' })).toHaveValue('')
@@ -220,7 +229,7 @@ describe('browsing shell', () => {
                     ? { libraries: [] }
                     : { items: [] }
         return Promise.resolve(
-          new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+          new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
             headers: { 'Content-Type': 'application/json' },
           }),
         )
@@ -258,11 +267,9 @@ describe('browsing shell', () => {
     await waitFor(() => expect(window.location.search).toContain('preference=liked'))
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Search media"]')!
     expect(input).not.toHaveFocus()
-    expect(input.closest('form')).toHaveAttribute('inert')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
-    await userEvent.click(
-      screen.getAllByRole('button', { name: 'Search' }).find(button => button.textContent?.includes('Search'))!,
-    )
+    expect(input.closest('form')).not.toHaveAttribute('inert')
+    await visitGallery()
+    await userEvent.click(screen.getByRole('button', { name: 'Open search' }))
     await waitFor(() => expect(input).toHaveFocus())
   })
 
@@ -278,9 +285,10 @@ describe('browsing shell', () => {
     const input = screen.getByRole('combobox', { name: 'Search media' })
     await userEvent.type(input, 'Beach{Enter}')
     expect(window.location.search).toContain('q=Beach')
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
+    await visitGallery()
     expect(window.location.search).toContain('q=Beach')
-    await userEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    await userEvent.clear(screen.getByRole('combobox', { name: 'Search media' }))
+    await userEvent.keyboard('{Enter}')
     expect(input).toHaveValue('')
     expect(window.location.search).toBe('?libraryId=1&folderId=2&order=asc')
     expect(await screen.findByRole('heading', { name: 'Trips' })).toBeVisible()
@@ -352,15 +360,12 @@ describe('browsing shell', () => {
 
   it('clears a search started from Search back to its default page', async () => {
     browsingApi()
-    renderApp()
-    await userEvent.click(
-      (await screen.findAllByRole('button', { name: 'Search' })).find(button =>
-        button.textContent?.includes('Search'),
-      )!,
-    )
+    renderApp('/gallery/search?view=search')
+
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Beach{Enter}')
     expect(window.location.search).toContain('q=Beach')
-    await userEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    await userEvent.clear(screen.getByRole('combobox', { name: 'Search media' }))
+    await userEvent.keyboard('{Enter}')
     expect(window.location.search).toBe('?view=search')
     expect(screen.getByRole('combobox', { name: 'Search media' })).toHaveValue('')
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
@@ -385,7 +390,7 @@ describe('browsing shell', () => {
                   ? { libraries: [] }
                   : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -579,7 +584,7 @@ describe('browsing shell', () => {
   it('opens filters from the keyboard and restores focus after Escape', async () => {
     emptyApi()
     renderApp()
-    const trigger = screen.getByRole('button', { name: 'Filters' })
+    const trigger = screen.getAllByRole('button', { name: 'Filters' })[0]
     trigger.focus()
     await userEvent.keyboard('{Enter}')
     expect(screen.getByRole('dialog', { name: 'Filters and sorting' })).toBeVisible()
@@ -591,13 +596,13 @@ describe('browsing shell', () => {
     emptyApi()
     renderApp()
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'Summer{Enter}')
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Filters' })[0])
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Favourite state' }), 'liked')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(window.location.search).toContain('q=Summer')
     expect(window.location.search).toContain('preference=liked')
   })
-  it('opens reels with the current folder represented by visible filters', async () => {
+  it('opens Flick with independent default filters', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
     const clip = {
       id: 10,
@@ -626,7 +631,7 @@ describe('browsing shell', () => {
                 ? clip
                 : { items: [clip], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -642,21 +647,17 @@ describe('browsing shell', () => {
         <App />
       </QueryClientProvider>,
     )
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await switchApp('Flick')
 
     await waitFor(() =>
       expect(
         fetch.mock.calls.some(
-          ([url]) =>
-            String(url).startsWith('/api/media?') &&
-            String(url).includes('mediaType=motion') &&
-            String(url).includes('folderId=2') &&
-            String(url).includes('libraryId=1'),
+          ([url]) => String(url).startsWith('/api/media?') && String(url).includes('mediaType=motion'),
         ),
       ).toBe(true),
     )
     expect(window.location.search).toContain('mediaType=motion')
-    expect(window.location.search).toContain('folderId=2')
+    expect(window.location.search).not.toContain('folderId=2')
   })
   it('restores each folder scroll position when revisiting it', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
@@ -733,7 +734,7 @@ describe('browsing shell', () => {
       rect.mockRestore()
     }
   })
-  it('returns from Watch on Reels to the same viewer and gallery position', async () => {
+  it('returns from Watch on Flick to the same viewer and gallery position', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
     const clip = {
       id: 10,
@@ -801,47 +802,30 @@ describe('browsing shell', () => {
       fireEvent.scroll(gallery)
       await userEvent.click(folderActions)
       await userEvent.click(screen.getByRole('button', { name: 'Start slideshow' }))
-      await userEvent.click(await screen.findByRole('button', { name: 'Watch on Reels' }))
-      expect(await screen.findByRole('region', { name: 'Reels' })).toBeVisible()
+      await userEvent.click(await screen.findByRole('button', { name: 'Watch on Flick' }))
+      expect(await screen.findByRole('region', { name: 'Flick' })).toBeVisible()
       act(() => window.history.back())
       expect(await screen.findByRole('dialog', { name: 'clip.mp4' })).toBeVisible()
-      expect(screen.getByTestId('gallery-scroll').scrollTop).toBe(360)
+      await waitFor(() => expect(screen.getByTestId('gallery-scroll').scrollTop).toBe(360))
     } finally {
       rect.mockRestore()
       vi.restoreAllMocks()
     }
   })
-  it('keeps the visible reels media filter when opening search, until explicitly cleared', async () => {
-    const fetch = vi.fn().mockImplementation((url: string) => {
-      const text = String(url)
-      const data = text.startsWith('/api/libraries')
-        ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
-        : text.startsWith('/api/indexing')
-          ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
-          : text.includes('/neighbors?')
-            ? { previous: null, next: null }
-            : { items: [], nextCursor: null, previousCursor: null }
-      return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    })
-    vi.stubGlobal('fetch', fetch)
+  it('keeps Flick filters independent when opening Gallery search', async () => {
+    browsingApi()
     renderApp()
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await switchApp('Flick')
     expect(window.location.search).toContain('mediaType=motion')
-    await userEvent.click(
-      (await screen.findAllByRole('button', { name: 'Search' })).find(button =>
-        button.textContent?.includes('Search'),
-      )!,
-    )
-    expect(window.location.search).toContain('mediaType=motion')
-    await userEvent.click(screen.getByRole('button', { name: 'Clear all filters' }))
-    expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
+    expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
+    await visitGallery()
+    await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'photo{Enter}')
     expect(window.location.search).not.toContain('mediaType=motion')
+    expect(new URLSearchParams(location.search).get('q')).toBe('photo')
+    await switchApp('Flick')
+    expect(window.location.search).toContain('mediaType=motion')
   })
-  it('carries visible folder and media filters across gallery and reels', async () => {
+  it('restores Gallery folder without inheriting Flick filters', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
     const clip = {
       id: 10,
@@ -870,7 +854,7 @@ describe('browsing shell', () => {
                 ? clip
                 : { items: [clip], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -886,15 +870,58 @@ describe('browsing shell', () => {
       </QueryClientProvider>,
     )
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await switchApp('Flick')
     await waitFor(() => expect(window.location.search).toContain('mediaType=motion'))
     // Switching presentation preserves the visible query scope.
-    expect(window.location.search).toContain('folderId=2')
+    expect(window.location.search).not.toContain('folderId=2')
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
+    await visitGallery()
     expect(window.location.search).toContain('libraryId=1')
     expect(window.location.search).toContain('folderId=2')
-    expect(window.location.search).toContain('mediaType=motion')
+    expect(window.location.search).not.toContain('mediaType=motion')
+  })
+  it('keeps a newly selected viewer when a menu Back event lands before React renders', async () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(1000)
+    const photo = {
+      id: 7,
+      libraryId: 1,
+      folderId: 1,
+      fileName: 'race.jpg',
+      mediaType: 'image',
+      extension: '.jpg',
+      sizeBytes: 10,
+      modifiedAt: '2026-01-01T00:00:00Z',
+      preference: 'neutral',
+      tags: [],
+      thumbnail: { status: 'ready', url: '/thumb.jpg' },
+      preview: { status: 'ready', url: '/preview.jpg' },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        const data =
+          url === '/api/tasks' || url.includes('/suggestions')
+            ? []
+            : url === '/api/libraries'
+              ? [{ id: 1, name: 'Photos', availability: 'available', rootFolderId: 1 }]
+              : url.startsWith('/api/indexing')
+                ? { libraries: [{ id: 1, availability: 'available' }] }
+                : url.includes('/neighbors?')
+                  ? { previous: null, next: null }
+                  : /\/api\/media\/\d+$/.test(url)
+                    ? photo
+                    : { items: [photo], nextCursor: null, previousCursor: null }
+        return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+      }),
+    )
+    renderApp('/?q=race')
+    const tile = await screen.findByRole('button', { name: 'Open race.jpg' })
+    act(() => {
+      tile.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { section: 'gallery', filters: {} } }))
+    })
+    expect(await screen.findByRole('dialog', { name: 'race.jpg' })).toBeVisible()
   })
   it('starts a slideshow from the gallery and hands a video over to reels in the same folder', async () => {
     window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
@@ -926,7 +953,7 @@ describe('browsing shell', () => {
                 ? clip
                 : { items: [clip], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -948,11 +975,11 @@ describe('browsing shell', () => {
       // A slideshow plays videos through rather than waiting for a Play press.
       await waitFor(() => expect(play).toHaveBeenCalled())
 
-      await userEvent.click(screen.getByRole('button', { name: 'Watch on Reels' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Watch on Flick' }))
       await waitFor(() => expect(window.location.search).toContain('view=reels'))
       expect(window.location.search).not.toContain('mediaType=')
       expect(window.location.search).toContain('folderId=2')
-      expect(await screen.findByRole('region', { name: 'Reels' })).toBeVisible()
+      expect(await screen.findByRole('region', { name: 'Flick' })).toBeVisible()
       expect(await screen.findByLabelText('clip.mp4')).toBeInTheDocument()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     } finally {
@@ -988,29 +1015,29 @@ describe('browsing shell', () => {
                 ? photo
                 : { items: [photo], nextCursor: null, previousCursor: null }
         return Promise.resolve(
-          new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+          new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
             headers: { 'Content-Type': 'application/json' },
           }),
         )
       }),
     )
     renderApp()
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
-    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Filters' }))
+    await switchApp('Flick')
+    await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Filters' }))[0])
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Media type' }), 'image')
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Favourite state' }), 'liked')
     await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(window.location.search).toContain('mediaType=image')
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Library' }))[0])
+    await visitGallery()
     await userEvent.type(screen.getByRole('combobox', { name: 'Search media' }), 'beach{Enter}')
     expect(window.location.search).toContain('q=beach')
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await switchApp('Flick')
     expect(window.location.search).toContain('mediaType=image')
     expect(window.location.search).toContain('preference=liked')
-    expect(window.location.search).toContain('q=beach')
+    expect(window.location.search).not.toContain('q=beach')
   })
   it('does not show a random feed on the empty search destination', async () => {
     const fetch = vi.fn().mockImplementation((url: string) => {
@@ -1021,19 +1048,13 @@ describe('browsing shell', () => {
           ? { libraries: [{ id: 1, name: 'Photos', availability: 'available', latestScanId: null }] }
           : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
     })
     vi.stubGlobal('fetch', fetch)
-    renderApp()
-    await screen.findByRole('button', { name: 'Open Photos' })
-    await userEvent.click(
-      (await screen.findAllByRole('button', { name: 'Search' })).find(button =>
-        button.textContent?.includes('Search'),
-      )!,
-    )
+    renderApp('/gallery/search?view=search')
     expect(await screen.findByRole('heading', { name: 'Search your media' })).toBeVisible()
     expect(screen.queryByTestId('gallery-scroll')).not.toBeInTheDocument()
   })
@@ -1101,7 +1122,6 @@ it('organizes settings under consistent headings without an installation panel',
     'Metadata exchange',
     'Libraries',
     'Hidden folders',
-    'Help',
     'About',
   ]) {
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
@@ -1114,6 +1134,8 @@ it('organizes settings under consistent headings without an installation panel',
   expect(screen.getByTestId('desktop-version').closest('aside')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/sameert89/luma')
   expect(screen.queryByText('Install Luma')).not.toBeInTheDocument()
+  expect(screen.getAllByRole('heading').at(-1)).toHaveTextContent('About')
+  expect(screen.getByRole('button', { name: 'Recycle bin' })).toBeInTheDocument()
 })
 
 describe('help', () => {
@@ -1142,23 +1164,20 @@ describe('help', () => {
       .map(nav => nav.querySelectorAll('button').length)
   }
 
-  it('opens from a labeled button beside Your libraries and returns home', async () => {
+  it('opens Help from the top of Settings and returns to Settings', async () => {
     libraryApi()
     renderApp()
     await screen.findByRole('button', { name: 'Open Photos' })
     const navigation = navigationSize()
-    const entry = screen.getByRole('button', { name: 'Help' })
-    expect(entry).toHaveTextContent('Help')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
+    const entry = screen.getByRole('link', { name: 'Open the Help guide' })
     await userEvent.click(entry)
     expect(screen.getByRole('heading', { name: 'Help', level: 1 })).toBeVisible()
-    expect(new URLSearchParams(window.location.search).get('view')).toBe('help')
-    expect(new URLSearchParams(window.location.search).get('from')).toBe('library')
-    // Help is not another bottom-bar destination.
+    expect(new URLSearchParams(window.location.search).get('from')).toBe('settings')
     expect(navigationSize()).toEqual(navigation)
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
-    expect(await screen.findByRole('heading', { name: 'Your libraries' })).toBeVisible()
-    expect(window.location.search).toBe('')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Help' })).toHaveFocus())
+    expect(await screen.findByRole('heading', { name: 'General' })).toBeVisible()
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Open the Help guide' })).toHaveFocus())
   })
 
   it('opens from Settings without losing folder scope or filters, and Back returns to Settings', async () => {
@@ -1188,7 +1207,7 @@ describe('help', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('heading', { name: 'Theme & appearance' })).toBeVisible()
     expect(window.location.search).toBe('?libraryId=1&folderId=2&mediaType=video&view=settings')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
+    await visitGallery()
     expect(await screen.findByRole('heading', { name: 'Trips' })).toBeVisible()
   })
 
@@ -1286,25 +1305,20 @@ describe('folder actions', () => {
     )
   })
 
-  it('includes media in subfolders when switching from a folder to Reels', async () => {
+  it('opens Flick independently when switching from a Gallery folder', async () => {
     const fetch = folderApi()
     renderFolder()
     await screen.findByRole('heading', { name: 'Trips' })
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reels' })[0])
+    await switchApp('Flick')
     await waitFor(() =>
       expect(
         fetch.mock.calls.some(([url]) => {
           const value = String(url)
-          return (
-            value.startsWith('/api/media?') &&
-            value.includes('folderId=2') &&
-            value.includes('recursive=true') &&
-            value.includes('mediaType=motion')
-          )
+          return value.startsWith('/api/media?') && value.includes('mediaType=motion')
         }),
       ).toBe(true),
     )
-    expect(new URLSearchParams(window.location.search).get('recursive')).toBe('true')
+    expect(new URLSearchParams(window.location.search).get('folderId')).toBeNull()
   })
 
   it('rescans a folder and everything inside it from its menu, only after confirmation', async () => {
@@ -1420,14 +1434,14 @@ it('remembers filter-row visibility separately for Reels', async () => {
       </QueryClientProvider>,
     )
     expect(await screen.findByRole('navigation', { name: 'Active filters' })).toBeVisible()
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await switchApp('Flick')
     expect(screen.getByRole('navigation', { name: 'Active filters' })).toBeVisible()
-    await userEvent.click(await screen.findByRole('button', { name: 'Reels menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Flick menu' }))
     await userEvent.click(screen.getByRole('button', { name: 'Hide filters' }))
     expect(screen.queryByRole('navigation', { name: 'Active filters' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
+    await visitGallery()
     expect(await screen.findByRole('navigation', { name: 'Active filters' })).toBeVisible()
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Reels' }))[0])
+    await switchApp('Flick')
     expect(screen.queryByRole('navigation', { name: 'Active filters' })).not.toBeInTheDocument()
   } finally {
     vi.restoreAllMocks()
@@ -1453,7 +1467,7 @@ it('pulls to refresh the listing without asking the server to scan anything', as
               ? { libraries: [] }
               : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -1502,7 +1516,7 @@ it('opens Reels in the order chosen in Settings, and gives the library its own o
               ? { libraries: [] }
               : { items: [], nextCursor: null, previousCursor: null }
       return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' ? [] : data), {
+        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
@@ -1521,14 +1535,14 @@ it('opens Reels in the order chosen in Settings, and gives the library its own o
     // Direction means nothing for a shuffle.
     expect(screen.getByRole('combobox', { name: 'Default direction' })).toBeDisabled()
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reels' })[0])
+    await switchApp('Flick')
     const reels = new URLSearchParams(window.location.search)
     expect(reels.get('sort')).toBe('shuffle')
     expect(reels.get('seed')).toMatch(/^[0-9a-f]{32}$/)
     expect(reels.get('mediaType')).toBe('motion')
 
     // Back to the library, which was sorted by name before Reels was opened.
-    await userEvent.click(screen.getAllByRole('button', { name: 'Library' })[0])
+    await visitGallery()
     const library = new URLSearchParams(window.location.search)
     expect(library.get('sort')).toBe('name')
     expect(library.get('order')).toBe('asc')
@@ -1537,8 +1551,8 @@ it('opens Reels in the order chosen in Settings, and gives the library its own o
     // Keeping the library's order leaves Reels in it, as before the setting existed.
     await userEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0])
     await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Default order' }), 'library')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Reels' })[0])
-    expect(new URLSearchParams(window.location.search).get('sort')).toBe('name')
+    await switchApp('Flick')
+    expect(new URLSearchParams(window.location.search).get('sort')).toBe('shuffle')
   } finally {
     // The choice is held for the session, so put it back for the tests after this one.
     setReelsSort({ sort: 'library', order: 'desc' })
@@ -1557,4 +1571,140 @@ it('points the page at the manifest built for the chosen theme, and tints browse
   expect(document.querySelector('link[rel="manifest"]')).toHaveAttribute('href', '/manifest-nord.webmanifest')
   expect(document.querySelector('meta[name="theme-color"]')).toHaveAttribute('content', '#2e3440')
   expect(localStorage.getItem('luma-theme')).toBe('nord')
+})
+
+it('keeps Panels queries and deep links separate from Gallery', async () => {
+  emptyApi()
+  renderApp()
+  await switchApp('Panels')
+  await userEvent.type(await screen.findByRole('combobox', { name: 'Search comics' }), 'moon{Enter}')
+  await waitFor(() => expect(window.location.pathname).toBe('/panels'))
+  expect(new URLSearchParams(window.location.search).get('q')).toBe('moon')
+  await switchApp('Gallery')
+  expect(new URLSearchParams(window.location.search).get('q')).toBeNull()
+  await switchApp('Panels')
+  expect(await screen.findByRole('combobox', { name: 'Search comics' })).toHaveValue('moon')
+  cleanup()
+  window.history.replaceState(null, '', '/panels?q=direct&comic=42')
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  render(
+    <QueryClientProvider client={client}>
+      <App />
+    </QueryClientProvider>,
+  )
+  await screen.findByRole('button', { name: 'Switch application, Panels' })
+  expect(window.location.pathname).toBe('/panels')
+  expect(new URLSearchParams(window.location.search).get('comic')).toBe('42')
+  expect(new URLSearchParams(window.location.search).get('q')).toBe('direct')
+})
+
+it('returns to Flick and its query after opening its Settings section', async () => {
+  emptyApi()
+  renderApp('/flick?q=clips')
+  await userEvent.click((await screen.findAllByRole('button', { name: 'Settings' }))[0])
+  expect(await screen.findByRole('heading', { name: 'Flick', level: 2 })).toBeVisible()
+  expect(new URLSearchParams(location.search).get('from')).toBe('flick')
+  await userEvent.click(screen.getByRole('button', { name: 'Back to Flick' }))
+  expect(await screen.findByRole('button', { name: 'Switch application, Flick' })).toBeVisible()
+  expect(location.pathname).toBe('/flick')
+  expect(new URLSearchParams(location.search).get('q')).toBe('clips')
+})
+
+it('places Gallery background jobs in the header action group', async () => {
+  emptyApi()
+  renderApp('/')
+  const jobs = (await screen.findAllByRole('button', { name: /^Background jobs/ }))[0]
+  expect(jobs.closest('header')).not.toBeNull()
+  expect(jobs.parentElement).toBe(screen.getByRole('button', { name: 'Settings' }).parentElement)
+})
+
+it('closing after viewer navigation reveals the current item instead of restoring the opening position', async () => {
+  const items = Array.from({ length: 60 }, (_, index) => ({
+    id: index + 1,
+    libraryId: 1,
+    folderId: 1,
+    fileName: `photo-${index + 1}.jpg`,
+    mediaType: 'image',
+    extension: '.jpg',
+    availability: 'present',
+    preference: 'neutral',
+    sizeBytes: 1,
+    modifiedAt: '2026-01-01',
+    effectiveDate: '2026-01-01',
+    thumbnail: { status: 'ready', url: `/thumb/${index + 1}` },
+    preview: { status: 'ready', url: `/preview/${index + 1}` },
+    tags: [],
+  }))
+  const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+    width: 800,
+    height: 600,
+    top: 0,
+    left: 0,
+    right: 800,
+    bottom: 600,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect)
+  const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.dataset.testid === 'gallery-scroll' ? 600 : 0
+    },
+  })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Response(null, { status: 204 })
+      const match = url.match(/\/api\/media\/(\d+)/)
+      const id = match ? Number(match[1]) : null
+      const data = url.includes('/neighbors?')
+        ? { previous: id === 1 ? null : items[0], next: id === 1 ? items[44] : null }
+        : id
+          ? items[id - 1]
+          : url === '/api/files/capabilities'
+            ? { accessConfigured: false, libraries: [] }
+            : url.startsWith('/api/media?')
+              ? { items, nextCursor: null, previousCursor: null }
+              : url === '/api/libraries'
+                ? [{ id: 1, name: 'Photos', rootFolderId: 1 }]
+                : url === '/api/tasks' || url.includes('/suggestions')
+                  ? []
+                  : { libraries: [] }
+      return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } })
+    }),
+  )
+  try {
+    renderApp('/?q=photo')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open photo-1.jpg' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Viewer menu' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next item' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Next item' }))
+    await screen.findByRole('dialog', { name: 'photo-45.jpg' })
+    await userEvent.click(screen.getByRole('button', { name: 'Close viewer' }))
+    await waitFor(() => expect(screen.getByTestId('gallery-scroll').scrollTop).toBeGreaterThan(0))
+    await waitFor(() => expect(window.history.state?.lumaModal).toBeFalsy())
+  } finally {
+    rect.mockRestore()
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height)
+  }
+})
+
+it.each(['/?q=photo', '/?tag=Vacation'])('keeps file management available in filtered results at %s', async url => {
+  browsingApi()
+  const previous = globalThis.fetch
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((path: string, init?: RequestInit) =>
+      path.includes('/files/capabilities')
+        ? Promise.resolve(
+            new Response(JSON.stringify({ accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] })),
+          )
+        : previous(path, init),
+    ),
+  )
+  renderApp(url)
+  await userEvent.click(await screen.findByRole('button', { name: 'File management' }))
+  expect(await screen.findByRole('group', { name: 'File actions' })).toBeVisible()
 })

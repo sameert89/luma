@@ -170,6 +170,35 @@ public sealed class BrowsingTests
         Assert.Equal("invalid_cursor", (await Assert.ThrowsAsync<ApiRequestException>(() => browser.ListAsync(query with { Cursor = tampered }, default))).Code);
     }
 
+    [Theory]
+    [InlineData("modified", "none", "desc")]
+    [InlineData("name", "none", "asc")]
+    [InlineData("type", "none", "desc")]
+    [InlineData("size", "folder", "asc")]
+    [InlineData("modified", "date", "desc")]
+    [InlineData("name", "type", "asc")]
+    [InlineData("shuffle", "none", "desc")]
+    [InlineData("name", "tag", "desc")]
+    public async Task Neighbor_page_cursor_seeks_to_the_viewed_item_without_reading_sources(string sort, string grouping, string order)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await SeedAsync(f, 1001);
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("INSERT INTO Tags(Id,Name,NormalizedKey) VALUES(1,'test','TEST'); INSERT INTO MediaTags SELECT Id,1 FROM Media;");
+        Directory.Move(f.Root.Path, f.Root.Path + "-offline");
+        var browser = await BrowserAsync(f);
+        var query = new MediaQuery { Sort = sort, Order = order, GroupBy = grouping, Limit = 60, Seed = sort == "shuffle" ? "saved-viewer-order" : null }.Normalize();
+        var neighbors = await browser.NeighborsAsync(777, query, default);
+        var page = await browser.ListAsync(query with { Cursor = neighbors.PageCursor }, default);
+        Assert.Equal(777, page.Items[0].Id);
+        Assert.InRange(page.Items.Count, 1, 60);
+        if (neighbors.Previous is not null)
+        {
+            var before = await browser.ListAsync(query with { Cursor = page.PreviousCursor }, default);
+            Assert.Equal(neighbors.Previous.Id, before.Items[^1].Id);
+        }
+    }
+
     [Fact]
     public async Task Filters_combine_literal_unicode_text_dimensions_dates_preferences_and_tags()
     {

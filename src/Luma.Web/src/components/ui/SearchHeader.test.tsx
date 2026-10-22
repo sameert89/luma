@@ -19,7 +19,6 @@ function Harness({ onSearch, onSuggestion }: { onSearch: () => void; onSuggestio
       onChange={setValue}
       onSearch={onSearch}
       onSuggestion={onSuggestion}
-      onClear={() => setValue('')}
       onHome={vi.fn()}
       onFilters={vi.fn()}
       searchRequested={false}
@@ -77,47 +76,6 @@ it('chooses a suggestion by tapping it', async () => {
   expect(onSuggestion).toHaveBeenCalledWith(suggestions[0])
 })
 
-it('closes an expanded phone search field when nothing was searched and the view changes', async () => {
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn().mockImplementation(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
-  )
-  function Harness({ scope }: { scope: string }) {
-    const [value, setValue] = useState('')
-    return (
-      <SearchHeader
-        value={value}
-        onChange={setValue}
-        onSearch={vi.fn()}
-        onClear={() => setValue('')}
-        onHome={vi.fn()}
-        onFilters={vi.fn()}
-        searchRequested={false}
-        scope={scope}
-      />
-    )
-  }
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
-  const shell = (scope: string) => (
-    <QueryClientProvider client={client}>
-      <Harness scope={scope} />
-    </QueryClientProvider>
-  )
-  const { rerender } = render(shell('library:'))
-  await userEvent.click(screen.getByRole('button', { name: 'Open search' }))
-  const field = screen.getByRole('search')
-  expect(field).toHaveAttribute('data-open', 'true')
-
-  // Still open while the caret is in it: clearing a query leaves the field ready for the next one.
-  await userEvent.click(screen.getByRole('textbox', { name: 'Search media' }))
-  rerender(shell('library:folderId=2'))
-  expect(field).toHaveAttribute('data-open', 'true')
-
-  await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
-  rerender(shell('search:q=beach'))
-  expect(screen.getByRole('search')).toHaveAttribute('data-open', 'false')
-})
-
 // The suggestion list floats over the filter row, and Clear all filters sits directly under it.
 // Choosing happens on pointer down, so by the time the click arrives the list has gone and the
 // click lands on whatever it was covering -- which cleared the filters instead of picking the
@@ -153,4 +111,55 @@ it('does not press what the suggestion list was covering', async () => {
   // Only that one click is swallowed: the next deliberate press works.
   fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }))
   expect(clearAllFilters).toHaveBeenCalledTimes(1)
+})
+
+it('reveals phone search only on request, keeps actions together, and hides it on Settings', async () => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+  )
+  const client = new QueryClient()
+  const ui = (hidden: boolean) => (
+    <QueryClientProvider client={client}>
+      <SearchHeader
+        value="photos"
+        onChange={vi.fn()}
+        onSearch={vi.fn()}
+        onHome={vi.fn()}
+        onFilters={vi.fn()}
+        onSettings={vi.fn()}
+        searchRequested={false}
+        hideSearch={hidden}
+        logo={<button>Switch application</button>}
+      />
+    </QueryClientProvider>
+  )
+  const { rerender } = render(ui(false))
+  expect(screen.queryByRole('textbox', { name: 'Search media' })).toBeNull()
+  const opener = screen.getByRole('button', { name: 'Open search' })
+  expect(opener.parentElement).toBe(screen.getByRole('button', { name: 'Filters' }).parentElement)
+  expect(opener.parentElement).toBe(screen.getByRole('button', { name: 'Settings' }).parentElement)
+  await userEvent.click(opener)
+  expect(screen.getByRole('textbox', { name: 'Search media' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull()
+  expect(screen.getAllByRole('button', { name: 'Close search' })).toHaveLength(1)
+  expect(screen.queryByRole('button', { name: 'Switch application' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Filters' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
+  await userEvent.click(screen.getByRole('button', { name: 'Close search' }))
+  expect(screen.queryByRole('textbox', { name: 'Search media' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Switch application' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Filters' })).toBeVisible()
+  rerender(ui(true))
+  expect(screen.queryByRole('search')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Filters' })).toBeNull()
+})
+
+it('does not turn a text search into a suggestion selection when the list appears under the mouse', async () => {
+  const { field, onSearch, onSuggestion } = renderHeader()
+  await userEvent.type(field, 'bea')
+  fireEvent.mouseEnter(await screen.findByRole('option', { name: /beach-sunset/ }))
+  await userEvent.keyboard('{Enter}')
+  expect(onSearch).toHaveBeenCalledOnce()
+  expect(onSuggestion).not.toHaveBeenCalled()
 })
