@@ -1,3 +1,5 @@
+import { Trans } from 'react-i18next'
+import { t } from '../../lib/i18n'
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Check, LayoutGrid, Crop } from 'lucide-react'
 import { SettingsSection } from '../../components/ui/SettingsSection'
@@ -114,16 +116,15 @@ export function AlbumCover({
 const modes: Array<{ id: CoverRenderingMode; name: string; description: string; icon: ReactNode }> = [
   {
     id: 'smart',
-    name: 'Smart album covers',
+    name: t('browse:albumCover.smartAlbumCovers'),
     icon: <LayoutGrid className="size-5" />,
-    description:
-      'Albums with three or more photos show a mosaic. Single covers fill the card, cropping gently, and photos far from the card’s shape sit enlarged over a blurred backdrop.',
+    description: t('browse:albumCover.albumsWithThreeOrMorePhotosShowAMosaic'),
   },
   {
     id: 'cropped',
-    name: 'Cropped album covers',
+    name: t('browse:albumCover.croppedAlbumCovers'),
     icon: <Crop className="size-5" />,
-    description: 'One photo fills the whole card, cropped to fit. The traditional look.',
+    description: t('browse:albumCover.onePhotoFillsTheWholeCardCroppedToFit'),
   },
 ]
 
@@ -131,10 +132,10 @@ export function AlbumCoverSettings() {
   const mode = useCoverRenderingMode()
   return (
     <SettingsSection
-      title="Album covers"
-      description="Choose how Luma draws automatic album and folder covers on this device."
+      title={t('browse:albumCover.albumCovers')}
+      description={t('browse:albumCover.chooseHowLumaDrawsAutomaticAlbumAndFolderCovers')}
     >
-      <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Album cover style">
+      <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t('browse:albumCover.albumCoverStyle')}>
         {modes.map(option => (
           <button
             key={option.id}
@@ -154,9 +155,7 @@ export function AlbumCoverSettings() {
         ))}
       </div>
       <p className="text-sm leading-relaxed text-muted">
-        This only sets the default for automatic covers. A cover you picked yourself for an album or folder always stays
-        that photo, whichever style you choose. To go back to an automatic cover, use{' '}
-        <span className="text-ink">Reset album cover</span> in that folder’s actions.
+        <Trans i18nKey="browse:albumCover.coverDefaultHelp" components={{ action: <span className="text-ink" /> }} />
       </p>
     </SettingsSection>
   )

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { QuietButton } from '../../components/ui/Controls'
 import { tagTone } from '../../components/ui/TagTone'
 import { type Filters } from './api'
@@ -14,19 +15,19 @@ export function ActiveFilters({
   onApply: (value: Filters) => void
 }) {
   const labels: Record<string, string> = {
-    libraryId: 'Library',
-    folderId: 'Folder',
-    q: 'Search',
-    tag: 'Tags',
-    collectionTag: 'Tag collection',
-    mediaType: 'Media type',
-    groupBy: 'Grouping',
-    tagMode: 'Tag matching',
-    tagged: 'Tagged',
-    recursive: 'Include subfolders',
-    preference: 'Favourite state',
-    sort: 'Sort',
-    order: 'Direction',
+    libraryId: t('browse:activeFilters.library'),
+    folderId: t('browse:activeFilters.folder'),
+    q: t('browse:activeFilters.search'),
+    tag: t('browse:activeFilters.tags'),
+    collectionTag: t('browse:activeFilters.tagCollection'),
+    mediaType: t('browse:activeFilters.mediaType'),
+    groupBy: t('browse:activeFilters.grouping'),
+    tagMode: t('browse:activeFilters.tagMatching'),
+    tagged: t('browse:activeFilters.tagged'),
+    recursive: t('browse:activeFilters.includeSubfolders'),
+    preference: t('browse:activeFilters.favouriteState'),
+    sort: t('browse:activeFilters.sort'),
+    order: t('browse:activeFilters.direction'),
   }
   function shown(key: string, value: unknown) {
     return key === 'libraryId'
@@ -50,7 +51,7 @@ export function ActiveFilters({
   // each chip needs an outline of its own. Clear all filters is the one that carries a colour.
   return (
     <nav
-      aria-label="Active filters"
+      aria-label={t('browse:activeFilters.activeFilters')}
       className="no-scrollbar flex shrink-0 items-center gap-1.5 overflow-x-auto bg-surface/50 px-4 py-2"
     >
       {active.flatMap(([key, value]) =>
@@ -62,7 +63,7 @@ export function ActiveFilters({
                 key={`${key}:${name}`}
                 className="tag-tone shrink-0"
                 style={tagTone(String(name))}
-                aria-label={`Clear tag filter ${name}`}
+                aria-label={t('browse:activeFilters.clearTagFilter', { value1: name })}
                 onClick={() => onApply({ ...filters, tag: value.filter(item => item !== name) })}
               >
                 {name} ×
@@ -75,7 +76,7 @@ export function ActiveFilters({
                 key={key}
                 className={`shrink-0 ${key === 'collectionTag' ? 'tag-tone' : ''}`}
                 style={key === 'collectionTag' ? tagTone(String(value)) : undefined}
-                aria-label={`Clear ${key} filter`}
+                aria-label={t('browse:activeFilters.clearFilter', { value1: key })}
                 onClick={() =>
                   onApply({ ...filters, [key]: undefined, ...(key === 'libraryId' ? { folderId: undefined } : {}) })
                 }
@@ -85,7 +86,7 @@ export function ActiveFilters({
             ],
       )}
       <QuietButton compact variant="accent" className="ml-1 shrink-0" onClick={() => onApply({})}>
-        Clear all filters
+        {t('browse:activeFilters.clearAllFilters')}
       </QuietButton>
     </nav>
   )

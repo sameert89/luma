@@ -1,15 +1,16 @@
+import { t } from '../../lib/i18n'
 import { Field, Select } from '../../components/ui/Controls'
 import { SettingsSection } from '../../components/ui/SettingsSection'
 import { setReelsSort, useReelsSort, type ReelsSortChoice } from './reelsSort'
 
 const options: { id: ReelsSortChoice; name: string }[] = [
-  { id: 'library', name: 'Same as the library' },
-  { id: 'modified', name: 'Modified date' },
-  { id: 'captured', name: 'Captured date' },
-  { id: 'name', name: 'Name' },
-  { id: 'type', name: 'Type' },
-  { id: 'size', name: 'Size' },
-  { id: 'shuffle', name: 'Shuffle' },
+  { id: 'library', name: t('browse:reelsSortSettings.sameAsTheLibrary') },
+  { id: 'modified', name: t('browse:reelsSortSettings.modifiedDate') },
+  { id: 'captured', name: t('browse:reelsSortSettings.capturedDate') },
+  { id: 'name', name: t('browse:reelsSortSettings.name') },
+  { id: 'type', name: t('browse:reelsSortSettings.type') },
+  { id: 'size', name: t('browse:reelsSortSettings.size') },
+  { id: 'shuffle', name: t('browse:reelsSortSettings.shuffle') },
 ]
 
 export function ReelsSortSettings() {
@@ -17,9 +18,12 @@ export function ReelsSortSettings() {
   // Direction means nothing for a shuffle, or when the library's own order is kept.
   const directed = value.sort !== 'library' && value.sort !== 'shuffle'
   return (
-    <SettingsSection title="Reels" description="Choose the order Reels opens in on this device.">
+    <SettingsSection
+      title={t('browse:reelsSortSettings.reels')}
+      description={t('browse:reelsSortSettings.chooseTheOrderReelsOpensInOnThisDevice')}
+    >
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Default order">
+        <Field label={t('browse:reelsSortSettings.defaultOrder')}>
           <Select
             value={value.sort}
             onChange={event => setReelsSort({ ...value, sort: event.target.value as ReelsSortChoice })}
@@ -31,20 +35,19 @@ export function ReelsSortSettings() {
             ))}
           </Select>
         </Field>
-        <Field label="Default direction">
+        <Field label={t('browse:reelsSortSettings.defaultDirection')}>
           <Select
             value={value.order}
             disabled={!directed}
             onChange={event => setReelsSort({ ...value, order: event.target.value === 'asc' ? 'asc' : 'desc' })}
           >
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
+            <option value="desc">{t('browse:reelsSortSettings.descending')}</option>
+            <option value="asc">{t('browse:reelsSortSettings.ascending')}</option>
           </Select>
         </Field>
       </div>
       <p className="text-sm leading-relaxed text-muted">
-        Applies each time you open Reels. You can still change the order from Filters while you watch, and Watch on
-        Reels from a photo or video keeps the order you were browsing in, so it carries on from that item.
+        {t('browse:reelsSortSettings.appliesEachTimeYouOpenReelsYouCanStill')}
       </p>
     </SettingsSection>
   )

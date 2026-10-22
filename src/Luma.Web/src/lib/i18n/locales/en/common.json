@@ -1,3 +1,28 @@
 {
-  "appName": "Luma"
+  "appName": "Luma",
+  "states": {
+    "unread": "Unread",
+    "reading": "Reading",
+    "completed": "Completed",
+    "queued": "Queued",
+    "uploading": "Uploading",
+    "waiting": "Waiting",
+    "conflict": "Conflict",
+    "paused": "Paused",
+    "cancelled": "Cancelled",
+    "failed": "Failed",
+    "skipped": "Skipped",
+    "reserved": "Reserved",
+    "published": "Published",
+    "deleting": "Deleting",
+    "finalizing": "Finalizing",
+    "needsAttention": "Needs attention",
+    "running": "Running",
+    "interrupted": "Interrupted",
+    "expired": "Expired",
+    "reselect": "Reselect files"
+  },
+  "counts": {
+    "skipped": " {{count}} skipped."
+  }
 }

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import type { components } from '../../lib/api/generated'
 import { request } from '../browse/api'
 export type FileOperation = Required<components['schemas']['FileOperation']>
@@ -9,7 +10,10 @@ export async function waitForOperation(id: string, signal?: AbortSignal) {
     if (result.state === 'completed') return result
     if (['needsAttention', 'failed', 'cancelled'].includes(result.state))
       throw new Error(
-        `Operation ${result.state}: ${result.failureCode ?? 'inspect the task details before continuing'}`,
+        t('files:operations.operation', {
+          value1: result.state,
+          value2: result.failureCode ?? t('files:operations.inspectTheTaskDetailsBeforeContinuing'),
+        }),
       )
     await new Promise(resolve => setTimeout(resolve, 500))
   }

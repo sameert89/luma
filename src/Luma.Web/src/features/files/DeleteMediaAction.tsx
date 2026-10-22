@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
@@ -60,10 +61,10 @@ export function DeleteMediaAction({
   return (
     <>
       <IconButton
-        label="Delete file"
+        label={t('files:deleteMediaAction.deleteFile')}
         className={className}
         disabled={disabled || !writable || item.availability === 'missing'}
-        title={writable ? 'Delete file' : 'This library is read-only'}
+        title={writable ? t('files:deleteMediaAction.deleteFile') : t('files:deleteMediaAction.thisLibraryIsReadOnly')}
         onClick={() => {
           setTarget(item)
           setPermanent(false)
@@ -85,12 +86,14 @@ export function DeleteMediaAction({
             onQueued()
           }
         }}
-        title="Delete file"
+        title={t('files:deleteMediaAction.deleteFile')}
         description={target?.fileName ?? ''}
       >
         <div className="space-y-4 p-5">
           <p className="break-words text-sm">
-            {target?.fileName} will be moved to the recycle bin unless permanent deletion is selected.
+            {t('files:deleteMediaAction.willBeMovedToTheRecycleBinUnlessPermanent', {
+              targetFileName: target?.fileName,
+            })}
           </p>
           <label htmlFor={permanentId} className="flex items-center gap-2 text-sm">
             <Checkbox
@@ -99,14 +102,18 @@ export function DeleteMediaAction({
               disabled={busy}
               onChange={event => setPermanent(event.target.checked)}
             />
-            Permanently delete. This cannot be undone.
+            {t('files:deleteMediaAction.permanentlyDeleteThisCannotBeUndone')}
           </label>
           <div className="flex flex-wrap gap-2">
             <QuietButton disabled={busy} onClick={() => void remove()}>
-              {busy ? 'Queuing…' : permanent ? 'Delete permanently' : 'Move to recycle bin'}
+              {busy
+                ? t('files:deleteMediaAction.queuing')
+                : permanent
+                  ? t('files:deleteMediaAction.deletePermanently')
+                  : t('files:deleteMediaAction.moveToRecycleBin')}
             </QuietButton>
             <QuietButton disabled={busy} onClick={close}>
-              Cancel
+              {t('files:deleteMediaAction.cancel')}
             </QuietButton>
           </div>
           {error && (

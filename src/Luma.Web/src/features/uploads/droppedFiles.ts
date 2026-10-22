@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 // Read each directory in batches; Chrome may return only the first 100 entries per call.
 export async function droppedFiles(data: DataTransfer): Promise<File[]> {
   const entries = [...data.items]
@@ -6,10 +7,10 @@ export async function droppedFiles(data: DataTransfer): Promise<File[]> {
   if (!entries.length) return [...data.files]
   const files: File[] = []
   async function walk(entry: FileSystemEntry, parent = '', depth = 0): Promise<void> {
-    if (depth > 127) throw new Error('Folder upload exceeds the depth limit.')
+    if (depth > 127) throw new Error(t('uploads:droppedFiles.folderUploadExceedsTheDepthLimit'))
     const path = parent ? `${parent}/${entry.name}` : entry.name
     if (entry.isFile) {
-      if (files.length >= 10000) throw new Error('Choose at most 10,000 files at once.')
+      if (files.length >= 10000) throw new Error(t('uploads:droppedFiles.chooseAtMost10000FilesAtOnce'))
       const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject))
       Object.defineProperty(file, 'webkitRelativePath', { value: path })
       files.push(file)

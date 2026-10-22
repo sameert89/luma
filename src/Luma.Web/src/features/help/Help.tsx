@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect, useRef, type MouseEvent } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
@@ -5,8 +6,8 @@ import { gestures, guideSections, shortcutGroups, type GuideEntry } from './guid
 
 const gesturesSection = {
   id: 'gestures',
-  title: 'Gestures and keyboard shortcuts',
-  summary: 'Touch, mouse and keyboard interactions without a button',
+  title: t('help:help.gesturesAndKeyboardShortcuts'),
+  summary: t('help:help.touchMouseAndKeyboardInteractionsWithoutAButton'),
 }
 const index = [...guideSections, gesturesSection]
 
@@ -47,7 +48,7 @@ function Keys({ keys }: { keys: string[] }) {
     <span className="flex flex-wrap items-center gap-1">
       {keys.map((key, index) => (
         <span key={key} className="flex items-center gap-1">
-          {index > 0 && <span className="text-xs text-muted">or</span>}
+          {index > 0 && <span className="text-xs text-muted">{t('help:help.or')}</span>}
           <kbd className="inline-flex min-w-7 justify-center rounded-md border border-line bg-canvas px-1.5 py-0.5 text-xs font-semibold text-ink">
             {key}
           </kbd>
@@ -77,7 +78,7 @@ export function Help({ onBack }: { onBack?: () => void }) {
           {onBack && (
             <QuietButton onClick={onBack}>
               <ArrowLeft className="size-4" aria-hidden="true" />
-              Back
+              {t('help:help.back')}
             </QuietButton>
           )}
         </div>
@@ -85,13 +86,11 @@ export function Help({ onBack }: { onBack?: () => void }) {
       <div className="mx-auto w-full max-w-5xl space-y-10 p-5">
         <header>
           <h1 ref={title} tabIndex={-1} className="text-2xl font-semibold">
-            Help
+            {t('help:help.help')}
           </h1>
-          <p className="mt-2 text-sm text-muted">
-            What each button, gesture and shortcut does, grouped by where it appears.
-          </p>
+          <p className="mt-2 text-sm text-muted">{t('help:help.whatEachButtonGestureAndShortcutDoesGroupedBy')}</p>
         </header>
-        <nav aria-label="Help sections">
+        <nav aria-label={t('help:help.helpSections')}>
           <ul className="grid gap-2 sm:grid-cols-2">
             {index.map(section => (
               <li key={section.id}>
@@ -138,7 +137,7 @@ export function Help({ onBack }: { onBack?: () => void }) {
             ))}
             {section.notes && (
               <div className="rounded-2xl border border-line p-4">
-                <h3 className="text-sm font-semibold">Good to know</h3>
+                <h3 className="text-sm font-semibold">{t('help:help.goodToKnow')}</h3>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-muted">
                   {section.notes.map(note => (
                     <li key={note}>{note}</li>
@@ -153,7 +152,9 @@ export function Help({ onBack }: { onBack?: () => void }) {
             {gesturesSection.title}
           </h2>
           <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Touch and mouse</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
+              {t('help:help.touchAndMouse')}
+            </h3>
             <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
               {gestures.map(item => (
                 <li key={`${item.gesture}:${item.where}`} className="p-3">
@@ -165,8 +166,8 @@ export function Help({ onBack }: { onBack?: () => void }) {
             </ul>
           </div>
           <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Keyboard</h3>
-            <p className="text-sm text-muted">Shortcuts pause while you type in a field.</p>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{t('help:help.keyboard')}</h3>
+            <p className="text-sm text-muted">{t('help:help.shortcutsPauseWhileYouTypeInAField')}</p>
             <div className="grid gap-4 lg:grid-cols-3">
               {shortcutGroups.map(group => (
                 <div key={group.title} className="rounded-2xl border border-line bg-surface p-3">

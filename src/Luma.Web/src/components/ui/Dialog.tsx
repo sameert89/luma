@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import type { ReactNode } from 'react'
 import { Button } from './Button'
@@ -25,7 +26,7 @@ export function Dialog({
           </DialogPrimitive.Description>
           {children}
           <DialogPrimitive.Close asChild>
-            <Button className="mt-6">Close</Button>
+            <Button className="mt-6">{t('ui:dialog.close')}</Button>
           </DialogPrimitive.Close>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>

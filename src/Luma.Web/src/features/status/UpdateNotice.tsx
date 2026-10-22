@@ -1,3 +1,5 @@
+import { Trans } from 'react-i18next'
+import { t } from '../../lib/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { CircleFadingArrowUp, RefreshCw, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
@@ -53,7 +55,9 @@ export function UpdateNotice() {
       className="fixed inset-x-4 bottom-20 z-40 flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-lg sm:inset-x-auto sm:right-6 sm:max-w-sm md:bottom-6"
     >
       <CircleFadingArrowUp className="size-5 shrink-0 text-accent" aria-hidden="true" />
-      <p className="min-w-0 flex-1 text-sm leading-relaxed">Luma {serverVersion} is ready. Refresh to update.</p>
+      <p className="min-w-0 flex-1 text-sm leading-relaxed">
+        {t('status:updateNotice.lumaIsReadyRefreshToUpdate', { serverVersion: serverVersion })}
+      </p>
       <Button
         className="min-h-10 shrink-0 px-3"
         onClick={() => {
@@ -61,9 +65,9 @@ export function UpdateNotice() {
           update()
         }}
       >
-        Refresh
+        {t('status:updateNotice.refresh')}
       </Button>
-      <IconButton label="Not now" onClick={dismiss}>
+      <IconButton label={t('status:updateNotice.notNow')} onClick={dismiss}>
         <X className="size-4" />
       </IconButton>
     </div>
@@ -75,8 +79,8 @@ export function UpdateSettings({ onWhatsNew }: { onWhatsNew: () => void }) {
   const { serverVersion, updateAvailable } = useServerRelease()
   return (
     <SettingsSection
-      title="Updates"
-      description="Which release this device is running, and whether the server has a newer one."
+      title={t('status:updateNotice.updates')}
+      description={t('status:updateNotice.whichReleaseThisDeviceIsRunningAndWhetherThe')}
     >
       <div
         className={`flex flex-wrap items-center gap-3 rounded-2xl border p-4 ${updateAvailable ? 'border-accent bg-surface' : 'border-line'}`}
@@ -87,25 +91,28 @@ export function UpdateSettings({ onWhatsNew }: { onWhatsNew: () => void }) {
         />
         <p className="min-w-0 flex-1 text-sm leading-relaxed">
           {updateAvailable ? (
-            <>
-              Luma <span className="font-semibold">{serverVersion}</span> is installed on the server. Refresh to start
-              using it; nothing is lost.
-            </>
+            <Trans
+              i18nKey="status:updateNotice.serverInstalled"
+              values={{ version: serverVersion }}
+              components={{ version: <span className="font-semibold" /> }}
+            />
           ) : (
-            <>
-              Luma <span className="font-semibold">v{appVersion}</span> is up to date.
-            </>
+            <Trans
+              i18nKey="status:updateNotice.upToDate"
+              values={{ version: appVersion }}
+              components={{ version: <span className="font-semibold" /> }}
+            />
           )}
         </p>
         {updateAvailable && (
           <Button className="min-h-10 shrink-0" onClick={update}>
             <RefreshCw className="mr-2 size-4" aria-hidden="true" />
-            Refresh to update
+            {t('status:updateNotice.refreshToUpdate')}
           </Button>
         )}
         <QuietButton className="shrink-0" onClick={onWhatsNew}>
           <Sparkles className="size-4" aria-hidden="true" />
-          What’s new
+          {t('status:updateNotice.whatSNew')}
         </QuietButton>
       </div>
     </SettingsSection>
@@ -127,17 +134,21 @@ export function WhatsNew({ open, onOpenChange }: { open: boolean; onOpenChange: 
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={`What’s new in Luma v${currentRelease.version}`}
-      description="Changes in this release."
+      title={t('status:updateNotice.whatSNewInLumaV', { value1: currentRelease.version })}
+      description={t('status:updateNotice.changesInThisRelease')}
       sheet
     >
       <div className="space-y-6 p-5">
         {releases.map(release => (
-          <section key={release.version} className="space-y-3" aria-label={`Luma v${release.version}`}>
+          <section
+            key={release.version}
+            className="space-y-3"
+            aria-label={t('status:updateNotice.lumaV', { value1: release.version })}
+          >
             <div>
               <h3 className="font-semibold">{release.headline}</h3>
               <p className="mt-1 text-sm text-muted">
-                v{release.version} · {release.date}
+                {t('status:updateNotice.v2', { releaseVersion: release.version, releaseDate: release.date })}
               </p>
             </div>
             <ul className="space-y-2 text-sm leading-relaxed">
@@ -150,7 +161,7 @@ export function WhatsNew({ open, onOpenChange }: { open: boolean; onOpenChange: 
             </ul>
           </section>
         ))}
-        <Button onClick={() => onOpenChange(false)}>Continue</Button>
+        <Button onClick={() => onOpenChange(false)}>{t('status:updateNotice.continue')}</Button>
       </div>
     </Modal>
   )

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import type { components } from '../../lib/api/generated'
 import { BookOpen, Clapperboard, Images } from 'lucide-react'
 import { useState } from 'react'
@@ -5,9 +6,24 @@ import { Modal } from '../../components/ui/Modal'
 import { QuietButton } from '../../components/ui/Controls'
 export type Experience = 'gallery' | 'flick' | 'panels'
 const experiences = [
-  { id: 'gallery' as const, name: 'Gallery', icon: Images, description: 'Photos, videos and library management' },
-  { id: 'flick' as const, name: 'Flick', icon: Clapperboard, description: 'Immersive motion feed' },
-  { id: 'panels' as const, name: 'Panels', icon: BookOpen, description: 'Comics and manga' },
+  {
+    id: 'gallery' as const,
+    name: t('app:appSwitcher.gallery'),
+    icon: Images,
+    description: t('app:appSwitcher.photosVideosAndLibraryManagement'),
+  },
+  {
+    id: 'flick' as const,
+    name: t('app:appSwitcher.flick'),
+    icon: Clapperboard,
+    description: t('app:appSwitcher.immersiveMotionFeed'),
+  },
+  {
+    id: 'panels' as const,
+    name: t('app:appSwitcher.panels'),
+    icon: BookOpen,
+    description: t('app:appSwitcher.comicsAndManga'),
+  },
 ]
 export function AppSwitcher({
   active,
@@ -27,20 +43,21 @@ export function AppSwitcher({
       <button
         type="button"
         className="relative inline-flex min-h-11 shrink-0 items-center rounded-xl pl-1 pr-5 text-sm font-semibold"
-        aria-label={`Switch application, ${name}`}
+        aria-label={t('app:appSwitcher.switchApplication', { value1: name })}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
         <span className="text-xl tracking-tight">
-          luma<span className="text-accent">.</span>
+          {'luma'}
+          <span className="text-accent">.</span>
         </span>
         <Icon className="absolute right-0 top-1 size-3.5 text-accent" aria-hidden="true" />
       </button>
       <Modal
         open={open}
         onOpenChange={setOpen}
-        title="Luma applications"
-        description="One library, three media experiences."
+        title={t('app:appSwitcher.lumaApplications')}
+        description={t('app:appSwitcher.oneLibraryThreeMediaExperiences')}
         sheet
       >
         <div className="space-y-2 p-5">

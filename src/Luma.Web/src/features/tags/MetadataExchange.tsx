@@ -1,3 +1,4 @@
+import { t, stateLabel } from '../../lib/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState } from 'react'
 import { Checkbox, QuietButton, QuietLink } from '../../components/ui/Controls'
@@ -63,11 +64,13 @@ export function MetadataExchange({
     }
   }, [complete, job.data?.kind, client])
   return (
-    <section aria-label="Metadata exchange" className="space-y-3">
-      {heading && <h2 className="text-sm font-semibold">Metadata exchange</h2>}
+    <section aria-label={t('tags:metadataExchange.metadataExchange')} className="space-y-3">
+      {heading && <h2 className="text-sm font-semibold">{t('tags:metadataExchange.metadataExchange')}</h2>}
       <p className="text-sm text-muted">
-        {canImport ? 'Imports merge EXIF/XMP tags into Luma. ' : ''}
-        {exports ? 'Exports are downloads; originals stay unchanged.' : 'Originals stay unchanged.'}
+        {canImport ? t('tags:metadataExchange.importsMergeEXIFXMPTagsIntoLuma') : ''}
+        {exports
+          ? t('tags:metadataExchange.exportsAreDownloadsOriginalsStayUnchanged')
+          : t('tags:metadataExchange.originalsStayUnchanged')}
       </p>
       {canImport && (
         <label htmlFor={sidecarsId} className="flex min-h-11 items-center gap-3 text-sm">
@@ -77,38 +80,46 @@ export function MetadataExchange({
             disabled={busy}
             onChange={event => setSidecars(event.target.checked)}
           />
-          Include adjacent XMP sidecars
+          {t('tags:metadataExchange.includeAdjacentXMPSidecars')}
         </label>
       )}
       <div className="flex flex-wrap gap-2">
         {canImport && (
           <QuietButton disabled={busy} onClick={() => start.mutate('tags')}>
-            {mediaIds ? 'Import metadata tags' : 'Import folder metadata tags'}
+            {mediaIds
+              ? t('tags:metadataExchange.importMetadataTags')
+              : t('tags:metadataExchange.importFolderMetadataTags')}
           </QuietButton>
         )}
         {exports && (
           <QuietButton disabled={busy} onClick={() => start.mutate('xmp')}>
-            Export XMP
+            {t('tags:metadataExchange.exportXMP')}
           </QuietButton>
         )}
         {dislikes && (
           <QuietButton disabled={busy} onClick={() => start.mutate('dislikes')}>
-            Export disliked paths
+            {t('tags:metadataExchange.exportDislikedPaths')}
           </QuietButton>
         )}
       </div>
       {job.data && (
         <p role="status" className="text-sm">
-          {job.data.state}: {job.data.processed} processed, {job.data.found ?? 0} with metadata, {job.data.updated ?? 0}{' '}
-          imported/updated, {job.data.skipped ?? 0} skipped, {job.data.failed} failed.
-          {job.data.failureCode && ` ${job.data.failureCode}`}
+          {t('tags:metadataExchange.processedWithMetadataImportedUpdatedSkippedFailed', {
+            jobDataState: stateLabel(job.data.state),
+            jobDataProcessed: job.data.processed,
+            jobDataFound0: job.data.found ?? 0,
+            jobDataUpdated0: job.data.updated ?? 0,
+            jobDataSkipped0: job.data.skipped ?? 0,
+            jobDataFailed: job.data.failed,
+            jobDataFailureCodeJobDataFailureCode: job.data.failureCode && ` ${job.data.failureCode}`,
+          })}
         </p>
       )}
       {job.data?.items
         .filter(item => item.code !== 'imported')
         .map(item => (
           <p key={item.mediaId} className="text-sm text-muted">
-            Item {item.mediaId}: {item.code}
+            {t('tags:metadataExchange.item', { itemMediaId: item.mediaId, itemCode: item.code })}
           </p>
         ))}
       {(afterMediaId || job.data?.nextMediaId) && (
@@ -121,7 +132,7 @@ export function MetadataExchange({
                 setResultPages(pages => pages.slice(0, -1))
               }}
             >
-              Previous item results
+              {t('tags:metadataExchange.previousItemResults')}
             </QuietButton>
           )}
           {job.data?.nextMediaId && (
@@ -132,12 +143,14 @@ export function MetadataExchange({
                 setAfterMediaId(job.data!.nextMediaId!)
               }}
             >
-              Next item results
+              {t('tags:metadataExchange.nextItemResults')}
             </QuietButton>
           )}
         </div>
       )}
-      {job.data?.contentUrl && <QuietLink href={job.data.contentUrl}>Download export</QuietLink>}
+      {job.data?.contentUrl && (
+        <QuietLink href={job.data.contentUrl}>{t('tags:metadataExchange.downloadExport')}</QuietLink>
+      )}
       {(start.isError || job.isError) && (
         <p role="alert" className="text-sm text-danger">
           {errorMessage(start.error ?? job.error)}

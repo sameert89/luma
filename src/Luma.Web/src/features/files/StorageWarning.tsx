@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import { Toast } from '../../components/ui/Toast'
@@ -41,14 +42,14 @@ export function StorageWarning({ onSettings }: { onSettings: () => void }) {
         visible
           ? {
               id: 1,
-              text: 'Read-only media. Browsing still works.',
+              text: t('files:storageWarning.readOnly'),
               tone: 'info',
             }
           : null
       }
       onDismiss={dismiss}
       action={{
-        label: 'Details',
+        label: t('files:storageWarning.details'),
         onClick: () => {
           dismiss()
           onSettings()

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { BookOpen, FileImage, FolderOpen, Search, SlidersHorizontal, Settings, Tag, X } from 'lucide-react'
 import { useDeferredValue, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -10,10 +11,10 @@ import type { components } from '../../lib/api/generated'
 export type SearchSuggestion = components['schemas']['SearchSuggestion']
 
 const kinds: Record<string, { label: string; icon: typeof Tag }> = {
-  comic: { label: 'Comic', icon: BookOpen },
-  tag: { label: 'Tag', icon: Tag },
-  folder: { label: 'Folder', icon: FolderOpen },
-  file: { label: 'File', icon: FileImage },
+  comic: { label: t('ui:searchHeader.comic'), icon: BookOpen },
+  tag: { label: t('ui:searchHeader.tag'), icon: Tag },
+  folder: { label: t('ui:searchHeader.folder'), icon: FolderOpen },
+  file: { label: t('ui:searchHeader.file'), icon: FileImage },
 }
 
 export function SearchHeader({
@@ -29,8 +30,8 @@ export function SearchHeader({
   onSettings,
   hideSearch = false,
   suggestionsUrl = '/api/search/suggestions',
-  searchLabel = 'Search media',
-  placeholder = 'Search names, folders and tags',
+  searchLabel = t('ui:searchHeader.searchMedia'),
+  placeholder = t('ui:searchHeader.searchNamesFoldersAndTags'),
   actions,
 }: {
   value: string
@@ -104,13 +105,14 @@ export function SearchHeader({
           <a
             href="/"
             className="shrink-0 text-xl font-semibold tracking-tight"
-            aria-label="Luma home"
+            aria-label={t('ui:searchHeader.lumaHome')}
             onClick={event => {
               event.preventDefault()
               onHome()
             }}
           >
-            luma<span className="text-accent">.</span>
+            {'luma'}
+            <span className="text-accent">.</span>
           </a>
         )}
       </div>
@@ -175,14 +177,14 @@ export function SearchHeader({
                 }}
               />
               <button type="submit" className="sr-only" tabIndex={-1}>
-                Submit search
+                {t('ui:searchHeader.submitSearch')}
               </button>
             </div>
             {expanded && (
               <ul
                 id={listId}
                 role="listbox"
-                aria-label="Search suggestions"
+                aria-label={t('ui:searchHeader.searchSuggestions')}
                 className="absolute inset-x-4 top-full mt-2 max-h-80 overflow-y-auto overscroll-contain rounded-xl border border-line bg-canvas py-1 sm:inset-x-0"
               >
                 {items.map((suggestion, index) => {
@@ -237,7 +239,13 @@ export function SearchHeader({
         {!hideSearch && (
           <IconButton
             ref={toggle}
-            label={mobile ? (open ? 'Close search' : 'Open search') : 'Search'}
+            label={
+              mobile
+                ? open
+                  ? t('ui:searchHeader.closeSearch')
+                  : t('ui:searchHeader.openSearch')
+                : t('ui:searchHeader.search')
+            }
             type={mobile ? 'button' : 'submit'}
             form={mobile ? undefined : formId}
             aria-expanded={mobile ? open : undefined}
@@ -256,12 +264,12 @@ export function SearchHeader({
           </IconButton>
         )}
         {!hideSearch && !editing && onFilters && (
-          <IconButton label="Filters" onClick={onFilters}>
+          <IconButton label={t('ui:searchHeader.filters')} onClick={onFilters}>
             <SlidersHorizontal className="size-5" />
           </IconButton>
         )}
         {onSettings && !editing && (
-          <IconButton label="Settings" onClick={onSettings}>
+          <IconButton label={t('ui:searchHeader.settings')} onClick={onSettings}>
             <Settings className="size-5" />
           </IconButton>
         )}

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { ComicFolderCard } from './ComicFolderCard'
 import { ComicCard } from './ComicCard'
 import { BackgroundJobsButton } from '../status/BackgroundJobs'
@@ -200,7 +201,7 @@ export function Panels({
         onSuggestion={suggestion => change('comic', String(suggestion.id))}
         suggestionsUrl="/api/panels/suggestions"
         searchLabel="Search comics"
-        placeholder="Search comic titles or series"
+        placeholder={t('panels:panels.searchComicTitlesOrSeries')}
         onHome={() => visit()}
         onFilters={() => setFiltersOpen(value => !value)}
         onSettings={onSettings}
@@ -209,47 +210,47 @@ export function Panels({
         scope={params.toString()}
       />
       <div className="flex flex-wrap items-center gap-3 p-4">
-        <h1 className="flex-1 text-xl font-semibold">Comic library</h1>
+        <h1 className="flex-1 text-xl font-semibold">{t('panels:panels.comicLibrary')}</h1>
         {configured && (
           <QuietButton onClick={() => setManage(true)}>
             <FolderCog className="size-4" aria-hidden="true" />
-            Comic locations
+            {t('panels:panels.comicLocations')}
           </QuietButton>
         )}
       </div>
       {!configured && !sources.isPending && (
-        <section aria-label="Set up comic library" className="space-y-4 p-5">
-          <h2 className="text-lg font-semibold">Choose where your comics live</h2>
+        <section aria-label={t('panels:panels.setUpComicLibrary')} className="space-y-4 p-5">
+          <h2 className="text-lg font-semibold">{t('panels:panels.chooseWhereYourComicsLive')}</h2>
           <QuietButton variant="accent" onClick={() => setManage(true)}>
             <FolderPlus className="size-4" aria-hidden="true" />
-            Add comic location
+            {t('panels:panels.addComicLocation')}
           </QuietButton>
         </section>
       )}
       {filtersOpen && (
         <div className="flex flex-wrap gap-3 px-4 pb-3">
           <Select
-            aria-label="Reading status"
+            aria-label={t('panels:panels.readingStatus')}
             className="w-auto"
             value={params.get('state') ?? ''}
             onChange={event => change('state', event.target.value)}
           >
-            <option value="">All comics</option>
-            <option value="reading">Continue reading</option>
-            <option value="unread">Unread</option>
-            <option value="completed">Completed</option>
+            <option value="">{t('panels:panels.allComics')}</option>
+            <option value="reading">{t('panels:panels.continueReading')}</option>
+            <option value="unread">{t('panels:panels.unread')}</option>
+            <option value="completed">{t('panels:panels.completed')}</option>
           </Select>
           <Input
-            aria-label="Series filter"
+            aria-label={t('panels:panels.seriesFilter')}
             className="w-auto"
-            placeholder="Series"
+            placeholder={t('panels:panels.series')}
             value={params.get('series') ?? ''}
             onChange={event => change('series', event.target.value)}
           />
           <Input
-            aria-label="Comic tag filter"
+            aria-label={t('panels:panels.comicTagFilter')}
             className="max-w-xs"
-            placeholder="Comic tag"
+            placeholder={t('panels:panels.comicTag')}
             value={params.get('tag') ?? ''}
             onChange={event => change('tag', event.target.value)}
           />
@@ -259,7 +260,7 @@ export function Panels({
               checked={params.get('favourite') === 'true'}
               onChange={event => change('favourite', event.target.checked ? 'true' : '')}
             />
-            Favourites only
+            {t('panels:panels.favouritesOnly')}
           </label>
         </div>
       )}
@@ -267,24 +268,27 @@ export function Panels({
         {libraryId && (
           <QuietButton onClick={() => visit()}>
             <BookOpen className="size-4" aria-hidden="true" />
-            Bookshelf
+            {t('panels:panels.bookshelf')}
           </QuietButton>
         )}
         {libraryId && path && (
           <QuietButton onClick={() => visit(libraryId, path.split('/').slice(0, -1).join('/'))}>
             <ArrowUp className="size-4" aria-hidden="true" />
-            Up
+            {t('panels:panels.up')}
           </QuietButton>
         )}
-        {libraryId && <span className="break-words text-sm text-muted">{path || 'Library root'}</span>}
+        {libraryId && <span className="break-words text-sm text-muted">{path || t('panels:panels.libraryRoot')}</span>}
       </div>
       {stats.data && (
         <p className="px-4 pb-3 text-sm text-muted">
-          {stats.data.started} started · {stats.data.completed} completed · {Math.floor(stats.data.readingSeconds / 60)}{' '}
-          minutes reading
+          {t('panels:panels.startedCompletedMinutesReading', {
+            statsDataStarted: stats.data.started,
+            statsDataCompleted: stats.data.completed,
+            mathFloorStatsDataReadingSeconds60: Math.floor(stats.data.readingSeconds / 60),
+          })}
         </p>
       )}
-      {comicId > 0 && reading.isError && <QuietButton onClick={exit}>Back to bookshelf</QuietButton>}
+      {comicId > 0 && reading.isError && <QuietButton onClick={exit}>{t('panels:panels.backToBookshelf')}</QuietButton>}
       {(library.error || reading.error || folders.error) && (
         <p role="alert" className="px-4 text-danger">
           {errorMessage(library.error || reading.error || folders.error)}
@@ -295,14 +299,14 @@ export function Panels({
           <div role="status" className="grid h-full min-h-48 place-items-center text-muted">
             <span className="flex items-center gap-2">
               <LoaderCircle className="size-5 motion-safe:animate-spin" aria-hidden="true" />
-              Loading comics…
+              {t('panels:panels.loadingComics')}
             </span>
           </div>
         ) : (
           <>
             {!libraryId && !searching && !!continuing.data?.length && (
-              <section aria-label="Continue reading" className="mb-6">
-                <h2 className="mb-3 text-lg font-semibold">Continue reading</h2>
+              <section aria-label={t('panels:panels.continueReading')} className="mb-6">
+                <h2 className="mb-3 text-lg font-semibold">{t('panels:panels.continueReading')}</h2>
                 <div className="flex gap-3 overflow-x-auto pb-3">
                   {continuing.data.slice(0, 5).map(comic => (
                     <div key={comic.id} className="w-32 shrink-0 sm:w-40">
@@ -313,7 +317,7 @@ export function Panels({
               </section>
             )}
             <section
-              aria-label="Comic folders"
+              aria-label={t('panels:panels.comicFolders')}
               className="grid grid-cols-[repeat(auto-fill,minmax(9rem,24rem))] gap-3 pb-4"
             >
               {!libraryId &&
@@ -354,8 +358,9 @@ export function Panels({
         )}
         {discovering && (
           <p role="status" className="py-4 text-center text-sm text-accent">
-            Discovering comics… {discovery.reduce((sum, task) => sum + task.processed, 0)} processed. Follow progress in
-            Background jobs.
+            {t('panels:panels.discoveringComicsProcessedFollowProgressInBackgroundJobs', {
+              discoveryReduceSumTaskSumTaskProcessed0: discovery.reduce((sum, task) => sum + task.processed, 0),
+            })}
           </p>
         )}
         {library.data?.items.length === 0 &&
@@ -363,17 +368,19 @@ export function Panels({
           !library.isFetching &&
           !folders.isFetching &&
           !folders.data?.items.length && (
-            <p className="text-muted">
-              No comics match. Add archives or explicitly classify an image folder as a comic.
-            </p>
+            <p className="text-muted">{t('panels:panels.noComicsMatchAddArchivesOrExplicitlyClassifyAn')}</p>
           )}
         {folders.data?.nextCursor && (
-          <QuietButton onClick={() => setFolderAfter(folders.data!.nextCursor!)}>More folders</QuietButton>
+          <QuietButton onClick={() => setFolderAfter(folders.data!.nextCursor!)}>
+            {t('panels:panels.moreFolders')}
+          </QuietButton>
         )}
         <div className="mt-4 flex gap-2">
-          {cursor && <QuietButton onClick={() => setCursor(undefined)}>Newest comics</QuietButton>}
+          {cursor && <QuietButton onClick={() => setCursor(undefined)}>{t('panels:panels.newestComics')}</QuietButton>}
           {library.data?.nextCursor && (
-            <QuietButton onClick={() => setCursor(library.data?.nextCursor ?? undefined)}>More comics</QuietButton>
+            <QuietButton onClick={() => setCursor(library.data?.nextCursor ?? undefined)}>
+              {t('panels:panels.moreComics')}
+            </QuietButton>
           )}
         </div>
       </div>
@@ -382,8 +389,8 @@ export function Panels({
         onOpenChange={open => {
           if (!open) setDetails(null)
         }}
-        title="Comic details"
-        description="Edit library metadata, favourite status and cover selection."
+        title={t('panels:panels.comicDetails')}
+        description={t('panels:panels.editLibraryMetadataFavouriteStatusAndCoverSelection')}
         sheet
       >
         {details !== null && <ComicDetails id={details} onSaved={() => setDetails(null)} />}
@@ -391,8 +398,8 @@ export function Panels({
       <Modal
         open={manage}
         onOpenChange={setManage}
-        title="Comic locations"
-        description="Save recursive comic sources within your libraries. Image folders are included only with your explicit choice."
+        title={t('panels:panels.comicLocations')}
+        description={t('panels:panels.saveRecursiveComicSourcesWithinYourLibrariesImageFolders')}
         sheet
       >
         {manage && (

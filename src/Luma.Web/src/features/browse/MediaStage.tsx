@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
@@ -230,9 +231,9 @@ export function MediaStage({
       else if (target?.requestFullscreen) await target.requestFullscreen()
       // iPhone Safari only offers fullscreen through its native video presentation.
       else if (player?.webkitEnterFullscreen) player.webkitEnterFullscreen()
-      else setFailure('Fullscreen is unavailable in this browser.')
+      else setFailure(t('browse:mediaStage.fullscreenIsUnavailableInThisBrowser'))
     } catch {
-      setFailure('Fullscreen is unavailable in this browser.')
+      setFailure(t('browse:mediaStage.fullscreenIsUnavailableInThisBrowser'))
     }
   }
   async function pictureInPicture() {
@@ -245,9 +246,9 @@ export function MediaStage({
         player.webkitSetPresentationMode(
           player.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture',
         )
-      else setFailure('Picture in picture is unavailable in this browser.')
+      else setFailure(t('browse:mediaStage.pictureInPictureIsUnavailableInThisBrowser'))
     } catch {
-      setFailure('Picture in picture is unavailable for this video.')
+      setFailure(t('browse:mediaStage.pictureInPictureIsUnavailableForThisVideo'))
     }
   }
   function togglePlay() {
@@ -255,7 +256,9 @@ export function MediaStage({
     if (!player) return
     const starting = player.paused
     if (starting)
-      void player.play().catch(() => setFailure(current => current || 'Autoplay was blocked. Press Play to start.'))
+      void player
+        .play()
+        .catch(() => setFailure(current => current || t('browse:mediaStage.autoplayWasBlockedPressPlayToStart')))
     else player.pause()
     return starting
   }
@@ -459,8 +462,8 @@ export function MediaStage({
               current =>
                 current ||
                 (player.error || (error instanceof DOMException && error.name === 'NotSupportedError')
-                  ? 'This video could not play. Copy its stream URL and open it in an external player such as VLC.'
-                  : 'Autoplay was blocked. Press Play to start.'),
+                  ? t('browse:mediaStage.thisVideoCouldNotPlayCopyItsStreamURL')
+                  : t('browse:mediaStage.autoplayWasBlockedPressPlayToStart')),
             )
         })
     return () => {
@@ -484,7 +487,7 @@ export function MediaStage({
       player.pause()
     } else if (resumePlayback.current) {
       resumePlayback.current = false
-      void player.play().catch(() => setFailure('Press Play to resume playback.'))
+      void player.play().catch(() => setFailure(t('browse:mediaStage.pressPlayToResumePlayback')))
     }
   }, [suspended, item.id])
   // Lock-screen, headset and notification controls, and background playback metadata.
@@ -755,9 +758,7 @@ export function MediaStage({
             }}
             onError={() => {
               ready()
-              setFailure(
-                'This video could not play. Copy its stream URL and open it in an external player such as VLC.',
-              )
+              setFailure(t('browse:mediaStage.thisVideoCouldNotPlayCopyItsStreamURL'))
             }}
             className={`motion-media pointer-events-none h-full w-full ${displayFill ? 'object-cover' : 'object-contain'}`}
           >
@@ -798,16 +799,18 @@ export function MediaStage({
             role="status"
             className="pointer-events-none absolute right-8 top-1/2 rounded-lg bg-canvas/85 px-4 py-3 text-ink"
           >
-            Volume {Math.round(volume * 100)}%
+            {t('browse:mediaStage.volume', { mathRoundVolume100: Math.round(volume * 100) })}
           </span>
         )}
         {/* Two buttons on the video itself: continuing is the accented one, starting over carries
           the same frosted backing as every other control that sits on media. */}
         {isVideo && watch.resume !== null && (
           <div data-chrome className="absolute top-16 flex flex-wrap gap-3">
-            <Button onClick={() => watch.choose(false)}>Resume from {formatTime(watch.resume)}</Button>
+            <Button onClick={() => watch.choose(false)}>
+              {t('browse:mediaStage.resumeFrom', { formatTimeWatchResume: formatTime(watch.resume) })}
+            </Button>
             <QuietButton variant="overlay" className="min-h-11" onClick={() => watch.choose(true)}>
-              Start from beginning
+              {t('browse:mediaStage.startFromBeginning')}
             </QuietButton>
           </div>
         )}
@@ -817,11 +820,15 @@ export function MediaStage({
             data-testid="buffering"
           >
             <LoaderCircle aria-hidden="true" className="size-8 text-ink motion-safe:animate-spin" />
-            <span className="sr-only">Buffering</span>
+            <span className="sr-only">{t('browse:mediaStage.buffering')}</span>
           </div>
         )}
         {isVideo && reels && !playing && !buffering && (
-          <IconButton label="Play video" className="absolute border-transparent bg-canvas/85" onClick={togglePlay}>
+          <IconButton
+            label={t('browse:mediaStage.playVideo')}
+            className="absolute border-transparent bg-canvas/85"
+            onClick={togglePlay}
+          >
             <Play className="size-6" />
           </IconButton>
         )}
@@ -841,7 +848,7 @@ export function MediaStage({
             className={`motion-flash pointer-events-none absolute top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-full bg-canvas/60 px-4 py-3 text-xs font-semibold text-ink ${skip.forward ? 'right-8' : 'left-8'}`}
           >
             {skip.forward ? <ChevronsRight className="size-6" /> : <ChevronsLeft className="size-6" />}
-            {skipSeconds} s
+            {skipSeconds} {t('browse:mediaStage.s')}
           </span>
         )}
         {boosted && (
@@ -917,7 +924,7 @@ export function MediaStage({
         )}
         {!isFullscreen && controlledOptionsOpen === undefined && (
           <IconButton
-            label="More options"
+            label={t('browse:mediaStage.moreOptions')}
             className={`absolute right-3 border-transparent bg-canvas/85 sm:right-5 ${reels ? 'bottom-16' : 'top-28'}`}
             onClick={() => setOptionsOpen(true)}
           >
@@ -928,7 +935,7 @@ export function MediaStage({
         {exitVisible && (
           <IconButton
             data-chrome
-            label="Exit fullscreen"
+            label={t('browse:mediaStage.exitFullscreen')}
             className={`absolute right-3 top-3 z-10 border-transparent bg-canvas/85 transition-opacity duration-200 sm:right-5 sm:top-5 ${chromeHidden ? 'pointer-events-none opacity-0' : ''}`}
             onClick={() => void fullscreen()}
           >
@@ -954,8 +961,8 @@ export function MediaStage({
       <Modal
         open={optionsOpen}
         onOpenChange={setOptionsOpen}
-        title="View options"
-        description="Fit, playback and download actions for this item."
+        title={t('browse:mediaStage.viewOptions')}
+        description={t('browse:mediaStage.fitPlaybackAndDownloadActionsForThisItem')}
         sheet
       >
         {/* Labeled settings sit in their own row: mixed into the button row, their taller
@@ -963,7 +970,7 @@ export function MediaStage({
         {isVideo && (
           <div className="grid gap-4 px-5 pt-5 sm:grid-cols-2">
             {reels && (
-              <Field label="Volume">
+              <Field label={t('browse:mediaStage.volume2')}>
                 <Range
                   min={0}
                   max={1}
@@ -974,7 +981,7 @@ export function MediaStage({
                 />
               </Field>
             )}
-            <Field label="Playback speed">
+            <Field label={t('browse:mediaStage.playbackSpeed')}>
               <Select
                 value={rate}
                 onChange={event => {
@@ -997,21 +1004,23 @@ export function MediaStage({
               toggleFill()
             }}
           >
-            {fill ? 'Fit' : 'Fill'}
+            {fill ? t('browse:mediaStage.fit') : t('browse:mediaStage.fill')}
           </QuietButton>
           {zoomable && (
             <>
-              <QuietButton aria-label="Zoom out" onClick={() => scale(zoom / 1.25)}>
+              <QuietButton aria-label={t('browse:mediaStage.zoomOut')} onClick={() => scale(zoom / 1.25)}>
                 −
               </QuietButton>
-              <QuietButton aria-label="Reset zoom" onClick={() => scale(1)}>
+              <QuietButton aria-label={t('browse:mediaStage.resetZoom')} onClick={() => scale(1)}>
                 {Math.round(zoom * 100)}%
               </QuietButton>
-              <QuietButton aria-label="Zoom in" onClick={() => scale(zoom * 1.25)}>
+              <QuietButton aria-label={t('browse:mediaStage.zoomIn')} onClick={() => scale(zoom * 1.25)}>
                 +
               </QuietButton>
-              <QuietButton onClick={actualSize}>Actual size</QuietButton>
-              <QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>Rotate</QuietButton>
+              <QuietButton onClick={actualSize}>{t('browse:mediaStage.actualSize')}</QuietButton>
+              <QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>
+                {t('browse:mediaStage.rotate')}
+              </QuietButton>
             </>
           )}
           {reels && onOpenViewer && (
@@ -1026,7 +1035,7 @@ export function MediaStage({
                 setOptionsOpen(false)
               }}
             >
-              Open in viewer
+              {t('browse:mediaStage.openInViewer')}
             </QuietButton>
           )}
           {isVideo && pictureInPictureAvailable && (
@@ -1037,7 +1046,7 @@ export function MediaStage({
               }}
             >
               <PictureInPicture2 className="size-4" />
-              Picture in picture
+              {t('browse:mediaStage.pictureInPicture')}
             </QuietButton>
           )}
           <QuietButton
@@ -1047,27 +1056,23 @@ export function MediaStage({
             }}
           >
             <Maximize className="size-4" />
-            Fullscreen
+            {t('browse:mediaStage.fullscreen')}
           </QuietButton>
           <QuietLink href={`${originalUrl}?download=true`}>
             <Download className="size-4" />
-            Download
+            {t('browse:mediaStage.download')}
           </QuietLink>
           {isVideo && (
             <QuietButton
               onClick={() => {
                 void navigator.clipboard
                   ?.writeText(new URL(originalUrl, window.location.href).href)
-                  .then(() => setFailure('Stream URL copied. In VLC, choose Open Network Stream and paste it.'))
-                  .catch(() =>
-                    setFailure(
-                      "Copy the download link and paste the stream URL into your player's network-stream dialog.",
-                    ),
-                  )
+                  .then(() => setFailure(t('browse:mediaStage.streamURLCopiedInVLCChooseOpenNetworkStream')))
+                  .catch(() => setFailure(t('browse:mediaStage.copyTheDownloadLinkAndPasteTheStreamURL')))
                 setOptionsOpen(false)
               }}
             >
-              Copy stream URL
+              {t('browse:mediaStage.copyStreamURL')}
             </QuietButton>
           )}
         </div>

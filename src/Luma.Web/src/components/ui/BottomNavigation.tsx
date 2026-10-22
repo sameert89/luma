@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import type { LucideIcon } from 'lucide-react'
 
 export type NavigationItem = { id: string; label: string; icon: LucideIcon }
@@ -13,7 +14,7 @@ export function BottomNavigation({
 }) {
   return (
     <nav
-      aria-label="Primary navigation"
+      aria-label={t('ui:bottomNavigation.primaryNavigation')}
       className="relative z-30 flex shrink-0 border-t border-line bg-canvas px-2 pb-safe-2 pt-2 md:hidden"
     >
       {items.map(item => {

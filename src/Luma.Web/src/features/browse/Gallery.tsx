@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Check, Film, Heart, Images, LoaderCircle, RefreshCw } from 'lucide-react'
@@ -193,7 +194,7 @@ export function Gallery({
       const page = await mediaPage(filters, cursor, controller.signal)
       if (disposed) return
       if (!page.items.some(item => item.id === revealMediaId))
-        throw new Error('The last viewed item is no longer in these results.')
+        throw new Error(t('browse:gallery.theLastViewedItemIsNoLongerInThese'))
       await client.cancelQueries({ queryKey: ['media', filters], exact: true })
       if (disposed) return
       const before = page.previousCursor ? await mediaPage(filters, page.previousCursor, controller.signal) : null
@@ -284,10 +285,10 @@ export function Gallery({
           </span>
           <span className="sr-only">
             {pull.refreshing
-              ? 'Refreshing…'
+              ? t('browse:gallery.refreshing')
               : pull.distance >= pullThreshold
-                ? 'Release to refresh'
-                : 'Pull to refresh'}
+                ? t('browse:gallery.releaseToRefresh')
+                : t('browse:gallery.pullToRefresh')}
           </span>
         </div>
       )}
@@ -296,13 +297,13 @@ export function Gallery({
         {folderIndexing && (
           <p role="status" className="flex items-center gap-2 pb-3 text-sm text-muted">
             <LoaderCircle className="size-4 motion-safe:animate-spin" />
-            Checking this folder and preparing previews…
+            {t('browse:gallery.checkingThisFolderAndPreparingPreviews')}
           </p>
         )}
         {revealMediaId && !revealFound && (
           <p role="status" className="flex items-center gap-2 py-4 text-sm text-muted">
             <LoaderCircle className="size-4 motion-safe:animate-spin" />
-            Finding the last viewed item…
+            {t('browse:gallery.findingTheLastViewedItem')}
           </p>
         )}
         {revealError && (
@@ -323,22 +324,21 @@ export function Gallery({
         {firstLoad && (
           <div role="status" className="flex items-center justify-center gap-3 py-20 text-muted">
             <LoaderCircle className="size-5 animate-spin" />
-            Loading your collection…
+            {t('browse:gallery.loadingYourCollection')}
           </div>
         )}
         {query.isError && (
           <div role="alert" className="space-y-3 p-5 text-danger">
             <p>{errorMessage(query.error)}</p>
-            <QuietButton onClick={() => void query.refetch()}>Try again</QuietButton>
+            <QuietButton onClick={() => void query.refetch()}>{t('browse:gallery.tryAgain')}</QuietButton>
           </div>
         )}
         {nothingToShow && (
           <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center">
             <Images className="size-12 text-muted" />
-            <h2 className="text-xl font-semibold">No media to show</h2>
+            <h2 className="text-xl font-semibold">{t('browse:gallery.noMediaToShow')}</h2>
             <p className="text-sm leading-relaxed text-muted">
-              Try another folder or adjust your filters. If this is a new library, start a scan to add your photos and
-              videos.
+              {t('browse:gallery.tryAnotherFolderOrAdjustYourFiltersIfThis')}
             </p>
           </div>
         )}
@@ -348,7 +348,7 @@ export function Gallery({
             onClick={() => void load(true)}
             disabled={query.isFetching}
           >
-            Load earlier items
+            {t('browse:gallery.loadEarlierItems')}
           </QuietButton>
         )}
         <div
@@ -387,7 +387,7 @@ export function Gallery({
                     <button
                       data-media-id={item.id}
                       className="block w-full text-left"
-                      aria-label={`Open ${item.fileName}`}
+                      aria-label={t('browse:gallery.open', { value1: item.fileName })}
                       onClick={() => onOpen(item)}
                     >
                       <CachedImage
@@ -401,7 +401,11 @@ export function Gallery({
                     </button>
                     {item.mediaType === 'video' && item.watchProgress && item.watchProgress.state !== 'unwatched' && (
                       <span
-                        aria-label={item.watchProgress.state === 'completed' ? 'Watched' : 'In progress'}
+                        aria-label={
+                          item.watchProgress.state === 'completed'
+                            ? t('browse:gallery.watched')
+                            : t('browse:gallery.inProgress')
+                        }
                         className="pointer-events-none absolute bottom-9 left-0 h-1 bg-accent"
                         style={{
                           width: `${item.watchProgress.state === 'completed' ? 100 : Math.min(100, (item.watchProgress.positionSeconds / item.watchProgress.durationSeconds) * 100)}%`,
@@ -411,24 +415,24 @@ export function Gallery({
                     {item.mediaType === 'video' && (
                       <span className="pointer-events-none absolute bottom-10 right-2 flex items-center gap-1 rounded bg-canvas/90 px-2 py-1 text-xs">
                         <Film className="size-3" aria-hidden="true" />
-                        Video
+                        {t('browse:gallery.video')}
                       </span>
                     )}
                     {isGif(item) && (
                       <span className="pointer-events-none absolute bottom-10 right-2 rounded bg-canvas/90 px-2 py-1 text-xs font-semibold">
-                        GIF
+                        {t('browse:gallery.gIF')}
                       </span>
                     )}
                     {item.preference === 'liked' && (
                       <Heart
                         className="pointer-events-none absolute right-2 top-2 size-4 fill-accent text-accent"
-                        aria-label="Liked"
+                        aria-label={t('browse:gallery.liked')}
                       />
                     )}
                     {selecting && (
                       <span className="absolute left-2 top-2 flex size-11 items-center justify-center rounded-lg bg-canvas/90">
                         <Checkbox
-                          aria-label={`Select ${item.fileName}`}
+                          aria-label={t('browse:gallery.select', { value1: item.fileName })}
                           checked={selected.has(item.id)}
                           onChange={() => onSelect(item.id)}
                         />
@@ -446,12 +450,12 @@ export function Gallery({
         {query.hasNextPage && (
           <div className="flex justify-center py-4">
             <QuietButton onClick={() => void load(false)} disabled={query.isFetching}>
-              {query.isFetching ? 'Loading more…' : 'Load more'}
+              {query.isFetching ? t('browse:gallery.loadingMore') : t('browse:gallery.loadMore')}
             </QuietButton>
           </div>
         )}
         {items.length > 0 && !query.hasNextPage && (
-          <p className="py-5 text-center text-xs text-muted">End of results</p>
+          <p className="py-5 text-center text-xs text-muted">{t('browse:gallery.endOfResults')}</p>
         )}
       </div>
     </div>

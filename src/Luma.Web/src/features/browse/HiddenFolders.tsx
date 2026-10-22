@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye } from 'lucide-react'
 import { QuietButton } from '../../components/ui/Controls'
@@ -31,12 +32,12 @@ export function HiddenFolders() {
   })
   return (
     <SettingsSection
-      title="Hidden folders"
-      description="Hidden folders and everything inside them are left out of the library, search, Reels, slideshows and indexing. Hide a folder from its folder actions."
+      title={t('browse:hiddenFolders.hiddenFolders')}
+      description={t('browse:hiddenFolders.hiddenFoldersAndEverythingInsideThemAreLeftOut')}
     >
       {hidden.isPending && (
         <p role="status" className="text-sm text-muted">
-          Loading hidden folders…
+          {t('browse:hiddenFolders.loadingHiddenFolders')}
         </p>
       )}
       {hidden.isError && (
@@ -44,7 +45,9 @@ export function HiddenFolders() {
           {errorMessage(hidden.error)}
         </p>
       )}
-      {hidden.data?.length === 0 && <p className="text-sm text-muted">No folders are hidden.</p>}
+      {hidden.data?.length === 0 && (
+        <p className="text-sm text-muted">{t('browse:hiddenFolders.noFoldersAreHidden')}</p>
+      )}
       {!!hidden.data?.length && (
         <ul className="divide-y divide-line">
           {hidden.data.map(folder => (
@@ -56,12 +59,12 @@ export function HiddenFolders() {
                 <p className="truncate text-xs text-muted">{folder.libraryName}</p>
               </div>
               <QuietButton
-                aria-label={`Show ${folder.path}`}
+                aria-label={t('browse:hiddenFolders.show', { value1: folder.path })}
                 disabled={show.isPending}
                 onClick={() => show.mutate(folder.id)}
               >
                 <Eye className="size-4" />
-                Show
+                {t('browse:hiddenFolders.show2')}
               </QuietButton>
             </li>
           ))}

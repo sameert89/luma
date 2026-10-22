@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ListVideo, Maximize, Minimize, Pause, PictureInPicture2, Play, Volume2, VolumeX } from 'lucide-react'
 import { IconButton, QuietButton, Range, SeekRange } from '../../components/ui/Controls'
@@ -226,13 +227,17 @@ export function ViewerVideoControls({
       data-chrome
       className={`absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-2 bg-canvas/80 p-3 transition-opacity duration-200 phone-portrait:gap-x-1 phone-portrait:gap-y-0 phone-portrait:px-2 phone-portrait:pb-2 phone-portrait:pt-0 ${hidden ? 'pointer-events-none opacity-0' : ''}`}
     >
-      <IconButton label={playing ? 'Pause' : 'Play'} className="border-transparent bg-canvas" onClick={onTogglePlay}>
+      <IconButton
+        label={playing ? t('browse:videoControls.pause') : t('browse:videoControls.play')}
+        className="border-transparent bg-canvas"
+        onClick={onTogglePlay}
+      >
         {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
       </IconButton>
       <Scrubber
         video={video}
         mediaId={mediaId}
-        label="Seek"
+        label={t('browse:videoControls.seek')}
         className="flex-1 phone-portrait:order-first phone-portrait:basis-full"
       >
         {(clock, shown) => (
@@ -242,14 +247,14 @@ export function ViewerVideoControls({
         )}
       </Scrubber>
       <IconButton
-        label={muted ? 'Unmute' : 'Mute'}
+        label={muted ? t('browse:videoControls.unmute') : t('browse:videoControls.mute')}
         className="phone-portrait:border-transparent"
         onClick={onToggleMute}
       >
         {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
       </IconButton>
       <Range
-        aria-label="Volume"
+        aria-label={t('browse:videoControls.volume')}
         aria-valuetext={`${Math.round(volume * 100)} percent`}
         min={0}
         max={1}
@@ -258,14 +263,18 @@ export function ViewerVideoControls({
         className="w-20"
         onChange={event => onVolume(Number(event.target.value))}
       />
-      <QuietButton className="order-1 min-h-10 px-3 phone-portrait:hidden" aria-label="Playback speed" onClick={onRate}>
+      <QuietButton
+        className="order-1 min-h-10 px-3 phone-portrait:hidden"
+        aria-label={t('browse:videoControls.playbackSpeed')}
+        onClick={onRate}
+      >
         {rate}×
       </QuietButton>
       {/* Whether the next video starts when this one ends; lives in the bar so it is there in fullscreen too. */}
       {onAutoplay && (
         <IconButton
-          label="Autoplay next video"
-          title={autoplay ? 'Autoplay is on' : 'Autoplay is off'}
+          label={t('browse:videoControls.autoplayNextVideo')}
+          title={autoplay ? t('browse:videoControls.autoplayIsOn') : t('browse:videoControls.autoplayIsOff')}
           aria-pressed={autoplay}
           className="order-1 border-transparent"
           onClick={onAutoplay}
@@ -275,7 +284,7 @@ export function ViewerVideoControls({
       )}
       {pictureInPicture && (
         <IconButton
-          label="Picture in picture"
+          label={t('browse:videoControls.pictureInPicture')}
           className="order-1 border-transparent phone-portrait:hidden"
           onClick={onPictureInPicture}
         >
@@ -284,7 +293,7 @@ export function ViewerVideoControls({
       )}
       <div className="contents max-md:absolute max-md:bottom-24 max-md:left-2 max-md:flex max-md:gap-1">{captions}</div>
       <IconButton
-        label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        label={fullscreen ? t('browse:videoControls.exitFullscreen') : t('browse:videoControls.fullscreen')}
         className="order-1 border-transparent"
         onClick={onFullscreen}
       >
@@ -319,7 +328,7 @@ export function ReelsSeek({
       <Scrubber
         video={video}
         mediaId={mediaId}
-        label="Seek video"
+        label={t('browse:videoControls.seekVideo')}
         interactive={visible}
         className={`w-full ${visible ? '' : 'pointer-events-none'}`}
         onInteract={onReveal}

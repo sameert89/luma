@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -13,8 +14,8 @@ export function BackgroundJobsDialog({ open, onOpenChange }: { open: boolean; on
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Background jobs"
-      description="Uploads, file operations, indexing and metadata jobs. Rescan a folder or library from its ⋯ menu."
+      title={t('status:backgroundJobs.backgroundJobs')}
+      description={t('status:backgroundJobs.uploadsFileOperationsIndexingAndMetadataJobsRescanA')}
       sheet
     >
       <div className="p-5">
@@ -70,7 +71,13 @@ export function BackgroundJobsButton({ libraryId, compact = false }: { libraryId
       <IconButton
         size={compact ? 'default' : 'large'}
         className={compact ? 'bg-canvas' : 'bg-canvas shadow-lg'}
-        label={attention ? 'Background jobs, needs attention' : busy ? 'Background jobs, running' : 'Background jobs'}
+        label={
+          attention
+            ? t('status:backgroundJobs.backgroundJobsNeedsAttention')
+            : busy
+              ? t('status:backgroundJobs.backgroundJobsRunning')
+              : t('status:backgroundJobs.backgroundJobs')
+        }
         onClick={() => setOpen(true)}
       >
         {icon}

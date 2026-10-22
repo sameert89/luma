@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useEffect, useId, useState, useSyncExternalStore } from 'react'
 import { Checkbox, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
@@ -19,22 +20,21 @@ export function FileConflictDialog() {
       onOpenChange={open => {
         if (!open) choose('skip')
       }}
-      title="An item already exists"
-      description="Choose how to handle this destination conflict."
+      title={t('files:fileConflictDialog.anItemAlreadyExists')}
+      description={t('files:fileConflictDialog.chooseHowToHandleThisDestinationConflict')}
     >
       <div className="space-y-4 p-5">
         <p className="break-words text-sm font-medium">{current?.target}</p>
         <p className="text-sm text-muted">
-          Replace moves the existing item and its contents to the recycle bin before publishing this item. Skip keeps
-          the destination unchanged.
+          {t('files:fileConflictDialog.replaceMovesTheExistingItemAndItsContentsTo')}
         </p>
         <label htmlFor={allId} className="flex items-center gap-2 text-sm">
           <Checkbox id={allId} checked={all} onChange={event => setAll(event.target.checked)} />
-          Apply to all remaining conflicts in this batch
+          {t('files:fileConflictDialog.applyToAllRemainingConflictsInThisBatch')}
         </label>
         <div className="flex flex-wrap gap-2">
-          <QuietButton onClick={() => choose('replace')}>Replace</QuietButton>
-          <QuietButton onClick={() => choose('skip')}>Skip</QuietButton>
+          <QuietButton onClick={() => choose('replace')}>{t('files:fileConflictDialog.replace')}</QuietButton>
+          <QuietButton onClick={() => choose('skip')}>{t('files:fileConflictDialog.skip')}</QuietButton>
         </div>
       </div>
     </Modal>

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useId, type ReactNode } from 'react'
 import { EllipsisVertical, Heart, HeartCrack, X } from 'lucide-react'
 import { IconButton } from '../../components/ui/Controls'
@@ -47,7 +48,7 @@ export function MediaActions({
       </div>
       <div className={`flex items-center gap-2 ${interactive}`}>
         <IconButton
-          label="Like"
+          label={t('browse:mediaActions.like')}
           aria-pressed={liked}
           className={actionButton}
           onClick={() => onPreference(liked ? 'neutral' : 'liked')}
@@ -56,7 +57,7 @@ export function MediaActions({
         </IconButton>
         {/* The broken heart stays an outline: filled, its crack disappears and it reads as a like. */}
         <IconButton
-          label="Dislike"
+          label={t('browse:mediaActions.dislike')}
           aria-pressed={disliked}
           className={actionButton}
           onClick={() => onPreference(disliked ? 'neutral' : 'disliked')}
@@ -64,7 +65,7 @@ export function MediaActions({
           <HeartCrack className={`size-4 ${disliked ? 'text-danger' : ''}`} />
         </IconButton>
         <IconButton
-          label={menuOpen ? `Close ${menuLabel.toLowerCase()}` : menuLabel}
+          label={menuOpen ? t('browse:mediaActions.close', { value1: menuLabel.toLowerCase() }) : menuLabel}
           aria-expanded={menuOpen}
           aria-controls={menuId}
           className={actionButton}

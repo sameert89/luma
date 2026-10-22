@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, Clapperboard, Images, X } from 'lucide-react'
 import { Checkbox, Field, IconButton, Input, QuietButton, Range, Select } from '../../components/ui/Controls'
@@ -21,7 +22,7 @@ export function useAppearance() {
         if (active && generation === revision.current) setBlob(value)
       })
       .catch(() => {
-        if (active) setError('Could not load the saved background.')
+        if (active) setError(t('app:appearance.couldNotLoadTheSavedBackground'))
       })
     return () => {
       active = false
@@ -41,7 +42,7 @@ export function useAppearance() {
     try {
       localStorage.setItem('luma-appearance-v2', JSON.stringify(value))
     } catch {
-      setError('Appearance changes could not be saved on this device.')
+      setError(t('app:appearance.appearanceChangesCouldNotBeSavedOnThisDevice'))
     }
   }, [value])
   function update(patch: Partial<Appearance>) {
@@ -61,7 +62,7 @@ export function useAppearance() {
         if (value.background === 'custom') update({ background: 'none' })
       }
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Could not save the background.')
+      setError(error instanceof Error ? error.message : t('app:appearance.couldNotSaveTheBackground'))
     } finally {
       setBusy(false)
     }
@@ -98,30 +99,30 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
   const backgroundInput = useRef<HTMLInputElement>(null)
   return (
     <SettingsSection
-      title="Background & motion"
-      description="Backgrounds and presentation preferences are saved on this device. Controls retain a theme-colored backing for readability."
+      title={t('app:appearance.backgroundMotion')}
+      description={t('app:appearance.backgroundsAndPresentationPreferencesAreSavedOnThisDevice')}
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Background">
+        <Field label={t('app:appearance.background')}>
           <Select
             value={value.background}
             onChange={event => update({ background: event.target.value as Appearance['background'] })}
           >
-            <option value="none">Theme canvas</option>
-            <option value="aurora">Aurora</option>
-            <option value="sunset">Sakura sunset</option>
-            <option value="paper">Manga paper</option>
-            <option value="solid">Solid color</option>
-            <option value="gradient">Custom gradient</option>
+            <option value="none">{t('app:appearance.themeCanvas')}</option>
+            <option value="aurora">{t('app:appearance.aurora')}</option>
+            <option value="sunset">{t('app:appearance.sakuraSunset')}</option>
+            <option value="paper">{t('app:appearance.mangaPaper')}</option>
+            <option value="solid">{t('app:appearance.solidColor')}</option>
+            <option value="gradient">{t('app:appearance.customGradient')}</option>
             <option value="custom" disabled={!appearance.customUrl}>
-              Custom image
+              {t('app:appearance.customImage')}
             </option>
           </Select>
         </Field>
         <div className="flex min-w-0 flex-col gap-2 text-sm font-medium text-muted">
-          <span>Custom background image</span>
+          <span>{t('app:appearance.customBackgroundImage')}</span>
           <QuietButton className="min-h-11 w-full" disabled={busy} onClick={() => backgroundInput.current?.click()}>
-            Upload background image
+            {t('app:appearance.uploadBackgroundImage')}
           </QuietButton>
           <input
             ref={backgroundInput}
@@ -136,12 +137,12 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
           />
         </div>
         {['solid', 'gradient'].includes(value.background) && (
-          <Field label="Background color">
+          <Field label={t('app:appearance.backgroundColor')}>
             <Input type="color" value={value.color} onChange={event => update({ color: event.target.value })} />
           </Field>
         )}
         {value.background === 'gradient' && (
-          <Field label="Second gradient color">
+          <Field label={t('app:appearance.secondGradientColor')}>
             <Input
               type="color"
               value={value.secondColor}
@@ -149,10 +150,10 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
             />
           </Field>
         )}
-        <Field label={`Background blur: ${value.blur}px`}>
+        <Field label={t('app:appearance.backgroundBlurPx', { value1: value.blur })}>
           <Range min={0} max={24} value={value.blur} onChange={event => update({ blur: Number(event.target.value) })} />
         </Field>
-        <Field label={`Background opacity: ${Math.round(value.opacity * 100)}%`}>
+        <Field label={t('app:appearance.backgroundOpacity', { value1: Math.round(value.opacity * 100) })}>
           <Range
             min={0}
             max={100}
@@ -160,7 +161,7 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
             onChange={event => update({ opacity: Number(event.target.value) / 100 })}
           />
         </Field>
-        <Field label={`Dark overlay: ${Math.round(value.darkness * 100)}%`}>
+        <Field label={t('app:appearance.darkOverlay', { value1: Math.round(value.darkness * 100) })}>
           <Range
             min={0}
             max={80}
@@ -168,7 +169,7 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
             onChange={event => update({ darkness: Number(event.target.value) / 100 })}
           />
         </Field>
-        <Field label="Background position">
+        <Field label={t('app:appearance.backgroundPosition')}>
           <Select
             value={value.position}
             onChange={event => update({ position: event.target.value as Appearance['position'] })}
@@ -180,21 +181,21 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
             ))}
           </Select>
         </Field>
-        <Field label="Background scaling">
+        <Field label={t('app:appearance.backgroundScaling')}>
           <Select value={value.scale} onChange={event => update({ scale: event.target.value as Appearance['scale'] })}>
-            <option value="cover">Cover screen</option>
-            <option value="contain">Fit image</option>
-            <option value="stretch">Stretch</option>
+            <option value="cover">{t('app:appearance.coverScreen')}</option>
+            <option value="contain">{t('app:appearance.fitImage')}</option>
+            <option value="stretch">{t('app:appearance.stretch')}</option>
           </Select>
         </Field>
-        <Field label="Animations">
+        <Field label={t('app:appearance.animations')}>
           <Select
             value={value.motion}
             onChange={event => update({ motion: event.target.value as Appearance['motion'] })}
           >
-            <option value="system">Follow device preference</option>
-            <option value="reduced">Reduced</option>
-            <option value="off">Off</option>
+            <option value="system">{t('app:appearance.followDevicePreference')}</option>
+            <option value="reduced">{t('app:appearance.reduced')}</option>
+            <option value="off">{t('app:appearance.off')}</option>
           </Select>
         </Field>
         <div className="flex items-center gap-2">
@@ -204,18 +205,18 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
             onChange={event => update({ splashes: event.target.checked })}
           />
           <label htmlFor="luma-splashes" className="text-sm">
-            Show app introductions once per session
+            {t('app:appearance.showAppIntroductionsOncePerSession')}
           </label>
         </div>
       </div>
       {appearance.customUrl && (
         <QuietButton disabled={busy} onClick={() => void appearance.image()}>
-          Remove custom background
+          {t('app:appearance.removeCustomBackground')}
         </QuietButton>
       )}
       {busy && (
         <p role="status" className="text-sm">
-          Preparing background…
+          {t('app:appearance.preparingBackground')}
         </p>
       )}
       {error && (
@@ -249,12 +250,17 @@ export function AppIntroduction({ experience, appearance }: { experience: Experi
   }, [experience, appearance.splashes, appearance.motion])
   if (!visible) return null
   const Icon = experience === 'gallery' ? Images : experience === 'flick' ? Clapperboard : BookOpen
-  const name = experience === 'gallery' ? 'Gallery' : experience === 'flick' ? 'Flick' : 'Panels'
+  const name =
+    experience === 'gallery'
+      ? t('app:appearance.gallery')
+      : experience === 'flick'
+        ? t('app:appearance.flick')
+        : t('app:appearance.panels')
   return (
     <div className={`app-introduction app-introduction-${experience}`} role="status">
       <Icon className="size-7 text-accent" aria-hidden="true" />
-      <span className="font-semibold">Luma {name}</span>
-      <IconButton label="Dismiss introduction" onClick={() => setVisible(false)}>
+      <span className="font-semibold">{t('app:appearance.luma', { name: name })}</span>
+      <IconButton label={t('app:appearance.dismissIntroduction')} onClick={() => setVisible(false)}>
         <X className="size-4" />
       </IconButton>
     </div>

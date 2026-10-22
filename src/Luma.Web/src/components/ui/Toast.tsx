@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconButton, QuietButton } from './Controls'
@@ -53,7 +54,7 @@ export function Toast({
           {action.label}
         </QuietButton>
       )}
-      <IconButton className="pointer-events-auto" label="Dismiss" onClick={onDismiss}>
+      <IconButton className="pointer-events-auto" label={t('ui:toast.dismiss')} onClick={onDismiss}>
         <X className="size-4" />
       </IconButton>
     </div>

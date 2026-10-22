@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useId, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { shuffleSeed } from './shuffleSeed'
@@ -73,9 +74,9 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
       }}
     >
       <div className="min-w-0 space-y-6 p-5">
-        <FilterSection title="Order and grouping">
+        <FilterSection title={t('browse:filterForm.orderAndGrouping')}>
           <div className={twoColumns}>
-            <Field label="Sort by">
+            <Field label={t('browse:filterForm.sortBy')}>
               <Select
                 value={draft.sort ?? 'modified'}
                 onChange={event =>
@@ -86,109 +87,109 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
                   }))
                 }
               >
-                <option value="modified">Modified date</option>
-                <option value="captured">Captured date</option>
-                <option value="name">Name</option>
-                <option value="type">Type</option>
-                <option value="size">Size</option>
-                <option value="shuffle">Shuffle</option>
+                <option value="modified">{t('browse:filterForm.modifiedDate')}</option>
+                <option value="captured">{t('browse:filterForm.capturedDate')}</option>
+                <option value="name">{t('browse:filterForm.name')}</option>
+                <option value="type">{t('browse:filterForm.type')}</option>
+                <option value="size">{t('browse:filterForm.size')}</option>
+                <option value="shuffle">{t('browse:filterForm.shuffle')}</option>
               </Select>
             </Field>
-            <Field label="Sort direction">
+            <Field label={t('browse:filterForm.sortDirection')}>
               <Select
                 value={draft.order ?? 'desc'}
                 onChange={event => set('order', event.target.value)}
                 disabled={draft.sort === 'shuffle'}
               >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
+                <option value="desc">{t('browse:filterForm.descending')}</option>
+                <option value="asc">{t('browse:filterForm.ascending')}</option>
               </Select>
             </Field>
-            <Field label="Group by">
+            <Field label={t('browse:filterForm.groupBy')}>
               <Select value={draft.groupBy ?? 'none'} onChange={event => set('groupBy', event.target.value)}>
-                <option value="none">No grouping</option>
-                <option value="tag">Tags</option>
-                <option value="folder">Folder</option>
-                <option value="date">Date</option>
-                <option value="type">Type</option>
+                <option value="none">{t('browse:filterForm.noGrouping')}</option>
+                <option value="tag">{t('browse:filterForm.tags')}</option>
+                <option value="folder">{t('browse:filterForm.folder')}</option>
+                <option value="date">{t('browse:filterForm.date')}</option>
+                <option value="type">{t('browse:filterForm.type')}</option>
               </Select>
             </Field>
             {draft.sort === 'shuffle' && (
-              <QuietButton onClick={() => set('seed', shuffleSeed())}>Reshuffle</QuietButton>
+              <QuietButton onClick={() => set('seed', shuffleSeed())}>{t('browse:filterForm.reshuffle')}</QuietButton>
             )}
           </div>
-          <p className="mt-2 text-sm text-muted">
-            Folders are sorted by name and follow the selected direction. Date, type, size and shuffle sorts apply to
-            media.
-          </p>
+          <p className="mt-2 text-sm text-muted">{t('browse:filterForm.foldersAreSortedByNameAndFollowTheSelected')}</p>
         </FilterSection>
-        <FilterSection title="Media">
+        <FilterSection title={t('browse:filterForm.media')}>
           <div className={twoColumns}>
-            <Field label="Media type">
+            <Field label={t('browse:filterForm.mediaType')}>
               <Select
                 value={draft.mediaType ?? ''}
                 onChange={event => set('mediaType', event.target.value || undefined)}
               >
-                <option value="">Photos and videos</option>
-                <option value="image">Photos</option>
-                <option value="video">Videos</option>
-                <option value="gif">GIFs</option>
-                <option value="motion">Videos and GIFs</option>
+                <option value="">{t('browse:filterForm.photosAndVideos')}</option>
+                <option value="image">{t('browse:filterForm.photos')}</option>
+                <option value="video">{t('browse:filterForm.videos')}</option>
+                <option value="gif">{t('browse:filterForm.gIFs')}</option>
+                <option value="motion">{t('browse:filterForm.videosAndGIFs')}</option>
               </Select>
             </Field>
-            <Field label="Orientation">
+            <Field label={t('browse:filterForm.orientation')}>
               <Select
                 value={draft.orientation ?? ''}
                 onChange={event => set('orientation', event.target.value || undefined)}
               >
-                <option value="">Any orientation</option>
-                <option>landscape</option>
-                <option>portrait</option>
-                <option>square</option>
+                <option value="">{t('browse:filterForm.anyOrientation')}</option>
+                <option value="landscape">{t('browse:filterForm.landscape')}</option>
+                <option value="portrait">{t('browse:filterForm.portrait')}</option>
+                <option value="square">{t('browse:filterForm.square')}</option>
               </Select>
             </Field>
-            <Field label="Favourite state">
+            <Field label={t('browse:filterForm.favouriteState')}>
               <Select
                 value={draft.preference ?? ''}
                 onChange={event => set('preference', event.target.value || undefined)}
               >
-                <option value="">Any item</option>
-                <option value="liked">Favourites</option>
-                <option value="disliked">Hidden</option>
-                <option value="neutral">Unrated</option>
+                <option value="">{t('browse:filterForm.anyItem')}</option>
+                <option value="liked">{t('browse:filterForm.favourites')}</option>
+                <option value="disliked">{t('browse:filterForm.hidden')}</option>
+                <option value="neutral">{t('browse:filterForm.unrated')}</option>
               </Select>
             </Field>
-            <Field label="Availability">
+            <Field label={t('browse:filterForm.availability')}>
               <Select
                 value={draft.availability ?? 'present'}
                 onChange={event => set('availability', event.target.value)}
               >
-                <option value="present">Present</option>
-                <option value="missing">Missing</option>
-                <option value="all">All records</option>
+                <option value="present">{t('browse:filterForm.present')}</option>
+                <option value="missing">{t('browse:filterForm.missing')}</option>
+                <option value="all">{t('browse:filterForm.allRecords')}</option>
               </Select>
             </Field>
-            <Field label="Tag state">
+            <Field label={t('browse:filterForm.tagState')}>
               <Select
                 value={draft.tagged === undefined ? '' : String(draft.tagged)}
                 onChange={event => set('tagged', event.target.value === '' ? undefined : event.target.value === 'true')}
               >
-                <option value="">Any item</option>
-                <option value="true">Tagged</option>
-                <option value="false">Untagged</option>
+                <option value="">{t('browse:filterForm.anyItem')}</option>
+                <option value="true">{t('browse:filterForm.tagged')}</option>
+                <option value="false">{t('browse:filterForm.untagged')}</option>
               </Select>
             </Field>
           </div>
         </FilterSection>
-        <FilterSection title="Location and name">
+        <FilterSection title={t('browse:filterForm.locationAndName')}>
           {draft.folderId && (
             <p className="text-sm text-muted">
-              Folder scope: {draft.folderId}{' '}
-              <QuietButton onClick={() => set('folderId', undefined)}>Clear folder scope</QuietButton>
+              {t('browse:filterForm.folderScope')}
+              {draft.folderId}{' '}
+              <QuietButton onClick={() => set('folderId', undefined)}>
+                {t('browse:filterForm.clearFolderScope')}
+              </QuietButton>
             </p>
           )}
           <div className={twoColumns}>
-            <Field label="Library">
+            <Field label={t('browse:filterForm.library')}>
               <Select
                 value={draft.libraryId ?? ''}
                 onChange={event =>
@@ -199,7 +200,7 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
                   }))
                 }
               >
-                <option value="">All libraries</option>
+                <option value="">{t('browse:filterForm.allLibraries')}</option>
                 {libraries.data?.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -207,13 +208,13 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
                 ))}
               </Select>
             </Field>
-            {text('path', 'Path contains')}
-            {text('startsWith', 'Name starts with')}
-            {text('endsWith', 'Name ends with')}
-            <Field label="Extensions">
+            {text('path', t('browse:filterForm.pathContains'))}
+            {text('startsWith', t('browse:filterForm.nameStartsWith'))}
+            {text('endsWith', t('browse:filterForm.nameEndsWith'))}
+            <Field label={t('browse:filterForm.extensions')}>
               <Input
                 value={draft.extension?.join(', ') ?? ''}
-                placeholder="jpg, png, mp4"
+                placeholder={t('browse:filterForm.extensionsExample')}
                 onChange={event =>
                   setDraft(old => ({
                     ...old,
@@ -232,19 +233,19 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
               checked={draft.recursive ?? false}
               onChange={event => set('recursive', event.target.checked)}
             />
-            Include subfolders
+            {t('browse:filterForm.includeSubfolders')}
           </label>
         </FilterSection>
-        <FilterSection title="Date">
+        <FilterSection title={t('browse:filterForm.date')}>
           <div className={twoColumns}>
-            <Field label="From (UTC)">
+            <Field label={t('browse:filterForm.fromUTC')}>
               <Input
                 type="datetime-local"
                 value={draft.dateFrom?.slice(0, 16) ?? ''}
                 onChange={event => set('dateFrom', event.target.value ? `${event.target.value}:00Z` : undefined)}
               />
             </Field>
-            <Field label="Before (UTC)">
+            <Field label={t('browse:filterForm.beforeUTC')}>
               <Input
                 type="datetime-local"
                 value={draft.dateTo?.slice(0, 16) ?? ''}
@@ -254,30 +255,34 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
           </div>
         </FilterSection>
         <details className="rounded-2xl bg-surface p-4">
-          <summary className="cursor-pointer text-sm font-semibold">Size and dimensions</summary>
+          <summary className="cursor-pointer text-sm font-semibold">{t('browse:filterForm.sizeAndDimensions')}</summary>
           <div className={`mt-4 ${twoColumns}`}>
-            {number('minSizeBytes', 'Minimum size (bytes)')}
-            {number('maxSizeBytes', 'Maximum size (bytes)')}
-            {number('minWidth', 'Minimum width', 1)}
-            {number('minHeight', 'Minimum height', 1)}
-            {number('width', 'Exact width', 1)}
-            {number('height', 'Exact height', 1)}
-            {number('minAspectRatio', 'Minimum aspect ratio', 0.01, 'any')}
-            {number('maxAspectRatio', 'Maximum aspect ratio', 0.01, 'any')}
+            {number('minSizeBytes', t('browse:filterForm.minimumSizeBytes'))}
+            {number('maxSizeBytes', t('browse:filterForm.maximumSizeBytes'))}
+            {number('minWidth', t('browse:filterForm.minimumWidth'), 1)}
+            {number('minHeight', t('browse:filterForm.minimumHeight'), 1)}
+            {number('width', t('browse:filterForm.exactWidth'), 1)}
+            {number('height', t('browse:filterForm.exactHeight'), 1)}
+            {number('minAspectRatio', t('browse:filterForm.minimumAspectRatio'), 0.01, 'any')}
+            {number('maxAspectRatio', t('browse:filterForm.maximumAspectRatio'), 0.01, 'any')}
           </div>
         </details>
-        <FilterSection title="Tags">
-          <Field label="Match tags">
+        <FilterSection title={t('browse:filterForm.tags')}>
+          <Field label={t('browse:filterForm.matchTags')}>
             <Select value={draft.tagMode ?? 'all'} onChange={event => set('tagMode', event.target.value)}>
-              <option value="all">All selected tags</option>
-              <option value="any">Any selected tag</option>
+              <option value="all">{t('browse:filterForm.allSelectedTags')}</option>
+              <option value="any">{t('browse:filterForm.anySelectedTag')}</option>
             </Select>
           </Field>
-          <Field label="Find a tag">
-            <Input value={tag} onChange={event => setTag(event.target.value)} placeholder="Search existing tags" />
+          <Field label={t('browse:filterForm.findATag')}>
+            <Input
+              value={tag}
+              onChange={event => setTag(event.target.value)}
+              placeholder={t('browse:filterForm.searchExistingTags')}
+            />
           </Field>
           {tag && (
-            <ul className="mt-3 flex flex-wrap gap-2" aria-label="Matching tags">
+            <ul className="mt-3 flex flex-wrap gap-2" aria-label={t('browse:filterForm.matchingTags')}>
               {suggestions.data?.map(item => (
                 <li key={item.id}>
                   <QuietButton
@@ -304,7 +309,7 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
                 key={name}
                 className="tag-tone min-h-9"
                 style={tagTone(name)}
-                aria-label={`Remove filter tag ${name}`}
+                aria-label={t('browse:filterForm.removeFilterTag', { value1: name })}
                 onClick={() => setDraft(old => ({ ...old, tag: old.tag?.filter(x => x !== name) }))}
               >
                 {name} ×
@@ -317,8 +322,8 @@ export function FilterForm({ value, onApply }: { value: Filters; onApply: (filte
         data-testid="filter-actions"
         className={`flex shrink-0 gap-3 border-t border-line bg-canvas px-5 py-4 ${changed ? 'motion-rise sticky bottom-0 z-10 shadow-lg' : ''}`}
       >
-        <Button type="submit">Apply filters</Button>
-        <QuietButton onClick={() => onApply({})}>Reset filters</QuietButton>
+        <Button type="submit">{t('browse:filterForm.applyFilters')}</Button>
+        <QuietButton onClick={() => onApply({})}>{t('browse:filterForm.resetFilters')}</QuietButton>
       </div>
     </form>
   )

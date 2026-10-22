@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { EllipsisVertical, Heart, Tag } from 'lucide-react'
@@ -39,8 +40,8 @@ function TagManager({ tag, onClose }: { tag: TagSummary; onClose: () => void }) 
       onOpenChange={value => {
         if (!value) onClose()
       }}
-      title={`Manage "${tag.name}"`}
-      description="Rename or remove this tag."
+      title={t('browse:collections.manage', { value1: tag.name })}
+      description={t('browse:collections.renameOrRemoveThisTag')}
       sheet
     >
       <form
@@ -50,29 +51,29 @@ function TagManager({ tag, onClose }: { tag: TagSummary; onClose: () => void }) 
           if (trimmed && trimmed !== tag.name) rename.mutate()
         }}
       >
-        <Field label="Tag name">
+        <Field label={t('browse:collections.tagName')}>
           <Input value={name} maxLength={200} onChange={event => setName(event.target.value)} />
         </Field>
-        <p className="text-xs text-muted">Renaming to another tag's spelling merges the two.</p>
+        <p className="text-xs text-muted">{t('browse:collections.renamingToAnotherTagSSpellingMergesTheTwo')}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" disabled={rename.isPending || !trimmed || trimmed === tag.name}>
-            {rename.isPending ? 'Saving…' : 'Save name'}
+            {rename.isPending ? t('browse:collections.saving') : t('browse:collections.saveName')}
           </Button>
           {confirmingDelete ? (
             <>
-              <span className="text-sm text-danger">Remove from every item?</span>
+              <span className="text-sm text-danger">{t('browse:collections.removeFromEveryItem')}</span>
               <QuietButton
                 className="border-danger text-danger"
                 disabled={remove.isPending}
                 onClick={() => remove.mutate()}
               >
-                {remove.isPending ? 'Removing…' : 'Confirm'}
+                {remove.isPending ? t('browse:collections.removing') : t('browse:collections.confirm')}
               </QuietButton>
-              <QuietButton onClick={() => setConfirmingDelete(false)}>Cancel</QuietButton>
+              <QuietButton onClick={() => setConfirmingDelete(false)}>{t('browse:collections.cancel')}</QuietButton>
             </>
           ) : (
             <QuietButton className="text-danger" onClick={() => setConfirmingDelete(true)}>
-              Delete tag
+              {t('browse:collections.deleteTag')}
             </QuietButton>
           )}
         </div>
@@ -116,7 +117,12 @@ function TagChip({ tag, onChoose, onManage }: { tag: TagSummary; onChoose: () =>
         <Tag className="size-4" />
         {tag.name}
       </QuietButton>
-      <IconButton label={`Manage tag ${tag.name}`} className="tag-tone" style={tone} onClick={onManage}>
+      <IconButton
+        label={t('browse:collections.manageTag', { value1: tag.name })}
+        className="tag-tone"
+        style={tone}
+        onClick={onManage}
+      >
         <EllipsisVertical className="size-4" />
       </IconButton>
     </div>
@@ -138,15 +144,15 @@ export function Collections({ onChoose }: { onChoose: (filters: Filters) => void
   return (
     <div className="space-y-6 overflow-auto p-5" data-scroll-restore>
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Favourites</h2>
+        <h2 className="text-lg font-semibold">{t('browse:collections.favourites')}</h2>
         <QuietButton onClick={() => onChoose({ preference: 'liked' })}>
           <Heart className="size-4" />
-          Open favourites
+          {t('browse:collections.openFavourites')}
         </QuietButton>
       </section>
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Tags</h2>
-        {tags.isPending && <p role="status">Loading tags…</p>}
+        <h2 className="text-lg font-semibold">{t('browse:collections.tags')}</h2>
+        {tags.isPending && <p role="status">{t('browse:collections.loadingTags')}</p>}
         {tags.isError && (
           <p role="alert" className="text-danger">
             {errorMessage(tags.error)}
@@ -163,17 +169,17 @@ export function Collections({ onChoose }: { onChoose: (filters: Filters) => void
           ))}
         </div>
         {tags.data?.items.length === 0 && (
-          <p className="text-sm text-muted">No tags yet. Add them from a media viewer.</p>
+          <p className="text-sm text-muted">{t('browse:collections.noTagsYetAddThemFromAMediaViewer')}</p>
         )}
-        <nav aria-label="Tag pages" className="flex gap-3">
+        <nav aria-label={t('browse:collections.tagPages')} className="flex gap-3">
           <QuietButton
             disabled={!tags.data?.previousCursor}
             onClick={() => setCursor(tags.data?.previousCursor ?? undefined)}
           >
-            Previous tags
+            {t('browse:collections.previousTags')}
           </QuietButton>
           <QuietButton disabled={!tags.data?.nextCursor} onClick={() => setCursor(tags.data?.nextCursor ?? undefined)}>
-            Next tags
+            {t('browse:collections.nextTags')}
           </QuietButton>
         </nav>
       </section>
