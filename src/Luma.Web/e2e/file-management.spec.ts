@@ -253,7 +253,7 @@ for (const choice of ['Replace', 'Skip'] as const) {
     release()
     const conflict = page.getByRole('dialog', { name: 'An item already exists', exact: true })
     await expect(conflict).toBeVisible()
-    await conflict.getByRole('checkbox', { name: 'Apply to all remaining conflicts in this batch' }).check()
+    await conflict.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts' }).check()
     await conflict.getByRole('button', { name: choice, exact: true }).click()
     await expect(conflict).toBeHidden()
     await expect
@@ -311,7 +311,7 @@ for (const [kind, choice] of [
     await page.getByRole('button', { name: kind, exact: true }).click()
     await page.getByRole('button', { name: 'Paste (2)', exact: true }).click()
     const conflict = page.getByRole('dialog', { name: 'An item already exists', exact: true })
-    await conflict.getByRole('checkbox', { name: 'Apply to all remaining conflicts in this batch' }).check()
+    await conflict.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts' }).check()
     await conflict.getByRole('button', { name: choice, exact: true }).click()
     await expect(conflict).toBeHidden()
     await expect(

@@ -123,7 +123,11 @@ export function Help({ onBack }: { onBack?: () => void }) {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold">{entry.name}</p>
                         <p className="text-xs text-muted">{entry.where}</p>
-                        <p className="mt-1 text-sm leading-relaxed">{entry.what}</p>
+                        <div className="mt-1 space-y-2 text-sm leading-relaxed">
+                          {entry.what.split('\n\n').map(paragraph => (
+                            <p key={paragraph}>{paragraph}</p>
+                          ))}
+                        </div>
                         {entry.code && (
                           <pre className="mt-3 max-w-full overflow-auto rounded-xl border border-line bg-canvas p-3 text-xs">
                             <code>{entry.code}</code>

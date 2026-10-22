@@ -62,7 +62,7 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
   }
   return (
     <div className="space-y-4 p-5">
-      <p className="text-sm text-muted">
+      <p className="whitespace-pre-line text-sm text-muted">
         {t('panels:comicLocations.chooseLocationsInsideYourServerConfiguredLibrariesEachLocation')}
       </p>
       {sources.isError && <p role="alert">{errorMessage(sources.error)}</p>}

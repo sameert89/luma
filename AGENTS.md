@@ -129,6 +129,13 @@ Avoid excessive visual effects:
 - unnecessary animations
 - animation durations above 200ms for routine controls
 
+## User-facing copy
+
+Follow the UI writing guidance in `docs/LOCALIZATION.md`: natural, concise,
+conversational English, without marketing language, repeated assurances or
+implementation details in everyday prompts. Keep user-facing text in the
+translation catalogs.
+
 ## Accessibility
 
 Accessibility is a functional requirement.

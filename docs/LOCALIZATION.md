@@ -43,8 +43,8 @@ const message = t('files:fileToolbar.operationsQueued', { count: queued, skipped
 ```json
 {
   "fileToolbar": {
-    "operationsQueued_one": "{{count}} operation queued.{{skipped}} Follow progress in Background jobs.",
-    "operationsQueued_other": "{{count}} operations queued.{{skipped}} Follow progress in Background jobs."
+    "operationsQueued_one": "{{count}} operation queued.{{skipped}} Check Background jobs for progress.",
+    "operationsQueued_other": "{{count}} operations queued.{{skipped}} Check Background jobs for progress."
   }
 }
 ```
@@ -58,10 +58,23 @@ must be able to move the styled portion without changing JSX.
 React escapes rendered text and values. Do not insert translations with
 `dangerouslySetInnerHTML` or turn user-provided text into translation keys.
 
-The API currently reuses error codes across distinct validation messages.
-`apiMessage()` matches known titles through the English catalog while retaining
-unknown server messages verbatim, so newer servers do not lose useful detail.
-Server logs and API contracts retain their existing English diagnostics.
+The API reuses error codes across distinct validation messages. `api-titles.json`
+maps the original server titles to catalog keys; these titles are protocol data,
+not UI copy. Edit the displayed messages in `locales/en/api.json`. Keep matching
+keys in both files when adding a server message. Unknown titles appear verbatim.
+Server logs and API contracts keep their existing English diagnostics.
+
+## Writing copy
+
+Use natural, conversational English. Be direct, concise and specific. Keep a
+short label when it already works. Errors should say what went wrong and give
+a useful next step. Preserve warnings about deletion, replacement and recovery.
+
+Skip obvious explanations, repeated assurances and implementation detail that
+doesn't help someone decide what to do. Avoid marketing language and formulas
+such as “X allows Y”, “This enables” and “This ensures”. Vary sentence structure;
+not every sentence needs a benefit or consequence. Use connected paragraphs
+for longer instructions. In Help descriptions, separate paragraphs with `\n\n`.
 
 ## Additional languages
 

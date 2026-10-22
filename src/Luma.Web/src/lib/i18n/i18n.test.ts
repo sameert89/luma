@@ -30,6 +30,6 @@ test('messages interpolate values and select full singular and plural sentences'
 test('state labels and known API titles use catalogs without losing unknown server detail', () => {
   expect(stateLabel('needsAttention')).toBe('Needs attention')
   expect(stateLabel('futureState')).toBe('futureState')
-  expect(apiMessage('A tag name is required.')).toBe('A tag name is required.')
+  expect(apiMessage('A tag name is required.')).toBe('Enter a tag name.')
   expect(apiMessage('Precise message from a future server.')).toBe('Precise message from a future server.')
 })
