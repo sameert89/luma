@@ -200,7 +200,7 @@ export function Panels({
         onSearch={() => change('q', search.trim())}
         onSuggestion={suggestion => change('comic', String(suggestion.id))}
         suggestionsUrl="/api/panels/suggestions"
-        searchLabel="Search comics"
+        searchLabel={t('panels:panels.searchComics')}
         placeholder={t('panels:panels.searchComicTitlesOrSeries')}
         onHome={() => visit()}
         onFilters={() => setFiltersOpen(value => !value)}
@@ -282,9 +282,9 @@ export function Panels({
       {stats.data && (
         <p className="px-4 pb-3 text-sm text-muted">
           {t('panels:panels.startedCompletedMinutesReading', {
-            statsDataStarted: stats.data.started,
-            statsDataCompleted: stats.data.completed,
-            mathFloorStatsDataReadingSeconds60: Math.floor(stats.data.readingSeconds / 60),
+            started: stats.data.started,
+            completed: stats.data.completed,
+            minutes: Math.floor(stats.data.readingSeconds / 60),
           })}
         </p>
       )}
@@ -359,7 +359,7 @@ export function Panels({
         {discovering && (
           <p role="status" className="py-4 text-center text-sm text-accent">
             {t('panels:panels.discoveringComicsProcessedFollowProgressInBackgroundJobs', {
-              discoveryReduceSumTaskSumTaskProcessed0: discovery.reduce((sum, task) => sum + task.processed, 0),
+              count: discovery.reduce((sum, task) => sum + task.processed, 0),
             })}
           </p>
         )}

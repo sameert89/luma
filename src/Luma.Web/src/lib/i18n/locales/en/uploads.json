@@ -13,7 +13,6 @@
     "pause": "Pause",
     "resumeRetry": "Resume / retry",
     "cancel": "Cancel",
-    "filesQueuedForUploadFollowProgressInBackgroundJobs": "{{value1}} files queued for upload.{{value2}} Follow progress in Background jobs.",
     "miBSSRemaining": " · {{value1}} MiB/s · {{value2}}s remaining",
     "filesQueued_one": "{{count}} file queued for upload.{{skipped}} Follow progress in Background jobs.",
     "filesQueued_other": "{{count}} files queued for upload.{{skipped}} Follow progress in Background jobs.",

@@ -105,13 +105,13 @@ export function MetadataExchange({
       {job.data && (
         <p role="status" className="text-sm">
           {t('tags:metadataExchange.processedWithMetadataImportedUpdatedSkippedFailed', {
-            jobDataState: stateLabel(job.data.state),
-            jobDataProcessed: job.data.processed,
-            jobDataFound0: job.data.found ?? 0,
-            jobDataUpdated0: job.data.updated ?? 0,
-            jobDataSkipped0: job.data.skipped ?? 0,
-            jobDataFailed: job.data.failed,
-            jobDataFailureCodeJobDataFailureCode: job.data.failureCode && ` ${job.data.failureCode}`,
+            state: stateLabel(job.data.state),
+            processed: job.data.processed,
+            found: job.data.found ?? 0,
+            updated: job.data.updated ?? 0,
+            skipped: job.data.skipped ?? 0,
+            failed: job.data.failed,
+            failure: job.data.failureCode && ` ${job.data.failureCode}`,
           })}
         </p>
       )}
@@ -119,7 +119,7 @@ export function MetadataExchange({
         .filter(item => item.code !== 'imported')
         .map(item => (
           <p key={item.mediaId} className="text-sm text-muted">
-            {t('tags:metadataExchange.item', { itemMediaId: item.mediaId, itemCode: item.code })}
+            {t('tags:metadataExchange.item', { id: item.mediaId, code: item.code })}
           </p>
         ))}
       {(afterMediaId || job.data?.nextMediaId) && (

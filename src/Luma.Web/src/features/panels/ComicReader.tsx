@@ -357,7 +357,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
               if (mode === 'continuous') virtual.scrollToIndex(index)
             }}
           />
-          <span className="text-sm text-muted">{t('panels:comicReader.of', { comicPageCount: comic.pageCount })}</span>
+          <span className="text-sm text-muted">{t('panels:comicReader.of', { count: comic.pageCount })}</span>
           <Range
             aria-label={t('panels:comicReader.pagePosition')}
             className="w-full"

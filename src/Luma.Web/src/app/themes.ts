@@ -1,4 +1,4 @@
-import { t } from '../lib/i18n'
+import { t } from '../lib/i18n/index'
 /**
  * The themes Luma offers, as data rather than as part of a component: the build reads this list
  * to write one web manifest per theme, so an installed app's status bar and splash screen can

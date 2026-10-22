@@ -904,7 +904,7 @@ export function App() {
       />
       {restored.isError && (
         <p role="alert" className="p-3 text-danger">
-          {t('app:app.couldNotRestoreTheOpenItem', { errorMessageRestoredError: errorMessage(restored.error) })}
+          {t('app:app.couldNotRestoreTheOpenItem', { error: errorMessage(restored.error) })}
         </p>
       )}
       {section !== 'panels' && (
@@ -925,8 +925,12 @@ export function App() {
             section === 'settings' ? (
               <QuietButton onClick={() => switchExperience(settingsOrigin)}>
                 {t('app:app.backTo', {
-                  settingsOriginFlickFlickSettingsOriginPanelsPanelsGallery:
-                    settingsOrigin === 'flick' ? 'Flick' : settingsOrigin === 'panels' ? 'Panels' : 'Gallery',
+                  application:
+                    settingsOrigin === 'flick'
+                      ? t('app:app.flick')
+                      : settingsOrigin === 'panels'
+                        ? t('app:app.panels')
+                        : t('app:app.gallery'),
                 })}
               </QuietButton>
             ) : showBackgroundJobs && section !== 'reels' && section !== 'help' ? (
@@ -981,7 +985,7 @@ export function App() {
             ))}
           </div>
           <footer data-testid="desktop-version" className="mt-auto px-3 pt-4 text-left text-xs text-muted">
-            {t('app:app.lumaV', { packageJsonVersion: packageJson.version })}
+            {t('app:app.lumaV', { version: packageJson.version })}
           </footer>
         </aside>
         <main
@@ -1075,7 +1079,7 @@ export function App() {
                 <div className="flex flex-col items-start gap-2 text-sm">
                   <p>
                     <span className="font-medium">{'Luma'}</span>{' '}
-                    <span className="text-muted">{t('app:app.v', { packageJsonVersion: packageJson.version })}</span>
+                    <span className="text-muted">{t('app:app.v', { version: packageJson.version })}</span>
                   </p>
                   <p className="text-muted">{t('app:app.createdBySameerTrivedi')}</p>
                   <QuietLink href="https://github.com/sameert89/luma" target="_blank" rel="noreferrer">
@@ -1204,7 +1208,7 @@ export function App() {
                     <div className="flex items-center gap-3 rounded-2xl bg-surface p-3">
                       <p className="text-sm">
                         {t('app:app.selected', {
-                          selectedSizeSelectedFoldersSize: selected.size + selectedFolders.size,
+                          count: selected.size + selectedFolders.size,
                         })}
                       </p>
                       <Button className="min-h-10" disabled={!selected.size} onClick={() => setBulkOpen(true)}>

@@ -319,7 +319,7 @@ export function Reels({
           onPreference={value => preference.mutate({ id: item.id, value })}
           menuOpen={menuOpen}
           onMenuOpenChange={setMenuOpen}
-          menuLabel="Flick menu"
+          menuLabel={t('browse:reels.menu')}
           className="bottom-16"
         >
           {onToggleFilters && (

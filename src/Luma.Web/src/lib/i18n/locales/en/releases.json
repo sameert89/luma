@@ -1,0 +1,137 @@
+{
+  "history": [
+    {
+      "version": "2.0.0-beta.11",
+      "date": "2026-10-22",
+      "headline": "Ready for translations",
+      "changes": [
+        "Luma remains in English, with translation files ready for additional languages.",
+        "What’s New now focuses on the highlights of each release."
+      ]
+    },
+    {
+      "version": "2.0.0-beta.10",
+      "date": "2026-10-21",
+      "headline": "Uploads and destination conflicts",
+      "changes": [
+        "Run independent uploads and file operations together.",
+        "Choose Replace or Skip when uploads, moves or copies meet an existing destination."
+      ]
+    },
+    {
+      "version": "2.0.0-beta.9",
+      "date": "2026-10-21",
+      "headline": "Delete from Flick",
+      "changes": ["Delete files from Flick and continue watching the next reel."]
+    },
+    {
+      "version": "2.0.0-beta.8",
+      "date": "2026-10-20",
+      "headline": "Rename files and keep viewing",
+      "changes": [
+        "Rename files and folders from file management or the viewer menu.",
+        "Keep viewing after deletion and manage files in search results."
+      ]
+    },
+    {
+      "version": "2.0.0-beta.7",
+      "date": "2026-10-20",
+      "headline": "Viewer deletion and saved position",
+      "changes": ["Delete from the Gallery viewer and return to your last viewed photo."]
+    },
+    {
+      "version": "2.0.0-beta.6",
+      "date": "2026-10-20",
+      "headline": "Cut, copy, paste and upload",
+      "changes": [
+        "Manage files with cut, copy, paste, new folders and a recycle bin.",
+        "Upload files or folders with drag and drop; transfers continue after closing the dialog."
+      ]
+    },
+    {
+      "version": "2.0.0-beta.5",
+      "date": "2026-10-19",
+      "headline": "Continue reading and smarter shelves",
+      "changes": [
+        "Resume recent comics from Continue reading, with saved page progress and smart folder covers.",
+        "Improved comic reading, pinch zoom and mobile search."
+      ]
+    },
+    {
+      "version": "2.0.0-beta.4",
+      "date": "2026-10-19",
+      "headline": "Compact mobile search",
+      "changes": ["Expand and collapse search on phones across Gallery, Collections, Flick and Panels."]
+    },
+    {
+      "version": "2.0.0-beta.3",
+      "date": "2026-10-19",
+      "headline": "Organized comic shelves",
+      "changes": [
+        "Browse comic subfolders, tag comics and keep comic locations out of Gallery.",
+        "Compact reader controls include page jump and reading progress."
+      ]
+    },
+    {
+      "version": "2.0.0-beta.2",
+      "date": "2026-10-19",
+      "headline": "Simpler setup",
+      "changes": [
+        "Enable file management directly in Settings without administrator tokens.",
+        "Browse mounted folders when adding comic locations."
+      ]
+    },
+    {
+      "version": "2.0.0-beta.1",
+      "date": "2026-10-18",
+      "headline": "Gallery, Flick and Panels",
+      "changes": [
+        "Switch between Gallery, Flick and the new Panels comic reader from the Luma logo.",
+        "Uploads, file management, a recycle bin and optional SRT captions.",
+        "New appearance options, grouped Settings and a Help guide."
+      ]
+    },
+    {
+      "version": "1.0.11",
+      "date": "2026-10-01",
+      "headline": "Refresh and default Reels order",
+      "changes": ["Choose a default Reels order and refresh Gallery without starting a scan."]
+    },
+    {
+      "version": "1.0.10",
+      "date": "2026-09-25",
+      "headline": "Faster Reels and restored sessions",
+      "changes": ["Faster Reels browsing and automatic restoration of your last view and filters."]
+    },
+    {
+      "version": "1.0.9",
+      "date": "2026-09-22",
+      "headline": "Smooth browsing during scans",
+      "changes": ["Browse large libraries smoothly while indexing runs in the background."]
+    },
+    {
+      "version": "1.0.8",
+      "date": "2026-09-22",
+      "headline": "Faster folders and resilient scans",
+      "changes": ["Faster folder covers and reliable scan recovery after a server restart."]
+    },
+    {
+      "version": "1.0.7",
+      "date": "2026-09-20",
+      "headline": "Folder refresh and app themes",
+      "changes": [
+        "Prioritize the folder you are browsing during a scan.",
+        "Installed apps follow your chosen theme colors."
+      ]
+    },
+    {
+      "version": "1.0.6",
+      "date": "2026-09-20",
+      "headline": "Updates, release notes and Nord",
+      "changes": [
+        "Update notifications, What’s New and the Nord theme.",
+        "More accessible background jobs, filters and playback controls."
+      ]
+    }
+  ]
+}

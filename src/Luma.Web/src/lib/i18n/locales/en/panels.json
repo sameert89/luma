@@ -2,7 +2,7 @@
   "comicCard": {
     "read": "Read {{value1}}",
     "favourite": "Favourite",
-    "pages": "{{comicSeriesComicFormatToUpperCase}} · {{comicPageCount}} pages",
+    "pages": "{{comicSeriesComicFormatToUpperCase}} · {{count}} pages",
     "readingProgressFor": "Reading progress for {{value1}}",
     "editDetailsFor": "Edit details for {{value1}}",
     "details": "Details",
@@ -27,7 +27,7 @@
   "comicLocations": {
     "comicLocationsSavedRecursiveDiscoveryIsQueuedReadingProgress": "Comic locations saved. Recursive discovery is queued; reading progress is preserved.",
     "chooseLocationsInsideYourServerConfiguredLibrariesEachLocation": "Choose locations inside your server-configured libraries. Each location is scanned recursively for CBZ, CBR, ZIP and RAR archives. Image folders are included only when explicitly enabled. You can change these locations later; books outside them are hidden and reading progress is retained.",
-    "comicLocation": "Comic location {{index1}}",
+    "comicLocation": "Comic location {{number}}",
     "library": "Library",
     "chooseLibrary": "Choose library",
     "entireLibrary": "Entire library",
@@ -80,7 +80,7 @@
     "goToPage": "Go to page",
     "nextPage": "Next page",
     "chooseAPageInThisComic": "Choose a page in this comic.",
-    "of": "of {{comicPageCount}}",
+    "of": "of {{count}}",
     "pagePosition": "Page position",
     "done": "Done"
   },
@@ -104,17 +104,18 @@
     "bookshelf": "Bookshelf",
     "up": "Up",
     "libraryRoot": "Library root",
-    "startedCompletedMinutesReading": "{{statsDataStarted}} started · {{statsDataCompleted}} completed · {{mathFloorStatsDataReadingSeconds60}} minutes reading",
+    "startedCompletedMinutesReading": "{{started}} started · {{completed}} completed · {{minutes}} minutes reading",
     "backToBookshelf": "Back to bookshelf",
     "loadingComics": "Loading comics…",
     "comicFolders": "Comic folders",
-    "discoveringComicsProcessedFollowProgressInBackgroundJobs": "Discovering comics… {{discoveryReduceSumTaskSumTaskProcessed0}} processed. Follow progress in Background jobs.",
+    "discoveringComicsProcessedFollowProgressInBackgroundJobs": "Discovering comics… {{count}} processed. Follow progress in Background jobs.",
     "noComicsMatchAddArchivesOrExplicitlyClassifyAn": "No comics match. Add archives or explicitly classify an image folder as a comic.",
     "moreFolders": "More folders",
     "newestComics": "Newest comics",
     "moreComics": "More comics",
     "comicDetails": "Comic details",
     "editLibraryMetadataFavouriteStatusAndCoverSelection": "Edit library metadata, favourite status and cover selection.",
-    "saveRecursiveComicSourcesWithinYourLibrariesImageFolders": "Save recursive comic sources within your libraries. Image folders are included only with your explicit choice."
+    "saveRecursiveComicSourcesWithinYourLibrariesImageFolders": "Save recursive comic sources within your libraries. Image folders are included only with your explicit choice.",
+    "searchComics": "Search comics"
   }
 }

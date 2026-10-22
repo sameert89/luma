@@ -122,7 +122,7 @@ export function FileRecoveryDialog({
             </dl>
             <p className="text-sm text-muted">
               {t('files:fileRecoveryDialog.sizeAndTimestampsDoNotProveFileContentsConfirm', {
-                rowFailureCode: row.failureCode,
+                code: row.failureCode,
               })}
             </p>
             {alternative && (
@@ -145,7 +145,7 @@ export function FileRecoveryDialog({
             {actions.includes('restart') && (
               <p className="text-sm">
                 {t('files:fileRecoveryDialog.continuingRenewsTheOriginalRequestForTheCurrentSource', {
-                  rowKind: row.kind,
+                  operation: row.kind,
                 })}
               </p>
             )}

@@ -92,7 +92,7 @@ export function DeleteMediaAction({
         <div className="space-y-4 p-5">
           <p className="break-words text-sm">
             {t('files:deleteMediaAction.willBeMovedToTheRecycleBinUnlessPermanent', {
-              targetFileName: target?.fileName,
+              name: target?.fileName,
             })}
           </p>
           <label htmlFor={permanentId} className="flex items-center gap-2 text-sm">

@@ -1,19 +1,22 @@
 import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import common from './locales/en/common.json'
-import app from './locales/en/app.json'
-import browse from './locales/en/browse.json'
-import files from './locales/en/files.json'
-import help from './locales/en/help.json'
-import panels from './locales/en/panels.json'
-import status from './locales/en/status.json'
-import tags from './locales/en/tags.json'
-import ui from './locales/en/ui.json'
-import uploads from './locales/en/uploads.json'
-import api from './locales/en/api.json'
+import common from './locales/en/common.json' with { type: 'json' }
+import app from './locales/en/app.json' with { type: 'json' }
+import browse from './locales/en/browse.json' with { type: 'json' }
+import files from './locales/en/files.json' with { type: 'json' }
+import help from './locales/en/help.json' with { type: 'json' }
+import panels from './locales/en/panels.json' with { type: 'json' }
+import status from './locales/en/status.json' with { type: 'json' }
+import tags from './locales/en/tags.json' with { type: 'json' }
+import ui from './locales/en/ui.json' with { type: 'json' }
+import uploads from './locales/en/uploads.json' with { type: 'json' }
+import api from './locales/en/api.json' with { type: 'json' }
+import releases from './locales/en/releases.json' with { type: 'json' }
 
 /** Bundled English works at startup, offline and in standalone Help without locale requests. */
-export const resources = { en: { common, app, browse, files, help, panels, status, tags, ui, uploads, api } } as const
+export const resources = {
+  en: { common, app, browse, files, help, panels, status, tags, ui, uploads, api, releases },
+} as const
 export const supportedLanguages = ['en'] as const
 
 void i18next.use(initReactI18next).init({

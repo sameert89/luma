@@ -22,7 +22,6 @@
     "searchMedia": "Search media",
     "searchNamesFoldersAndTags": "Search names, folders and tags",
     "lumaHome": "Luma home",
-    "luma": "luma",
     "submitSearch": "Submit search",
     "searchSuggestions": "Search suggestions",
     "closeSearch": "Close search",
@@ -34,8 +33,7 @@
   "themePicker": {
     "themeSettings": "Theme settings",
     "themeAppearance": "Theme & appearance",
-    "chooseHowLumaLooksOnThisDevice": "Choose how Luma looks on this device.",
-    "luma": "luma"
+    "chooseHowLumaLooksOnThisDevice": "Choose how Luma looks on this device."
   },
   "toast": {
     "dismiss": "Dismiss"

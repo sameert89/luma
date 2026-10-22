@@ -69,7 +69,7 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
       {locations.map((row, index) => (
         <fieldset key={index} className="space-y-3 rounded-xl border border-line p-3">
           <legend className="px-1 text-sm font-semibold">
-            {t('panels:comicLocations.comicLocation', { index1: index + 1 })}
+            {t('panels:comicLocations.comicLocation', { number: index + 1 })}
           </legend>
           <Field label={t('panels:comicLocations.library')}>
             <Select

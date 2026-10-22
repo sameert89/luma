@@ -16,7 +16,7 @@ export function MediaInformation({ item }: { item: Media }) {
         <dt className="text-muted">{t('browse:mediaInformation.fileSize')}</dt>
         <dd>
           {t('browse:mediaInformation.mB', {
-            itemSizeBytes10241024ToFixed2: (item.sizeBytes / 1024 / 1024).toFixed(2),
+            size: (item.sizeBytes / 1024 / 1024).toFixed(2),
           })}
         </dd>
       </div>

@@ -318,7 +318,7 @@ export function Viewer({
             faded={chromeHidden}
             menuOpen={menuOpen}
             onMenuOpenChange={setMenuOpen}
-            menuLabel="Viewer menu"
+            menuLabel={t('browse:viewer.menu')}
             className="bottom-24 phone-portrait:bottom-32"
           >
             <IconButton

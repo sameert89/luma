@@ -24,9 +24,6 @@
     "albumCovers": "Album covers",
     "chooseHowLumaDrawsAutomaticAlbumAndFolderCovers": "Choose how Luma draws automatic album and folder covers on this device.",
     "albumCoverStyle": "Album cover style",
-    "thisOnlySetsTheDefaultForAutomaticCoversA": "This only sets the default for automatic covers. A cover you picked yourself for an album or folder always stays that photo, whichever style you choose. To go back to an automatic cover, use",
-    "resetAlbumCover": "Reset album cover",
-    "inThatFolderSActions": " in that folder’s actions.",
     "smartAlbumCovers": "Smart album covers",
     "croppedAlbumCovers": "Cropped album covers",
     "coverDefaultHelp": "This only sets the default for automatic covers. A cover you picked yourself for an album or folder always stays that photo, whichever style you choose. To go back to an automatic cover, use <action>Reset album cover</action> in that folder’s actions."
@@ -242,7 +239,7 @@
     "name": "Name",
     "modified": "Modified",
     "fileSize": "File size",
-    "mB": "{{itemSizeBytes10241024ToFixed2}} MB",
+    "mB": "{{size}} MB",
     "dimensions": "Dimensions",
     "video": "Video",
     "durationUnknown": "Duration unknown"
@@ -254,9 +251,8 @@
     "autoplayWasBlockedPressPlayToStart": "Autoplay was blocked. Press Play to start.",
     "thisVideoCouldNotPlayCopyItsStreamURL": "This video could not play. Copy its stream URL and open it in an external player such as VLC.",
     "pressPlayToResumePlayback": "Press Play to resume playback.",
-    "luma": "Luma",
-    "volume": "Volume {{mathRoundVolume100}}%",
-    "resumeFrom": "Resume from {{formatTimeWatchResume}}",
+    "volume": "Volume {{volume}}%",
+    "resumeFrom": "Resume from {{position}}",
     "startFromBeginning": "Start from beginning",
     "buffering": "Buffering",
     "playVideo": "Play video",
@@ -311,7 +307,8 @@
     "previous": "Previous",
     "next": "Next",
     "addOrRemoveTagsForThisItem": "Add or remove tags for this item.",
-    "fileInformationForThisReel": "File information for this reel."
+    "fileInformationForThisReel": "File information for this reel.",
+    "menu": "Flick menu"
   },
   "reelsSortSettings": {
     "reels": "Reels",
@@ -364,7 +361,8 @@
     "galleryCovers": "Gallery covers",
     "useAsFolderCover": "Use as folder cover",
     "useAsLibraryCover": "Use as library cover",
-    "coverSaved": "Cover saved."
+    "coverSaved": "Cover saved.",
+    "menu": "Viewer menu"
   },
   "api": {
     "somethingWentWrongPleaseTryAgain": "Something went wrong. Please try again."

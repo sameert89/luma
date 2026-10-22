@@ -799,7 +799,7 @@ export function MediaStage({
             role="status"
             className="pointer-events-none absolute right-8 top-1/2 rounded-lg bg-canvas/85 px-4 py-3 text-ink"
           >
-            {t('browse:mediaStage.volume', { mathRoundVolume100: Math.round(volume * 100) })}
+            {t('browse:mediaStage.volume', { volume: Math.round(volume * 100) })}
           </span>
         )}
         {/* Two buttons on the video itself: continuing is the accented one, starting over carries
@@ -807,7 +807,7 @@ export function MediaStage({
         {isVideo && watch.resume !== null && (
           <div data-chrome className="absolute top-16 flex flex-wrap gap-3">
             <Button onClick={() => watch.choose(false)}>
-              {t('browse:mediaStage.resumeFrom', { formatTimeWatchResume: formatTime(watch.resume) })}
+              {t('browse:mediaStage.resumeFrom', { position: formatTime(watch.resume) })}
             </Button>
             <QuietButton variant="overlay" className="min-h-11" onClick={() => watch.choose(true)}>
               {t('browse:mediaStage.startFromBeginning')}

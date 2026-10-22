@@ -210,9 +210,7 @@ export function TagEditor({
                   className="flex min-h-11 w-full items-center gap-3 px-3 text-left text-sm hover:bg-surface focus-visible:ring-inset"
                 >
                   <Plus className="size-4 shrink-0 text-accent" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate">
-                    {t('tags:tagEditor.create', { nameTrim: name.trim() })}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate">{t('tags:tagEditor.create', { name: name.trim() })}</span>
                   <span className="shrink-0 text-xs text-muted">{t('tags:tagEditor.newTag')}</span>
                 </button>
               </li>

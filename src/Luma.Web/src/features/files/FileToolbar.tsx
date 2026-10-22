@@ -461,7 +461,7 @@ function RecycleBin({ libraryId }: { libraryId: number }) {
         <article key={item.id} className="space-y-2 rounded-lg border border-line p-3">
           <p className="break-all font-medium">{item.source}</p>
           <p className="text-sm text-muted">
-            {t('files:fileToolbar.deleted', { newDateItemCreatedAt: new Date(item.createdAt).toLocaleString() })}
+            {t('files:fileToolbar.deleted', { date: new Date(item.createdAt).toLocaleString() })}
           </p>
           <div className="flex flex-wrap gap-2">
             <QuietButton disabled={busy} onClick={() => void run(item, 'restore')}>

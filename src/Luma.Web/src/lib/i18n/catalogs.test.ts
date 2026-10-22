@@ -42,7 +42,10 @@ test('visible JSX text and accessibility labels are extracted instead of embedde
     function visit(node: ts.Node) {
       if (ts.isJsxText(node) && /[a-zA-Z]/.test(node.text) && !['Luma', 'luma'].includes(node.text.trim()))
         embedded.push(`${file}: ${node.text.trim()}`)
-      if (ts.isJsxAttribute(node) && attributes.has(node.name.getText(ast))) {
+      if (
+        ts.isJsxAttribute(node) &&
+        (attributes.has(node.name.getText(ast)) || /(?:Label|Title|Message|Description)$/.test(node.name.getText(ast)))
+      ) {
         const value = node.initializer
         if (value && ts.isStringLiteral(value) && /[a-zA-Z]/.test(value.text))
           embedded.push(`${file}: ${node.name.getText(ast)}=${value.text}`)
