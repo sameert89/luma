@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useState } from 'react'
 import { EllipsisVertical } from 'lucide-react'
 import { IconButton, QuietButton } from '../../components/ui/Controls'
@@ -36,13 +37,13 @@ export function GalleryActions({
     }
     return (
       <>
-        <QuietButton onClick={() => run(onSlideshow)}>Start slideshow</QuietButton>
-        <QuietButton onClick={() => run(onRefresh)}>Refresh collection</QuietButton>
-        <QuietButton onClick={() => run(onFilters)}>Edit filters</QuietButton>
+        <QuietButton onClick={() => run(onSlideshow)}>{t('browse:galleryActions.startSlideshow')}</QuietButton>
+        <QuietButton onClick={() => run(onRefresh)}>{t('browse:galleryActions.refreshCollection')}</QuietButton>
+        <QuietButton onClick={() => run(onFilters)}>{t('browse:galleryActions.editFilters')}</QuietButton>
         <QuietButton onClick={() => run(onToggleFilters)}>
-          {filtersVisible ? 'Hide filters' : 'Show filters'}
+          {filtersVisible ? t('browse:galleryActions.hideFilters') : t('browse:galleryActions.showFilters')}
         </QuietButton>
-        <QuietButton onClick={() => run(onClearFilters)}>Clear all filters</QuietButton>
+        <QuietButton onClick={() => run(onClearFilters)}>{t('browse:galleryActions.clearAllFilters')}</QuietButton>
       </>
     )
   }
@@ -58,14 +59,14 @@ export function GalleryActions({
     )
   return (
     <>
-      <IconButton label="Gallery actions" onClick={() => setOpen(true)}>
+      <IconButton label={t('browse:galleryActions.galleryActions')} onClick={() => setOpen(true)}>
         <EllipsisVertical className="size-4" />
       </IconButton>
       <Modal
         open={open}
         onOpenChange={setOpen}
-        title="Gallery actions"
-        description="Slideshow, selection and filters."
+        title={t('browse:galleryActions.galleryActions')}
+        description={t('browse:galleryActions.slideshowSelectionAndFilters')}
         sheet
       >
         <div className="flex flex-wrap gap-2 p-5">{actions(() => setOpen(false))}</div>

@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n/index'
 /**
  * The themes Luma offers, as data rather than as part of a component: the build reads this list
  * to write one web manifest per theme, so an installed app's status bar and splash screen can
@@ -24,44 +25,84 @@ export type Theme =
 export type ThemeOption = { id: Theme; name: string; description: string; canvas: string }
 
 export const themes: ThemeOption[] = [
-  { id: 'obsidian', name: 'Dark', description: 'Soft dark surfaces and lavender accents', canvas: '#111319' },
-  { id: 'light', name: 'White', description: 'Bright white surfaces and clear blue accents', canvas: '#f8fafc' },
-  { id: 'catppuccin', name: 'Catppuccin', description: 'Muted midnight tones and pastel mauve', canvas: '#1e1e2e' },
-  { id: 'ember', name: 'Orange & black', description: 'Deep black with vivid orange accents', canvas: '#050505' },
-  { id: 'crimson', name: 'Red & white', description: 'Light white surfaces with rich red accents', canvas: '#fffafa' },
+  {
+    id: 'obsidian',
+    name: t('app:themes.dark'),
+    description: t('app:themes.softDarkSurfacesAndLavenderAccents'),
+    canvas: '#111319',
+  },
+  {
+    id: 'light',
+    name: t('app:themes.white'),
+    description: t('app:themes.brightWhiteSurfacesAndClearBlueAccents'),
+    canvas: '#f8fafc',
+  },
+  {
+    id: 'catppuccin',
+    name: t('app:themes.catppuccin'),
+    description: t('app:themes.mutedMidnightTonesAndPastelMauve'),
+    canvas: '#1e1e2e',
+  },
+  {
+    id: 'ember',
+    name: t('app:themes.orangeBlack'),
+    description: t('app:themes.deepBlackWithVividOrangeAccents'),
+    canvas: '#050505',
+  },
+  {
+    id: 'crimson',
+    name: t('app:themes.redWhite'),
+    description: t('app:themes.lightWhiteSurfacesWithRichRedAccents'),
+    canvas: '#fffafa',
+  },
   {
     id: 'cinema',
-    name: 'Cinema red',
-    description: 'Netflix-inspired charcoal with vivid red accents',
+    name: t('app:themes.cinemaRed'),
+    description: t('app:themes.netflixInspiredCharcoalWithVividRedAccents'),
     canvas: '#101010',
   },
   {
     id: 'midnight',
-    name: 'Midnight blue',
-    description: 'Prime Video-inspired navy with bright blue accents',
+    name: t('app:themes.midnightBlue'),
+    description: t('app:themes.primeVideoInspiredNavyWithBrightBlueAccents'),
     canvas: '#080f19',
   },
   {
     id: 'oled',
-    name: 'OLED black',
-    description: 'Pure black, quiet gray surfaces and crisp white accents',
+    name: t('app:themes.oLEDBlack'),
+    description: t('app:themes.pureBlackQuietGraySurfacesAndCrispWhiteAccents'),
     canvas: '#000000',
   },
-  { id: 'forest', name: 'Forest', description: 'Media-player charcoal with fresh green accents', canvas: '#0e1411' },
-  { id: 'nord', name: 'Nord', description: 'Cool arctic greys with a frost-blue accent', canvas: '#2e3440' },
+  {
+    id: 'forest',
+    name: t('app:themes.forest'),
+    description: t('app:themes.mediaPlayerCharcoalWithFreshGreenAccents'),
+    canvas: '#0e1411',
+  },
+  {
+    id: 'nord',
+    name: t('app:themes.nord'),
+    description: t('app:themes.coolArcticGreysWithAFrostBlueAccent'),
+    canvas: '#2e3440',
+  },
   {
     id: 'sakura',
-    name: 'Sakura dusk',
-    description: 'Ink-violet surfaces with soft blossom accents',
+    name: t('app:themes.sakuraDusk'),
+    description: t('app:themes.inkVioletSurfacesWithSoftBlossomAccents'),
     canvas: '#221b2b',
   },
   {
     id: 'celestial',
-    name: 'Celestial',
-    description: 'Deep night skies and luminous ice-blue accents',
+    name: t('app:themes.celestial'),
+    description: t('app:themes.deepNightSkiesAndLuminousIceBlueAccents'),
     canvas: '#101c2c',
   },
-  { id: 'manga', name: 'Manga paper', description: 'Warm paper, dark ink and quiet violet accents', canvas: '#f5f1e7' },
+  {
+    id: 'manga',
+    name: t('app:themes.mangaPaper'),
+    description: t('app:themes.warmPaperDarkInkAndQuietVioletAccents'),
+    canvas: '#f5f1e7',
+  },
 ]
 
 /** Where the build writes each theme's manifest, and where the page points at it. */

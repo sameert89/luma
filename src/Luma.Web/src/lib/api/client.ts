@@ -1,3 +1,4 @@
+import { apiMessage, t } from '../i18n'
 import type { components, paths } from './generated'
 
 export type StatusResponse = paths['/api/status']['get']['responses'][200]['content']['application/json']
@@ -8,7 +9,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly problem?: ApiProblem,
   ) {
-    super(problem?.title ?? 'Unable to reach Luma. Please try again.')
+    super(problem?.title ? apiMessage(problem.title) : t('app:client.unableToReachLumaPleaseTryAgain'))
   }
 }
 

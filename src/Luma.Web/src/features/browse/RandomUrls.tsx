@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useState } from 'react'
 import { Shuffle } from 'lucide-react'
 import { QuietButton, QuietLink, Input, Field, Select } from '../../components/ui/Controls'
@@ -20,27 +21,26 @@ export function RandomUrls({ filters }: { filters: Filters }) {
         }}
       >
         <Shuffle className="size-4" />
-        Random media URL
+        {t('browse:randomUrls.randomMediaURL')}
       </QuietButton>
       <Modal
         open={open}
         onOpenChange={setOpen}
-        title="Random media URL"
-        description="Generate a reusable URL from the current visible filters."
+        title={t('browse:randomUrls.randomMediaURL')}
+        description={t('browse:randomUrls.generateAReusableURLFromTheCurrentVisibleFilters')}
         sheet
       >
         <div className="space-y-4 p-5">
           <p className="text-sm text-muted">
-            Uses the current folder, tags, search and advanced filters. Configure them with Filters. This content
-            endpoint serves cached photos or GIF previews.
+            {t('browse:randomUrls.usesTheCurrentFolderTagsSearchAndAdvancedFilters')}
           </p>
-          <Field label="Random media type">
+          <Field label={t('browse:randomUrls.randomMediaType')}>
             <Select value={type} onChange={event => setType(event.target.value)}>
-              <option value="image">Photos</option>
-              <option value="gif">GIF previews</option>
+              <option value="image">{t('browse:randomUrls.photos')}</option>
+              <option value="gif">{t('browse:randomUrls.gIFPreviews')}</option>
             </Select>
           </Field>
-          <Field label="Generated URL">
+          <Field label={t('browse:randomUrls.generatedURL')}>
             <Input readOnly value={url} onFocus={event => event.target.select()} />
           </Field>
           <div className="flex gap-3">
@@ -52,10 +52,10 @@ export function RandomUrls({ filters }: { filters: Filters }) {
                   .catch(() => setCopied(false))
               }}
             >
-              {copied ? 'Copied' : 'Copy URL'}
+              {copied ? t('browse:randomUrls.copied') : t('browse:randomUrls.copyURL')}
             </QuietButton>
             <QuietLink href={url} target="_blank" rel="noreferrer">
-              Open random media
+              {t('browse:randomUrls.openRandomMedia')}
             </QuietLink>
           </div>
         </div>

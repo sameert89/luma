@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { FolderOpen, FolderPlus, Trash2, ScanLine, Check, ArrowUp, Home } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useEffect, useId, useRef, useState } from 'react'
@@ -49,11 +50,11 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
           client.invalidateQueries({ queryKey: [key] }),
         ),
       )
-      setMessage('Comic locations saved. Recursive discovery is queued; reading progress is preserved.')
+      setMessage(t('panels:comicLocations.comicLocationsSavedRecursiveDiscoveryIsQueuedReadingProgress'))
       onSaved?.()
     } catch (error) {
       setMessage(
-        `${errorMessage(error)} Check that the library is configured and the folder path is relative to its root. Comic locations work with read-only media mounts and are independent of the file-management switch.`,
+        t('panels:comicLocations.checkThatTheLibraryIsConfiguredAndTheFolder', { value1: errorMessage(error) }),
       )
     } finally {
       setBusy(false)
@@ -61,21 +62,21 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
   }
   return (
     <div className="space-y-4 p-5">
-      <p className="text-sm text-muted">
-        Choose locations inside your server-configured libraries. Each location is scanned recursively for CBZ, CBR, ZIP
-        and RAR archives. Image folders are included only when explicitly enabled. You can change these locations later;
-        books outside them are hidden and reading progress is retained.
+      <p className="whitespace-pre-line text-sm text-muted">
+        {t('panels:comicLocations.chooseLocationsInsideYourServerConfiguredLibrariesEachLocation')}
       </p>
       {sources.isError && <p role="alert">{errorMessage(sources.error)}</p>}
       {locations.map((row, index) => (
         <fieldset key={index} className="space-y-3 rounded-xl border border-line p-3">
-          <legend className="px-1 text-sm font-semibold">Comic location {index + 1}</legend>
-          <Field label="Library">
+          <legend className="px-1 text-sm font-semibold">
+            {t('panels:comicLocations.comicLocation', { number: index + 1 })}
+          </legend>
+          <Field label={t('panels:comicLocations.library')}>
             <Select
               value={row.libraryId}
               onChange={event => patch(index, { libraryId: Number(event.target.value), relativePath: '' })}
             >
-              <option value={0}>Choose library</option>
+              <option value={0}>{t('panels:comicLocations.chooseLibrary')}</option>
               {libraries.data?.map(library => (
                 <option key={library.id} value={library.id}>
                   {library.name}
@@ -83,16 +84,18 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
               ))}
             </Select>
           </Field>
-          <p className="break-words text-sm text-muted">{row.relativePath || 'Entire library'}</p>
+          <p className="break-words text-sm text-muted">
+            {row.relativePath || t('panels:comicLocations.entireLibrary')}
+          </p>
           <QuietButton disabled={!row.libraryId} onClick={() => setBrowsing(index)}>
             <FolderOpen className="size-4" aria-hidden="true" />
-            Choose folder
+            {t('panels:comicLocations.chooseFolder')}
           </QuietButton>
           <details className="text-sm text-muted">
-            <summary>Enter a path manually</summary>
-            <Field label="Folder relative to library">
+            <summary>{t('panels:comicLocations.enterAPathManually')}</summary>
+            <Field label={t('panels:comicLocations.folderRelativeToLibrary')}>
               <Input
-                placeholder="Optional relative path"
+                placeholder={t('panels:comicLocations.optionalRelativePath')}
                 value={row.relativePath}
                 onChange={event => patch(index, { relativePath: event.target.value })}
               />
@@ -100,7 +103,7 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
           </details>
           <QuietButton onClick={() => setLocations(rows => rows.filter((_, i) => i !== index))}>
             <Trash2 className="size-4" aria-hidden="true" />
-            Remove location
+            {t('panels:comicLocations.removeLocation')}
           </QuietButton>
           <label htmlFor={`${checkboxId}-${index}`} className="flex items-center gap-2 text-sm">
             <Checkbox
@@ -108,7 +111,7 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
               checked={row.imageFolders}
               onChange={event => patch(index, { imageFolders: event.target.checked })}
             />
-            Treat folders containing images as comics
+            {t('panels:comicLocations.treatFoldersContainingImagesAsComics')}
           </label>
           <label htmlFor={`${checkboxId}-exclude-${index}`} className="flex items-center gap-2 text-sm">
             <Checkbox
@@ -116,11 +119,10 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
               checked={row.excludeFromGallery ?? true}
               onChange={event => patch(index, { excludeFromGallery: event.target.checked })}
             />
-            Exclude from Gallery
+            {t('panels:comicLocations.excludeFromGallery')}
           </label>
           <p className="text-xs text-muted">
-            Hides this location and its subfolders from Gallery, tag collections and XMP exports. Existing indexed items
-            and tags are preserved. Uncheck to include comic images in Gallery.
+            {t('panels:comicLocations.hidesThisLocationAndItsSubfoldersFromGalleryTag')}
           </p>
         </fieldset>
       ))}
@@ -141,20 +143,17 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
           }}
         >
           <FolderPlus className="size-4" aria-hidden="true" />
-          Add location
+          {t('panels:comicLocations.addLocation')}
         </QuietButton>
         <QuietButton
           disabled={busy || sources.isPending || locations.some(row => !row.libraryId)}
           onClick={() => void save()}
         >
           <ScanLine className="size-4" aria-hidden="true" />
-          {busy ? 'Saving…' : 'Save locations and scan'}
+          {busy ? t('panels:comicLocations.saving') : t('panels:comicLocations.saveLocationsAndScan')}
         </QuietButton>
       </div>
-      <p className="text-sm text-muted">
-        New disks or shares must first be mounted and configured as Luma libraries on the server. Browse folders
-        directly, including locations not indexed yet, or search indexed folder names.
-      </p>
+      <p className="text-sm text-muted">{t('panels:comicLocations.newDisksOrSharesMustFirstBeMountedAnd')}</p>
       {message && (
         <p role="status" className="text-sm">
           {message}
@@ -165,13 +164,13 @@ export function ComicLocations({ onSaved }: { onSaved?: () => void }) {
         onOpenChange={open => {
           if (!open) setBrowsing(null)
         }}
-        title="Choose comic folder"
-        description="Browse your library folders or search by folder name."
+        title={t('panels:comicLocations.chooseComicFolder')}
+        description={t('panels:comicLocations.browseYourLibraryFoldersOrSearchByFolderName')}
         sheet
       >
         {browsing !== null && locations[browsing] && (
           <div className="space-y-3 p-5">
-            <Field label="Choose library">
+            <Field label={t('panels:comicLocations.chooseLibrary')}>
               <Select
                 value={locations[browsing].libraryId}
                 onChange={event => patch(browsing, { libraryId: Number(event.target.value), relativePath: '' })}
@@ -232,8 +231,8 @@ function FolderPicker({ library, onChoose }: { library?: Library; onChoose: (pat
   return (
     <div className="space-y-3">
       <Input
-        aria-label="Search folders"
-        placeholder="Find folders by name"
+        aria-label={t('panels:comicLocations.searchFolders')}
+        placeholder={t('panels:comicLocations.findFoldersByName')}
         value={search}
         onChange={event => setSearch(event.target.value)}
       />
@@ -243,18 +242,18 @@ function FolderPicker({ library, onChoose }: { library?: Library; onChoose: (pat
       <div className="flex flex-wrap gap-2">
         <QuietButton onClick={() => onChoose(path)}>
           <Check className="size-4" aria-hidden="true" />
-          Use this folder
+          {t('panels:comicLocations.useThisFolder')}
         </QuietButton>
         {path && (
           <QuietButton onClick={() => visit(path.split('/').slice(0, -1).join('/'))}>
             <ArrowUp className="size-4" aria-hidden="true" />
-            Up one folder
+            {t('panels:comicLocations.upOneFolder')}
           </QuietButton>
         )}
         {path && (
           <QuietButton onClick={() => visit('')}>
             <Home className="size-4" aria-hidden="true" />
-            Library root
+            {t('panels:comicLocations.libraryRoot')}
           </QuietButton>
         )}
       </div>
@@ -274,10 +273,12 @@ function FolderPicker({ library, onChoose }: { library?: Library; onChoose: (pat
         ))}
       </div>
       {!browse.isPending && rows.size === 0 && (
-        <p className="text-sm text-muted">No matching folders. Try a shorter name or browse from the library root.</p>
+        <p className="text-sm text-muted">{t('panels:comicLocations.noMatchingFoldersTryAShorterNameOrBrowse')}</p>
       )}
       {browse.data?.nextOffset !== null && browse.data?.nextOffset !== undefined && !typed && (
-        <QuietButton onClick={() => setOffset(browse.data!.nextOffset!)}>More folders</QuietButton>
+        <QuietButton onClick={() => setOffset(browse.data!.nextOffset!)}>
+          {t('panels:comicLocations.moreFolders')}
+        </QuietButton>
       )}
       {(browse.error || matches.error) && <p role="alert">{errorMessage(browse.error || matches.error)}</p>}
     </div>

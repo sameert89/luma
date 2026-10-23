@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { DeleteMediaAction } from '../files/DeleteMediaAction'
 import { readSetting } from '../../app/uiDefaults'
 import { useQuery } from '@tanstack/react-query'
@@ -258,16 +259,16 @@ export function Reels({
             </span>
           )}
           <h1 id="reels-state-title" className="text-xl font-semibold">
-            {loading ? 'Loading reels…' : 'No reels to show'}
+            {loading ? t('browse:reels.loadingReels') : t('browse:reels.noReelsToShow')}
           </h1>
           {!loading && (
             <>
               <p className="text-sm leading-relaxed text-white/60">
-                No photos or videos match this view. Adjust the filters or choose another folder.
+                {t('browse:reels.noPhotosOrVideosMatchThisViewAdjustThe')}
               </p>
               <QuietButton className="border-white/20 text-white hover:bg-white/10" onClick={onFilters}>
                 <SlidersHorizontal className="size-4" />
-                Adjust filters
+                {t('browse:reels.adjustFilters')}
               </QuietButton>
             </>
           )}
@@ -277,7 +278,11 @@ export function Reels({
   }
   const liked = item.preference === 'liked'
   return (
-    <section ref={root} aria-label="Flick" className="relative flex min-h-0 flex-1 flex-col bg-canvas">
+    <section
+      ref={root}
+      aria-label={t('browse:reels.flick')}
+      className="relative flex min-h-0 flex-1 flex-col bg-canvas"
+    >
       {/* Reels loop until the person moves on; auto-scroll advances at the end instead. */}
       <div className="flex min-h-0 flex-1">
         <MediaStage
@@ -314,12 +319,12 @@ export function Reels({
           onPreference={value => preference.mutate({ id: item.id, value })}
           menuOpen={menuOpen}
           onMenuOpenChange={setMenuOpen}
-          menuLabel="Flick menu"
+          menuLabel={t('browse:reels.menu')}
           className="bottom-16"
         >
           {onToggleFilters && (
             <IconButton
-              label={filtersVisible ? 'Hide filters' : 'Show filters'}
+              label={filtersVisible ? t('browse:reels.hideFilters') : t('browse:reels.showFilters')}
               className={actionButton}
               onClick={onToggleFilters}
             >
@@ -327,7 +332,7 @@ export function Reels({
             </IconButton>
           )}
           <IconButton
-            label={muted ? 'Unmute' : 'Mute'}
+            label={muted ? t('browse:reels.unmute') : t('browse:reels.mute')}
             className={actionButton}
             aria-pressed={muted}
             onClick={() => setMuted(!muted)}
@@ -335,17 +340,26 @@ export function Reels({
             {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
           </IconButton>
           <IconButton
-            label="Auto-scroll"
+            label={t('browse:reels.autoScroll')}
             className={actionButton}
             aria-pressed={autoScroll}
             onClick={() => setAutoScroll(value => !value)}
           >
             <Timer className={`size-4 ${autoScroll ? 'text-accent' : ''}`} />
           </IconButton>
-          <IconButton label="Tags" className={actionButton} aria-pressed={tags} onClick={() => setTags(!tags)}>
+          <IconButton
+            label={t('browse:reels.tags')}
+            className={actionButton}
+            aria-pressed={tags}
+            onClick={() => setTags(!tags)}
+          >
             <Tag className="size-4" />
           </IconButton>
-          <IconButton label="View options" className={actionButton} onClick={() => setOptionsOpen(true)}>
+          <IconButton
+            label={t('browse:reels.viewOptions')}
+            className={actionButton}
+            onClick={() => setOptionsOpen(true)}
+          >
             <Settings2 className="size-4" />
           </IconButton>
           <DeleteMediaAction
@@ -366,23 +380,38 @@ export function Reels({
               }
             }}
           />
-          <IconButton label="Media information" className={actionButton} onClick={() => setInfoOpen(true)}>
+          <IconButton
+            label={t('browse:reels.mediaInformation')}
+            className={actionButton}
+            onClick={() => setInfoOpen(true)}
+          >
             <Info className="size-4" />
           </IconButton>
           <IconButton
-            label="Previous"
+            label={t('browse:reels.previous')}
             className={actionButton}
             disabled={!previous}
             onClick={() => navigate('previous')}
           >
             <ChevronUp className="size-4" />
           </IconButton>
-          <IconButton label="Next" className={actionButton} disabled={!next} onClick={() => navigate('next')}>
+          <IconButton
+            label={t('browse:reels.next')}
+            className={actionButton}
+            disabled={!next}
+            onClick={() => navigate('next')}
+          >
             <ChevronDown className="size-4" />
           </IconButton>
         </MediaActions>
       </div>
-      <Modal open={tags} onOpenChange={setTags} title="Tags" description="Add or remove tags for this item." sheet>
+      <Modal
+        open={tags}
+        onOpenChange={setTags}
+        title={t('browse:reels.tags')}
+        description={t('browse:reels.addOrRemoveTagsForThisItem')}
+        sheet
+      >
         <div className="overflow-auto p-5">
           <TagEditor key={item.id} mediaIds={[item.id]} tags={item.tags} />
         </div>
@@ -390,8 +419,8 @@ export function Reels({
       <Modal
         open={infoOpen}
         onOpenChange={setInfoOpen}
-        title="Media information"
-        description="File information for this reel."
+        title={t('browse:reels.mediaInformation')}
+        description={t('browse:reels.fileInformationForThisReel')}
         sheet
       >
         <div className="overflow-auto p-5">

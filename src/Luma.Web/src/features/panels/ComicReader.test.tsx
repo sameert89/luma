@@ -50,7 +50,7 @@ describe('comic reader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
     fireEvent.error(screen.getByRole('img'))
-    expect(screen.getByRole('alert')).toHaveTextContent('could not be loaded')
+    expect(screen.getByRole('alert')).toHaveTextContent('load this page')
     expect(screen.getByRole('button', { name: 'Exit reader' })).toBeVisible()
   })
 })

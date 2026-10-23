@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useState } from 'react'
 import { FolderOpen } from 'lucide-react'
 import { AlbumCover } from '../browse/AlbumCover'
@@ -16,7 +17,7 @@ export function ComicFolderCard({
     <article className="relative w-full max-w-sm overflow-hidden rounded-xl border border-line bg-surface hover:border-accent">
       <button
         type="button"
-        aria-label={`Open ${name}`}
+        aria-label={t('panels:comicFolderCard.open', { value1: name })}
         title={name}
         className="relative block w-full text-left focus-visible:ring-inset"
         onClick={onOpen}

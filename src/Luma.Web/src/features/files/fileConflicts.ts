@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { ApiError } from '../../lib/api/client'
 
 export type ConflictChoice = 'replace' | 'skip'
@@ -44,7 +45,7 @@ function ask(batch: string, target: string, signal?: AbortSignal): Promise<Confl
     const abort = () => {
       pending = pending.filter(item => item.id !== id)
       publish()
-      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'))
+      reject(signal?.reason ?? new DOMException(t('files:fileConflicts.aborted'), 'AbortError'))
     }
     signal?.addEventListener('abort', abort, { once: true })
     pending = [...pending, { id, batch, target, resolve, abort: () => signal?.removeEventListener('abort', abort) }]
@@ -68,7 +69,7 @@ export async function waitForFileSlot<T>(
       await new Promise<void>((resolve, reject) => {
         const abort = () => {
           clearTimeout(timer)
-          reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'))
+          reject(signal?.reason ?? new DOMException(t('files:fileConflicts.aborted'), 'AbortError'))
         }
         const timer = setTimeout(
           () => {

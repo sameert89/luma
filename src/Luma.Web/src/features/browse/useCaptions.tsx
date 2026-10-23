@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Captions, Settings2 } from 'lucide-react'
 import { Field, IconButton, Select } from '../../components/ui/Controls'
@@ -79,12 +80,11 @@ export function useCaptions(mediaId: number, isVideo: boolean) {
   }
   let message = ''
   if (enabled) {
-    if (error) message = `Captions unavailable: ${error} Playback can continue.`
-    else if (loading) message = 'Finding SRT captions…'
-    else if (!selected) message = data?.warning ?? 'No supported SRT captions found.'
-    else if (src && failedSrc === src)
-      message = 'Captions could not be loaded. Playback can continue; turn captions off and on to retry.'
-    else if (src && loadedSrc !== src) message = 'Preparing captions…'
+    if (error) message = t('browse:useCaptions.captionsUnavailablePlaybackCanContinue', { value1: error })
+    else if (loading) message = t('browse:useCaptions.findingSRTCaptions')
+    else if (!selected) message = data?.warning ?? t('browse:useCaptions.noSupportedSRTCaptionsFound')
+    else if (src && failedSrc === src) message = t('browse:useCaptions.captionsCouldNotBeLoadedPlaybackCanContinueTurn')
+    else if (src && loadedSrc !== src) message = t('browse:useCaptions.preparingCaptions')
   }
   const track =
     src && selected ? (
@@ -115,8 +115,10 @@ export function CaptionControls({ captions }: { captions: ReturnType<typeof useC
   return (
     <>
       <IconButton
-        label="Captions"
-        title={captions.enabled ? 'Turn captions off' : 'Turn captions on (SRT only)'}
+        label={t('browse:useCaptions.captions')}
+        title={
+          captions.enabled ? t('browse:useCaptions.turnCaptionsOff') : t('browse:useCaptions.turnCaptionsOnSRTOnly')
+        }
         aria-pressed={captions.enabled}
         className="order-1 border-transparent"
         onClick={captions.toggle}
@@ -124,21 +126,25 @@ export function CaptionControls({ captions }: { captions: ReturnType<typeof useC
         <Captions className={`size-4 ${captions.enabled ? 'text-accent' : ''}`} />
       </IconButton>
       {captions.enabled && (
-        <IconButton label="Caption settings" className="order-1 border-transparent" onClick={() => setOpen(true)}>
+        <IconButton
+          label={t('browse:useCaptions.captionSettings')}
+          className="order-1 border-transparent"
+          onClick={() => setOpen(true)}
+        >
           <Settings2 className="size-4" />
         </IconButton>
       )}
       <Modal
         open={open && captions.enabled}
         onOpenChange={setOpen}
-        title="Caption settings"
+        title={t('browse:useCaptions.captionSettings')}
         portalContainer={document.fullscreenElement instanceof HTMLElement ? document.fullscreenElement : undefined}
-        description="Plain SRT captions only. Author fonts, colors, positioning and effects are not supported."
+        description={t('browse:useCaptions.plainSRTCaptionsOnlyAuthorFontsColorsPositioningAnd')}
         sheet
       >
         <div className="space-y-3 p-5">
           {captions.tracks.length > 0 && (
-            <Field label="Caption track">
+            <Field label={t('browse:useCaptions.captionTrack')}>
               <Select value={captions.selected?.id ?? ''} onChange={event => captions.choose(event.target.value)}>
                 {captions.tracks.map(track => (
                   <option key={track.id} value={track.id}>
@@ -154,10 +160,7 @@ export function CaptionControls({ captions }: { captions: ReturnType<typeof useC
             </p>
           )}
           {captions.warning && <p className="text-sm text-muted">{captions.warning}</p>}
-          <p className="text-sm text-muted">
-            Supports embedded SubRip/SRT or a same-folder, same-basename .srt file. Other subtitle formats and styled
-            subtitles are not supported. Converted and extracted files stay in Luma’s cache.
-          </p>
+          <p className="text-sm text-muted">{t('browse:useCaptions.supportsEmbeddedSubRipSRTOrASameFolderSame')}</p>
         </div>
       </Modal>
     </>

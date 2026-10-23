@@ -186,7 +186,7 @@ describe('media viewing', () => {
           <MediaStage item={{ ...image, mediaType: 'video' }} reels muted onNavigate={vi.fn()} />
         </StrictMode>,
       )
-      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Autoplay was blocked'))
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Press Play to start this video'))
       const video = container.querySelector('video')!
       expect(video).toHaveAttribute('src', '/api/media/1/original')
       expect(video.controls).toBe(false)
@@ -195,7 +195,7 @@ describe('media viewing', () => {
       expect(screen.getByRole('slider', { name: 'Seek video' })).toBeVisible()
       expect(screen.queryByRole('button', { name: 'Play' })).not.toBeInTheDocument()
       fireEvent.error(video)
-      expect(screen.getByRole('status')).toHaveTextContent('external player')
+      expect(screen.getByRole('status')).toHaveTextContent('VLC')
       await userEvent.click(screen.getByRole('button', { name: 'More options' }))
       await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Playback speed' }), '2')
       expect(video.playbackRate).toBe(2)

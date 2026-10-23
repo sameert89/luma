@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useDeferredValue, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Plus, Search, Tag as TagIcon, X } from 'lucide-react'
@@ -44,7 +45,7 @@ export function TagEditor({
         if (mode === 'remove') {
           const choices = await request<Tag[]>(`${tagUrl}?prefix=${encodeURIComponent(name)}&limit=50`)
           id = choices.find(x => sameTag(x.name, name))?.id
-          if (!id) throw new Error('Choose an existing tag to remove.')
+          if (!id) throw new Error(t('tags:tagEditor.chooseAnExistingTagToRemove'))
           remove = true
         } else id = (await request<Tag>('/api/tags', undefined, 'POST', { name })).id
       }
@@ -95,10 +96,13 @@ export function TagEditor({
     }
   }
   return (
-    <section className="space-y-4" aria-label={bulk ? 'Bulk tag editor' : 'Tag editor'}>
+    <section
+      className="space-y-4"
+      aria-label={bulk ? t('tags:tagEditor.bulkTagEditor') : t('tags:tagEditor.tagEditor')}
+    >
       {!bulk && (
         <div className="flex flex-wrap gap-2">
-          {tags.length === 0 && <p className="text-sm text-muted">No tags yet.</p>}
+          {tags.length === 0 && <p className="text-sm text-muted">{t('tags:tagEditor.noTagsYet')}</p>}
           {tags.map(tag => (
             <QuietButton
               key={tag.id}
@@ -106,7 +110,7 @@ export function TagEditor({
               style={tagTone(tag.name)}
               disabled={update.isPending}
               onClick={() => update.mutate({ id: tag.id, remove: true })}
-              aria-label={`Remove tag ${tag.name}`}
+              aria-label={t('tags:tagEditor.removeTag', { value1: tag.name })}
             >
               {tag.name}
               <X className="size-3" aria-hidden="true" />
@@ -122,14 +126,14 @@ export function TagEditor({
         }}
       >
         {bulk && (
-          <Field label="Operation">
+          <Field label={t('tags:tagEditor.operation')}>
             <Select value={mode} onChange={event => setMode(event.target.value)}>
-              <option value="add">Add a tag</option>
-              <option value="remove">Remove a tag</option>
+              <option value="add">{t('tags:tagEditor.addATag')}</option>
+              <option value="remove">{t('tags:tagEditor.removeATag')}</option>
             </Select>
           </Field>
         )}
-        <Field label={removing ? 'Tag to remove' : 'Find or create a tag'}>
+        <Field label={removing ? t('tags:tagEditor.tagToRemove') : t('tags:tagEditor.findOrCreateATag')}>
           <div className="relative">
             <Search
               className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
@@ -147,7 +151,9 @@ export function TagEditor({
               spellCheck={false}
               enterKeyHint="done"
               aria-describedby={showResults ? resultsId : undefined}
-              placeholder={removing ? 'Type a tag on these items' : 'Type to search, Enter to add'}
+              placeholder={
+                removing ? t('tags:tagEditor.typeATagOnTheseItems') : t('tags:tagEditor.typeToSearchEnterToAdd')
+              }
               value={name}
               onChange={event => setName(event.target.value)}
               onKeyDown={move}
@@ -159,7 +165,7 @@ export function TagEditor({
           <ul
             ref={results}
             id={resultsId}
-            aria-label="Matching tags"
+            aria-label={t('tags:tagEditor.matchingTags')}
             className="overflow-hidden rounded-xl border border-line"
           >
             {matches.map(tag => {
@@ -183,10 +189,12 @@ export function TagEditor({
                     {on ? (
                       <span className="flex shrink-0 items-center gap-1 text-xs text-muted">
                         <Check className="size-3" aria-hidden="true" />
-                        Added
+                        {t('tags:tagEditor.added')}
                       </span>
                     ) : (
-                      <span className="shrink-0 text-xs text-muted">{removing ? 'Remove' : 'Add'}</span>
+                      <span className="shrink-0 text-xs text-muted">
+                        {removing ? t('tags:tagEditor.remove') : t('tags:tagEditor.add')}
+                      </span>
                     )}
                   </button>
                 </li>
@@ -202,8 +210,8 @@ export function TagEditor({
                   className="flex min-h-11 w-full items-center gap-3 px-3 text-left text-sm hover:bg-surface focus-visible:ring-inset"
                 >
                   <Plus className="size-4 shrink-0 text-accent" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate">Create “{name.trim()}”</span>
-                  <span className="shrink-0 text-xs text-muted">New tag</span>
+                  <span className="min-w-0 flex-1 truncate">{t('tags:tagEditor.create', { name: name.trim() })}</span>
+                  <span className="shrink-0 text-xs text-muted">{t('tags:tagEditor.newTag')}</span>
                 </button>
               </li>
             )}
@@ -212,13 +220,15 @@ export function TagEditor({
         {bulk && (
           <Button type="submit" disabled={update.isPending || !name.trim() || mediaIds.length === 0} className="gap-2">
             <Plus className="size-4" aria-hidden="true" />
-            {update.isPending ? 'Saving…' : `Apply to ${mediaIds.length} items`}
+            {update.isPending
+              ? t('tags:tagEditor.saving')
+              : t('tags:tagEditor.applyToItems', { count: mediaIds.length })}
           </Button>
         )}
       </form>
       {update.isPending && !bulk && (
         <p role="status" className="text-sm text-muted">
-          Saving…
+          {t('tags:tagEditor.saving')}
         </p>
       )}
       {update.isError && (
@@ -228,7 +238,7 @@ export function TagEditor({
       )}
       {update.isSuccess && (
         <p role="status" className="text-sm text-positive">
-          Tags saved.
+          {t('tags:tagEditor.tagsSaved')}
         </p>
       )}
     </section>

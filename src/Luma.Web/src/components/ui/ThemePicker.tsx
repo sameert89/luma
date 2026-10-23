@@ -1,12 +1,13 @@
+import { t } from '../../lib/i18n'
 import { Check, Image, Search } from 'lucide-react'
 import { themes, type Theme } from '../../app/themes'
 
 export function ThemePicker({ value, onChange }: { value: Theme; onChange: (theme: Theme) => void }) {
   return (
-    <section className="mx-auto min-h-0 w-full max-w-5xl space-y-4 p-5" aria-label="Theme settings">
+    <section className="mx-auto min-h-0 w-full max-w-5xl space-y-4 p-5" aria-label={t('ui:themePicker.themeSettings')}>
       <div>
-        <h2 className="text-2xl font-semibold">Theme & appearance</h2>
-        <p className="mt-2 text-sm text-muted">Choose how Luma looks on this device.</p>
+        <h2 className="text-2xl font-semibold">{t('ui:themePicker.themeAppearance')}</h2>
+        <p className="mt-2 text-sm text-muted">{t('ui:themePicker.chooseHowLumaLooksOnThisDevice')}</p>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         {themes.map(theme => (
@@ -21,7 +22,8 @@ export function ThemePicker({ value, onChange }: { value: Theme; onChange: (them
             <div data-theme={theme.id} className="space-y-2 bg-canvas p-3 text-ink" aria-hidden="true">
               <div className="flex items-center gap-2">
                 <span className="font-semibold">
-                  luma<span className="text-accent">.</span>
+                  {'luma'}
+                  <span className="text-accent">.</span>
                 </span>
                 <span className="ml-auto hidden h-7 w-24 sm:flex items-center rounded-full border border-line bg-surface px-2">
                   <Search className="size-3 text-muted" />

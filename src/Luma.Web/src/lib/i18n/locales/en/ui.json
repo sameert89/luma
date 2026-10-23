@@ -1,0 +1,41 @@
+{
+  "bottomNavigation": {
+    "primaryNavigation": "Primary navigation"
+  },
+  "cachedImage": {
+    "previewCouldNotBePrepared": "Preview could not be prepared",
+    "preparingPreview": "Preparing preview…",
+    "previewUnavailable": "Preview unavailable",
+    "retryPreview": "Retry preview"
+  },
+  "dialog": {
+    "close": "Close"
+  },
+  "modal": {
+    "close": "Close"
+  },
+  "searchHeader": {
+    "comic": "Comic",
+    "tag": "Tag",
+    "folder": "Folder",
+    "file": "File",
+    "searchMedia": "Search media",
+    "searchNamesFoldersAndTags": "Search names, folders and tags",
+    "lumaHome": "Luma home",
+    "submitSearch": "Submit search",
+    "searchSuggestions": "Search suggestions",
+    "closeSearch": "Close search",
+    "openSearch": "Open search",
+    "search": "Search",
+    "filters": "Filters",
+    "settings": "Settings"
+  },
+  "themePicker": {
+    "themeSettings": "Theme settings",
+    "themeAppearance": "Theme & appearance",
+    "chooseHowLumaLooksOnThisDevice": "Choose how Luma looks on this device."
+  },
+  "toast": {
+    "dismiss": "Dismiss"
+  }
+}

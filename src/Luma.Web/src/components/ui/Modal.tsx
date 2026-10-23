@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import * as Primitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { useEffect, useRef, type ReactNode } from 'react'
@@ -147,7 +148,7 @@ export function Modal({
                         <Primitive.Description className="sr-only">{description}</Primitive.Description>
                       </div>
                       <Primitive.Close asChild>
-                        <IconButton label="Close">
+                        <IconButton label={t('ui:modal.close')}>
                           <X className="size-5" />
                         </IconButton>
                       </Primitive.Close>
@@ -167,7 +168,7 @@ export function Modal({
                         <Primitive.Description className="sr-only">{description}</Primitive.Description>
                       </div>
                       <Primitive.Close asChild>
-                        <IconButton label="Close">
+                        <IconButton label={t('ui:modal.close')}>
                           <X className="size-5" />
                         </IconButton>
                       </Primitive.Close>

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../../lib/api/client'
@@ -59,7 +60,7 @@ export function useFolderIndexing(folderId?: number) {
     error:
       start.error ??
       (scan.data?.state === 'failed'
-        ? new Error('This folder could not be indexed. Check that its media source is available.')
+        ? new Error(t('browse:useFolderIndexing.thisFolderCouldNotBeIndexedCheckThatIts'))
         : scan.error),
   }
 }

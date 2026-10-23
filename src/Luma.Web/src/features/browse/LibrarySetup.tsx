@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '../../components/ui/Button'
@@ -11,7 +12,7 @@ type LibraryRoot = components['schemas']['LibraryRoot']
 
 /** The tag-import choices shared by setup, rescans and library settings. */
 export function MetadataModeSelect({
-  label = 'Tag import',
+  label = t('browse:librarySetup.tagImport'),
   ...props
 }: {
   label?: string
@@ -22,9 +23,9 @@ export function MetadataModeSelect({
   return (
     <Field label={label}>
       <Select value={props.value} disabled={props.disabled} onChange={event => props.onChange(event.target.value)}>
-        <option value="none">Do not import tags</option>
-        <option value="embedded">Tags embedded in media</option>
-        <option value="xmp">Embedded tags + XMP sidecars</option>
+        <option value="none">{t('browse:librarySetup.doNotImportTags')}</option>
+        <option value="embedded">{t('browse:librarySetup.tagsEmbeddedInMedia')}</option>
+        <option value="xmp">{t('browse:librarySetup.embeddedTagsXMPSidecars')}</option>
       </Select>
     </Field>
   )
@@ -52,14 +53,13 @@ function LibraryRefreshSettings({ library }: { library: Library }) {
     setDraft({ ...value!, [key]: next })
   return (
     <div className="space-y-3 border-t border-line pt-4">
-      <h3 className="font-medium">Automatic discovery</h3>
+      <h3 className="font-medium">{t('browse:librarySetup.automaticDiscovery')}</h3>
       <p className="text-sm leading-relaxed text-muted">
-        Controls how Luma discovers files added after the initial index. Discovered media still uses the normal bounded
-        metadata and preview queues.
+        {t('browse:librarySetup.controlsHowLumaDiscoversFilesAddedAfterTheInitial')}
       </p>
       {query.isPending && (
         <p role="status" className="text-sm text-muted">
-          Loading refresh settings…
+          {t('browse:librarySetup.loadingRefreshSettings')}
         </p>
       )}
       {query.isError && (
@@ -69,32 +69,30 @@ function LibraryRefreshSettings({ library }: { library: Library }) {
       )}
       {value && (
         <div className="max-w-md space-y-3">
-          <Field label={`Change detection for ${library.name}`}>
+          <Field label={t('browse:librarySetup.changeDetectionFor', { value1: library.name })}>
             <Select
               value={value.mode}
               disabled={update.isPending}
               onChange={event => change('mode', event.target.value as RefreshSettings['mode'])}
             >
-              <option value="watcher">Watch filesystem (recommended)</option>
-              <option value="periodic">Periodic full scan</option>
-              <option value="off">Manual only</option>
+              <option value="watcher">{t('browse:librarySetup.watchFilesystemRecommended')}</option>
+              <option value="periodic">{t('browse:librarySetup.periodicFullScan')}</option>
+              <option value="off">{t('browse:librarySetup.manualOnly')}</option>
             </Select>
           </Field>
           {value.mode === 'watcher' && (
             <p className="text-sm text-muted">
-              Event-driven: no polling or directory reads while the filesystem is idle. After a change, Luma scans only
-              the affected folder or newly added subtree.
+              {t('browse:librarySetup.eventDrivenNoPollingOrDirectoryReadsWhileThe')}
             </p>
           )}
           {value.mode === 'periodic' && (
             <p className="text-sm text-muted">
-              Runs a complete library scan on the interval, including while nobody is using Luma. Use this only when the
-              mount does not reliably forward filesystem events.
+              {t('browse:librarySetup.runsACompleteLibraryScanOnTheIntervalIncluding')}
             </p>
           )}
           {value.mode === 'off' && (
             <p className="text-sm text-muted">
-              No automatic scans. Refresh-on-open and manual folder/library rescans remain available.
+              {t('browse:librarySetup.noAutomaticScansRefreshOnOpenAndManualFolder')}
             </p>
           )}
           <label htmlFor={`refresh-on-open-${library.id}`} className="flex items-start gap-3 text-sm">
@@ -105,15 +103,15 @@ function LibraryRefreshSettings({ library }: { library: Library }) {
               onChange={event => change('refreshOnOpen', event.target.checked)}
             />
             <span className="pt-2">
-              <span className="block font-medium">Refresh folders when opened</span>
+              <span className="block font-medium">{t('browse:librarySetup.refreshFoldersWhenOpened')}</span>
               <span className="mt-1 block text-muted">
-                Checks one directory timestamp, and shallow-scans it only when it changed.
+                {t('browse:librarySetup.checksOneDirectoryTimestampAndShallowScansItOnly')}
               </span>
             </span>
           </label>
           {value.mode === 'watcher' && (
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Event debounce (seconds)">
+              <Field label={t('browse:librarySetup.eventDebounceSeconds')}>
                 <Input
                   type="number"
                   min={1}
@@ -122,7 +120,7 @@ function LibraryRefreshSettings({ library }: { library: Library }) {
                   onChange={event => change('watcherDebounceSeconds', Number(event.target.value))}
                 />
               </Field>
-              <Field label="File stability wait (seconds)">
+              <Field label={t('browse:librarySetup.fileStabilityWaitSeconds')}>
                 <Input
                   type="number"
                   min={1}
@@ -134,7 +132,7 @@ function LibraryRefreshSettings({ library }: { library: Library }) {
             </div>
           )}
           {value.mode === 'periodic' && (
-            <Field label="Scan interval (minutes)">
+            <Field label={t('browse:librarySetup.scanIntervalMinutes')}>
               <Input
                 type="number"
                 min={5}
@@ -146,7 +144,7 @@ function LibraryRefreshSettings({ library }: { library: Library }) {
           )}
           {draft && (
             <Button disabled={update.isPending} onClick={() => update.mutate(draft)}>
-              {update.isPending ? 'Saving…' : 'Save discovery settings'}
+              {update.isPending ? t('browse:librarySetup.saving') : t('browse:librarySetup.saveDiscoverySettings')}
             </Button>
           )}
           {update.isError && (
@@ -204,37 +202,34 @@ export function LibrarySetup({
       onOpenChange={open => {
         if (!open) onClose()
       }}
-      title="Set up library"
+      title={t('browse:librarySetup.setUpLibrary')}
       description={library?.name ?? ''}
       sheet
     >
       <div className="space-y-4 overflow-auto p-5">
         <MetadataModeSelect
-          label="Automatic tag import"
+          label={t('browse:librarySetup.automaticTagImport')}
           value={metadataMode}
           disabled={busy}
           onChange={setMetadataMode}
         />
         <p className="text-sm leading-relaxed text-muted">
-          This controls only EXIF/IPTC/XMP tag import. It does not disable indexing, thumbnails, video posters or
-          on-demand previews. Luma remembers it for this library.
+          {t('browse:librarySetup.thisControlsOnlyEXIFIPTCXMPTagImportIt')}
         </p>
         <div className="space-y-2">
           <Button disabled={busy} onClick={() => onDemand.mutate(library!.id)}>
-            {onDemand.isPending ? 'Opening…' : 'Index folders as I open them'}
+            {onDemand.isPending ? t('browse:librarySetup.opening') : t('browse:librarySetup.indexFoldersAsIOpenThem')}
           </Button>
           <p className="text-sm leading-relaxed text-muted">
-            Indexes each folder when first opened. After setup, filesystem watching keeps changed folders current by
-            default; configure or disable it in Settings.
+            {t('browse:librarySetup.indexesEachFolderWhenFirstOpenedAfterSetupFilesystem')}
           </p>
         </div>
         <div className="space-y-2">
           <QuietButton disabled={busy} onClick={() => scanAll.mutate(library!.id)}>
-            {scanAll.isPending ? 'Starting…' : 'Index everything now'}
+            {scanAll.isPending ? t('browse:librarySetup.starting') : t('browse:librarySetup.indexEverythingNow')}
           </QuietButton>
           <p className="text-sm leading-relaxed text-muted">
-            Scans the whole library in the background. On a large library this can take a long time and use significant
-            disk and CPU.
+            {t('browse:librarySetup.scansTheWholeLibraryInTheBackgroundOnA')}
           </p>
         </div>
         {error && (
@@ -261,12 +256,12 @@ export function LibrarySettings() {
   })
   return (
     <SettingsSection
-      title="Libraries"
-      description="Configure automatic discovery and tag import independently for each library."
+      title={t('browse:librarySetup.libraries')}
+      description={t('browse:librarySetup.configureAutomaticDiscoveryAndTagImportIndependentlyForEach')}
     >
       {libraries.isPending && (
         <p role="status" className="text-sm text-muted">
-          Loading libraries…
+          {t('browse:librarySetup.loadingLibraries')}
         </p>
       )}
       {libraries.isError && (
@@ -274,19 +269,21 @@ export function LibrarySettings() {
           {errorMessage(libraries.error)}
         </p>
       )}
-      {libraries.data?.length === 0 && <p className="text-sm text-muted">No libraries are configured.</p>}
+      {libraries.data?.length === 0 && (
+        <p className="text-sm text-muted">{t('browse:librarySetup.noLibrariesAreConfigured')}</p>
+      )}
       {libraries.data?.map(library => (
         <div key={library.id} className="max-w-2xl space-y-4">
           <div className="max-w-md">
             <MetadataModeSelect
-              label={`Automatic tag import for ${library.name}`}
+              label={t('browse:librarySetup.automaticTagImportFor', { value1: library.name })}
               value={library.metadataMode}
               disabled={update.isPending}
               onChange={metadataMode => update.mutate({ id: library.id, metadataMode })}
             />
           </div>
           <p className="text-sm text-muted">
-            Tag import affects tags only; preview and thumbnail generation is unchanged.
+            {t('browse:librarySetup.tagImportAffectsTagsOnlyPreviewAndThumbnailGeneration')}
           </p>
           <LibraryRefreshSettings library={library} />
         </div>

@@ -1,3 +1,4 @@
+import { t, stateLabel } from '../../lib/i18n'
 import { useRef, useState, useSyncExternalStore } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
 import { FileUp, FolderUp, UploadCloud } from 'lucide-react'
@@ -14,21 +15,24 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
   async function choose(files: File[]) {
     setError('')
     setPreparing(true)
-    setMessage('Preparing uploads… You can close this dialog; uploads continue in Background jobs.')
+    setMessage(t('uploads:uploadPicker.preparingUploadsYouCanCloseThisDialogUploadsContinue'))
     try {
       const result = await addUploads(files, libraryId, destination)
       setMessage(
-        `${result.queued} files queued for upload.${result.skipped ? ` ${result.skipped} skipped.` : ''} Follow progress in Background jobs.`,
+        t('uploads:uploadPicker.filesQueued', {
+          count: result.queued,
+          skipped: result.skipped ? t('common:counts.skipped', { count: result.skipped }) : '',
+        }),
       )
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Could not start upload.')
+      setError(error instanceof Error ? error.message : t('uploads:uploadPicker.couldNotStartUpload'))
     } finally {
       setPreparing(false)
     }
   }
   return (
     <section
-      aria-label="Upload files"
+      aria-label={t('uploads:uploadPicker.uploadFiles')}
       className="space-y-4"
       onDragOver={event => {
         event.preventDefault()
@@ -50,22 +54,24 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
         className={`flex min-h-48 flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-6 text-center ${dragging ? 'border-accent bg-surface' : 'border-line'}`}
       >
         <UploadCloud className="size-10 text-accent" aria-hidden="true" />
-        <p className="font-semibold">Drop files or folders here</p>
-        <p className="text-sm text-muted">Upload into {destination || '/'}</p>
+        <p className="font-semibold">{t('uploads:uploadPicker.dropFilesOrFoldersHere')}</p>
+        <p className="text-sm text-muted">
+          {t('uploads:uploadPicker.uploadInto', { destination: destination || '/' })}
+        </p>
         <div className="flex flex-wrap justify-center gap-2">
           <QuietButton disabled={preparing} onClick={() => fileInput.current?.click()}>
             <FileUp className="size-4" />
-            Choose files
+            {t('uploads:uploadPicker.chooseFiles')}
           </QuietButton>
           <QuietButton disabled={preparing} onClick={() => folderInput.current?.click()}>
             <FolderUp className="size-4" />
-            Choose folder
+            {t('uploads:uploadPicker.chooseFolder')}
           </QuietButton>
         </div>
       </div>
       <input
         ref={fileInput}
-        aria-label="Choose upload files"
+        aria-label={t('uploads:uploadPicker.chooseUploadFiles')}
         className="hidden"
         type="file"
         multiple
@@ -76,7 +82,7 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
       />
       <input
         ref={folderInput}
-        aria-label="Choose upload folder"
+        aria-label={t('uploads:uploadPicker.chooseUploadFolder')}
         className="hidden"
         type="file"
         multiple
@@ -87,7 +93,7 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
         }}
       />
       <p className="text-sm text-muted">
-        Uploads continue when this dialog closes. After refreshing, reselect the same files or folder to resume.
+        {t('uploads:uploadPicker.uploadsContinueWhenThisDialogClosesAfterRefreshingReselect')}
       </p>
       {message && (
         <p role="status" className="text-sm text-muted">
@@ -100,7 +106,9 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
         </p>
       )}
       <p className="text-sm text-muted">
-        {queue.filter(item => !['completed', 'cancelled', 'skipped'].includes(item.state)).length} uploads in queue
+        {t('uploads:uploadPicker.uploadsInQueue', {
+          count: queue.filter(item => !['completed', 'cancelled', 'skipped'].includes(item.state)).length,
+        })}
       </p>
       {queue.slice(-100).map(item => (
         <article key={item.key} className="space-y-2 rounded-lg border border-line p-3">
@@ -108,30 +116,33 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
             {item.target}
           </p>
           <p className="text-sm text-muted">
-            {item.state} · {item.size ? Math.round((item.offset / item.size) * 100) : 0}%
+            {stateLabel(item.state)} · {item.size ? Math.round((item.offset / item.size) * 100) : 0}%
             {item.speed
-              ? ` · ${(item.speed / 1024 / 1024).toFixed(1)} MiB/s · ${Math.ceil((item.size - item.offset) / item.speed)}s remaining`
+              ? t('uploads:uploadPicker.miBSSRemaining', {
+                  value1: (item.speed / 1024 / 1024).toFixed(1),
+                  value2: Math.ceil((item.size - item.offset) / item.speed),
+                })
               : ''}
           </p>
           {item.error && <p className="text-sm text-danger">{item.error}</p>}
           <div className="flex flex-wrap gap-2">
             {item.state === 'uploading' && (
               <QuietButton onClick={() => void uploadAction(item.key, 'pause').catch(error => setError(String(error)))}>
-                Pause
+                {t('uploads:uploadPicker.pause')}
               </QuietButton>
             )}
             {['paused', 'failed'].includes(item.state) && (
               <QuietButton
                 onClick={() => void uploadAction(item.key, 'resume').catch(error => setError(String(error)))}
               >
-                Resume / retry
+                {t('uploads:uploadPicker.resumeRetry')}
               </QuietButton>
             )}
             {!['completed', 'cancelled', 'skipped', 'finalizing'].includes(item.state) && (
               <QuietButton
                 onClick={() => void uploadAction(item.key, 'cancel').catch(error => setError(String(error)))}
               >
-                Cancel
+                {t('uploads:uploadPicker.cancel')}
               </QuietButton>
             )}
           </div>

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Modal } from '../../components/ui/Modal'
@@ -7,10 +8,10 @@ import type { components } from '../../lib/api/generated'
 
 type Evidence = components['schemas']['FileRecoveryEvidence']
 const labels: Record<string, string> = {
-  retry: 'Retry from saved checkpoint',
-  restart: 'Continue with this source',
-  confirmPublished: 'Confirm destination and finish',
-  cancel: 'Cancel untouched operation',
+  retry: t('files:fileRecoveryDialog.retryFromSavedCheckpoint'),
+  restart: t('files:fileRecoveryDialog.continueWithThisSource'),
+  confirmPublished: t('files:fileRecoveryDialog.confirmDestinationAndFinish'),
+  cancel: t('files:fileRecoveryDialog.cancelUntouchedOperation'),
 }
 export function FileRecoveryDialog({
   id,
@@ -68,12 +69,12 @@ export function FileRecoveryDialog({
       onOpenChange={open => {
         if (!open) onClose()
       }}
-      title="Review file operation"
-      description="Review the interrupted operation before continuing. Files are never overwritten during recovery."
+      title={t('files:fileRecoveryDialog.reviewFileOperation')}
+      description={t('files:fileRecoveryDialog.reviewTheInterruptedOperationBeforeContinuingFilesAreNever')}
       sheet
     >
       <div className="space-y-4 p-5">
-        {evidence.isPending && <p role="status">Loading operation evidence…</p>}
+        {evidence.isPending && <p role="status">{t('files:fileRecoveryDialog.loadingOperationEvidence')}</p>}
         {evidence.isError && (
           <p role="alert" className="text-danger">
             {errorMessage(evidence.error)}
@@ -86,62 +87,71 @@ export function FileRecoveryDialog({
             </p>
             <dl className="space-y-3 break-words text-sm">
               <div>
-                <dt className="font-semibold">Source</dt>
+                <dt className="font-semibold">{t('files:fileRecoveryDialog.source')}</dt>
                 <dd>{row.source}</dd>
                 <dd className="text-muted">
                   {evidence.data.sourceExists
                     ? evidence.data.sourceMatches
-                      ? 'Present, matches recorded size, timestamp and type'
-                      : 'Present, differs from the recorded source'
-                    : 'Absent'}
+                      ? t('files:fileRecoveryDialog.presentMatchesRecordedSizeTimestampAndType')
+                      : t('files:fileRecoveryDialog.presentDiffersFromTheRecordedSource')
+                    : t('files:fileRecoveryDialog.absent')}
                 </dd>
               </div>
               <div>
-                <dt className="font-semibold">Reserved content</dt>
+                <dt className="font-semibold">{t('files:fileRecoveryDialog.reservedContent')}</dt>
                 <dd>{evidence.data.stagingPath}</dd>
-                <dd className="text-muted">{evidence.data.stagingExists ? 'Present' : 'Absent'}</dd>
+                <dd className="text-muted">
+                  {evidence.data.stagingExists
+                    ? t('files:fileRecoveryDialog.present')
+                    : t('files:fileRecoveryDialog.absent')}
+                </dd>
               </div>
               {(row.destination || row.kind === 'mkdir') && (
                 <div>
-                  <dt className="font-semibold">Destination</dt>
+                  <dt className="font-semibold">{t('files:fileRecoveryDialog.destination')}</dt>
                   <dd>{row.destination ?? row.source}</dd>
                   <dd className="text-muted">
                     {evidence.data.destinationExists
                       ? evidence.data.destinationMatches
-                        ? 'Present, matches recorded evidence'
-                        : 'Present, differs from recorded evidence'
-                      : 'Absent'}
+                        ? t('files:fileRecoveryDialog.presentMatchesRecordedEvidence')
+                        : t('files:fileRecoveryDialog.presentDiffersFromRecordedEvidence')
+                      : t('files:fileRecoveryDialog.absent')}
                   </dd>
                 </div>
               )}
             </dl>
             <p className="text-sm text-muted">
-              {row.failureCode}. Size and timestamps do not prove file contents. Confirm the intended source or
-              destination before continuing.
+              {t('files:fileRecoveryDialog.sizeAndTimestampsDoNotProveFileContentsConfirm', {
+                code: row.failureCode,
+              })}
             </p>
             {alternative && (
-              <Field label="Alternative destination (optional)">
+              <Field label={t('files:fileRecoveryDialog.alternativeDestinationOptional')}>
                 <Input
                   value={destination}
                   onChange={event => {
                     setDestination(event.target.value)
                     setConfirmed(false)
                   }}
-                  placeholder="Unused path relative to this library"
+                  placeholder={t('files:fileRecoveryDialog.unusedPathRelativeToThisLibrary')}
                 />
               </Field>
             )}
             {!actions.length && (
               <p className="text-sm">
-                Resolve the filesystem conflict, then reload the evidence to see available actions.
+                {t('files:fileRecoveryDialog.resolveTheFilesystemConflictThenReloadTheEvidenceTo')}
               </p>
             )}
             {actions.includes('restart') && (
-              <p className="text-sm">Continuing renews the original {row.kind} request for the current source.</p>
+              <p className="text-sm">
+                {t('files:fileRecoveryDialog.continuingRenewsTheOriginalRequestForTheCurrentSource', {
+                  operation: row.kind,
+                })}
+              </p>
             )}
             {actions.includes('confirmPublished') && (
               <p className="text-sm">
-                Confirming the destination preserves it and finishes the library metadata update.
+                {t('files:fileRecoveryDialog.confirmingTheDestinationPreservesItAndFinishesTheLibrary')}
               </p>
             )}
             {!!actions.length && (
@@ -152,13 +162,12 @@ export function FileRecoveryDialog({
                   disabled={busy}
                   onChange={event => setConfirmed(event.target.checked)}
                 />
-                I reviewed these paths and the recovery action.
+                {t('files:fileRecoveryDialog.iReviewedThesePathsAndTheRecoveryAction')}
               </label>
             )}
             {blocked && (
               <p role="status" className="text-sm text-muted">
-                File changes disabled. Correct the media mount or permissions and use Check media mounts in Settings
-                before recovery.
+                {t('files:fileRecoveryDialog.fileChangesDisabledCorrectTheMediaMountOrPermissions')}
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -182,7 +191,7 @@ export function FileRecoveryDialog({
             void evidence.refetch()
           }}
         >
-          Reload evidence
+          {t('files:fileRecoveryDialog.reloadEvidence')}
         </QuietButton>
       </div>
     </Modal>

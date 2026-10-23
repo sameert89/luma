@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { TagEditor } from '../tags/TagEditor'
 import type { Tag } from '../browse/api'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -27,7 +28,7 @@ export function ComicDetails({ id, onSaved }: { id: number; onSaved: () => void 
   if (!detail.data || !detail.isFetchedAfterMount)
     return (
       <p role="status" className="p-5 text-muted">
-        Loading comic details…
+        {t('panels:comicDetails.loadingComicDetails')}
       </p>
     )
   return (
@@ -76,7 +77,7 @@ function MetadataForm({ comic, onSaved }: { comic: Comic; onSaved: () => void })
       }}
     >
       <fieldset disabled={busy} className="space-y-4">
-        <Field label="Title">
+        <Field label={t('panels:comicDetails.title')}>
           <Input
             required
             maxLength={500}
@@ -84,21 +85,21 @@ function MetadataForm({ comic, onSaved }: { comic: Comic; onSaved: () => void })
             onChange={event => setDraft({ ...draft, title: event.target.value })}
           />
         </Field>
-        <Field label="Series">
+        <Field label={t('panels:comicDetails.series')}>
           <Input
             maxLength={500}
             value={draft.series}
             onChange={event => setDraft({ ...draft, series: event.target.value })}
           />
         </Field>
-        <Field label="Author">
+        <Field label={t('panels:comicDetails.author')}>
           <Input
             maxLength={500}
             value={draft.author}
             onChange={event => setDraft({ ...draft, author: event.target.value })}
           />
         </Field>
-        <Field label="Description">
+        <Field label={t('panels:comicDetails.description')}>
           <Textarea
             maxLength={4096}
             rows={4}
@@ -112,9 +113,9 @@ function MetadataForm({ comic, onSaved }: { comic: Comic; onSaved: () => void })
             checked={draft.favourite}
             onChange={event => setDraft({ ...draft, favourite: event.target.checked })}
           />
-          Favourite
+          {t('panels:comicDetails.favourite')}
         </label>
-        <Field label="Cover page">
+        <Field label={t('panels:comicDetails.coverPage')}>
           <Input
             type="number"
             required
@@ -126,7 +127,7 @@ function MetadataForm({ comic, onSaved }: { comic: Comic; onSaved: () => void })
           />
         </Field>
         <p className="text-sm text-muted">
-          Changing the cover queues background preparation. The source archive or folder stays unchanged.
+          {t('panels:comicDetails.changingTheCoverQueuesBackgroundPreparationTheSourceArchive')}
         </p>
         <QuietButton
           type="submit"
@@ -137,7 +138,7 @@ function MetadataForm({ comic, onSaved }: { comic: Comic; onSaved: () => void })
             draft.coverPage >= comic.pageCount
           }
         >
-          {busy ? 'Saving…' : 'Save comic details'}
+          {busy ? t('panels:comicDetails.saving') : t('panels:comicDetails.saveComicDetails')}
         </QuietButton>
       </fieldset>
       {error && (

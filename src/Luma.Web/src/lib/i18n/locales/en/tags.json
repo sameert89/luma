@@ -1,0 +1,42 @@
+{
+  "metadataExchange": {
+    "metadataExchange": "Metadata exchange",
+    "importsMergeEXIFXMPTagsIntoLuma": "Import tags from EXIF/XMP metadata. ",
+    "exportsAreDownloadsOriginalsStayUnchanged": "Download exports without changing your original files.",
+    "originalsStayUnchanged": "Your original files stay untouched.",
+    "includeAdjacentXMPSidecars": "Include adjacent XMP sidecars",
+    "importMetadataTags": "Import metadata tags",
+    "importFolderMetadataTags": "Import folder metadata tags",
+    "exportXMP": "Export XMP",
+    "exportDislikedPaths": "Export disliked paths",
+    "processedWithMetadataImportedUpdatedSkippedFailed": "{{state}}: {{processed}} processed, {{found}} with metadata, {{updated}} imported/updated, {{skipped}} skipped, {{failed}} failed.{{failure}}",
+    "item": "Item {{id}}: {{code}}",
+    "previousItemResults": "Previous item results",
+    "nextItemResults": "Next item results",
+    "downloadExport": "Download export"
+  },
+  "tagEditor": {
+    "chooseAnExistingTagToRemove": "Choose an existing tag to remove.",
+    "bulkTagEditor": "Bulk tag editor",
+    "tagEditor": "Tag editor",
+    "noTagsYet": "No tags yet.",
+    "removeTag": "Remove tag {{value1}}",
+    "operation": "Operation",
+    "addATag": "Add a tag",
+    "removeATag": "Remove a tag",
+    "tagToRemove": "Tag to remove",
+    "findOrCreateATag": "Find or create a tag",
+    "typeATagOnTheseItems": "Type a tag on these items",
+    "typeToSearchEnterToAdd": "Type to search, Enter to add",
+    "matchingTags": "Matching tags",
+    "added": "Added",
+    "remove": "Remove",
+    "add": "Add",
+    "create": "Create “{{name}}”",
+    "newTag": "New tag",
+    "saving": "Saving…",
+    "tagsSaved": "Tags saved.",
+    "applyToItems_one": "Apply to {{count}} item",
+    "applyToItems_other": "Apply to {{count}} items"
+  }
+}

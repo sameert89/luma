@@ -34,6 +34,6 @@ it('reports busy only after its bounded retries are exhausted', async () => {
   await vi.runAllTimersAsync()
   const error = await saved
   expect(error).toBeInstanceOf(ApiError)
-  expect((error as ApiError).message).toBe('Luma is busy. Please try again.')
+  expect((error as ApiError).message).toBe('Luma is busy. Try again in a moment.')
   expect(fetch).toHaveBeenCalledTimes(3)
 })

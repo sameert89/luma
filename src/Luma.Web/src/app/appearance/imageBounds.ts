@@ -1,12 +1,13 @@
+import { t } from '../../lib/i18n'
 // Read bounded raster headers before asking the browser to allocate decoded pixels.
 // Custom backgrounds use common still formats and are rasterized once, never animated.
 export function checkBackgroundDimensions(bytes: Uint8Array) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const text = (start: number, length: number) => String.fromCharCode(...bytes.slice(start, start + length))
-  const invalid = () => new Error('Choose a valid JPEG, PNG or still WebP background.')
+  const invalid = () => new Error(t('app:imageBounds.chooseAValidJPEGPNGOrStillWebPBackground'))
   const bounds = (width: number, height: number) => {
     if (width < 1 || height < 1 || width > 8192 || height > 8192 || width * height > 16000000)
-      throw new Error('Choose an image under 16 megapixels and 8,192 pixels per side.')
+      throw new Error(t('app:imageBounds.chooseAnImageUnder16MegapixelsAnd8192'))
   }
   if (bytes.length >= 24 && bytes[0] === 137 && text(1, 7) === 'PNG\r\n\x1a\n' && text(12, 4) === 'IHDR') {
     bounds(view.getUint32(16), view.getUint32(20))
@@ -45,7 +46,7 @@ export function checkBackgroundDimensions(bytes: Uint8Array) {
         data = offset + 8
       if (data + length > bytes.length) throw invalid()
       if (kind === 'ANIM' || kind === 'ANMF' || (kind === 'VP8X' && bytes[data] & 2))
-        throw new Error('Choose a still background image.')
+        throw new Error(t('app:imageBounds.chooseAStillBackgroundImage'))
       if (kind === 'VP8X') {
         if (length < 10) throw invalid()
         const uint24 = (index: number) => bytes[index] | (bytes[index + 1] << 8) | (bytes[index + 2] << 16)

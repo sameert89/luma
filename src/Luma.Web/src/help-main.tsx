@@ -1,3 +1,4 @@
+import './lib/i18n'
 import ReactDOM from 'react-dom/client'
 import { Help } from './features/help/Help'
 import '@fontsource-variable/inter/wght.css'

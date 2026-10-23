@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useEffect, useState } from 'react'
 import { ImageOff, RefreshCw } from 'lucide-react'
 import { QuietButton } from './Controls'
@@ -34,14 +35,14 @@ export function CachedImage({
   if (status === 'pending' || status === 'failed')
     return (
       <div className={`flex items-center justify-center bg-surface text-center text-xs text-muted ${className}`}>
-        {status === 'failed' ? 'Preview could not be prepared' : 'Preparing preview…'}
+        {status === 'failed' ? t('ui:cachedImage.previewCouldNotBePrepared') : t('ui:cachedImage.preparingPreview')}
       </div>
     )
   if (failed)
     return (
       <div className={`flex flex-col items-center justify-center gap-3 bg-surface text-center text-muted ${className}`}>
         <ImageOff className="size-8" aria-hidden="true" />
-        <span className="text-xs">Preview unavailable</span>
+        <span className="text-xs">{t('ui:cachedImage.previewUnavailable')}</span>
         {preview && (
           <QuietButton
             onClick={() => {
@@ -50,7 +51,7 @@ export function CachedImage({
             }}
           >
             <RefreshCw className="size-4" />
-            Retry preview
+            {t('ui:cachedImage.retryPreview')}
           </QuietButton>
         )}
       </div>

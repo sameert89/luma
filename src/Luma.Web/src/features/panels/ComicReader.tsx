@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { Modal } from '../../components/ui/Modal'
 import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useRef, useState } from 'react'
@@ -139,26 +140,30 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
 
   const start = useRef<{ x: number; y: number } | null>(null)
   return (
-    <div ref={root} className="relative flex min-h-0 flex-1 flex-col bg-canvas text-ink" aria-label="Comic reader">
+    <div
+      ref={root}
+      className="relative flex min-h-0 flex-1 flex-col bg-canvas text-ink"
+      aria-label={t('panels:comicReader.comicReader')}
+    >
       <div className="flex shrink-0 items-center gap-2 border-b border-line p-3">
-        <IconButton label="Exit reader" disabled={exiting} onClick={() => void exitReader()}>
+        <IconButton label={t('panels:comicReader.exitReader')} disabled={exiting} onClick={() => void exitReader()}>
           <ArrowLeft className="size-5" />
         </IconButton>
         <h1 className="min-w-0 flex-1 truncate font-semibold">{comic.title}</h1>
-        <IconButton label="Reader settings" onClick={() => setControls(true)}>
+        <IconButton label={t('panels:comicReader.readerSettings')} onClick={() => setControls(true)}>
           <SlidersHorizontal className="size-5" />
         </IconButton>
       </div>
       <Modal
         open={controls}
         onOpenChange={setControls}
-        title="Reader settings"
-        description="Reading direction, fit, zoom and display."
+        title={t('panels:comicReader.readerSettings')}
+        description={t('panels:comicReader.readingDirectionFitZoomAndDisplay')}
         portalContainer={root.current ?? undefined}
       >
         <div className="flex flex-wrap items-center gap-2 p-3">
           <Select
-            aria-label="Reading mode"
+            aria-label={t('panels:comicReader.readingMode')}
             className="w-auto"
             value={mode}
             onChange={event => {
@@ -167,32 +172,40 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
               setPan({ x: 0, y: 0 })
             }}
           >
-            <option value="single">Single page</option>
-            <option value="continuous">Continuous scroll</option>
+            <option value="single">{t('panels:comicReader.singlePage')}</option>
+            <option value="continuous">{t('panels:comicReader.continuousScroll')}</option>
           </Select>
           <Select
-            aria-label="Reading direction"
+            aria-label={t('panels:comicReader.readingDirection')}
             className="w-auto"
             value={direction}
             onChange={event => setDirection(event.target.value)}
           >
-            <option value="ltr">Left to right</option>
-            <option value="rtl">Right to left</option>
+            <option value="ltr">{t('panels:comicReader.leftToRight')}</option>
+            <option value="rtl">{t('panels:comicReader.rightToLeft')}</option>
           </Select>
-          <Select aria-label="Page fit" className="w-auto" value={fit} onChange={event => setFit(event.target.value)}>
-            <option value="screen">Fit screen</option>
-            <option value="width">Fit width</option>
-            <option value="height">Fit height</option>
-            <option value="original">Original resolution</option>
+          <Select
+            aria-label={t('panels:comicReader.pageFit')}
+            className="w-auto"
+            value={fit}
+            onChange={event => setFit(event.target.value)}
+          >
+            <option value="screen">{t('panels:comicReader.fitScreen')}</option>
+            <option value="width">{t('panels:comicReader.fitWidth')}</option>
+            <option value="height">{t('panels:comicReader.fitHeight')}</option>
+            <option value="original">{t('panels:comicReader.originalResolution')}</option>
           </Select>
-          <IconButton label="Zoom out" onClick={() => setZoom(value => Math.max(1, value - 0.5))}>
+          <IconButton
+            label={t('panels:comicReader.zoomOut')}
+            onClick={() => setZoom(value => Math.max(1, value - 0.5))}
+          >
             <Minus className="size-4" />
           </IconButton>
-          <IconButton label="Zoom in" onClick={() => setZoom(value => Math.min(8, value + 0.5))}>
+          <IconButton label={t('panels:comicReader.zoomIn')} onClick={() => setZoom(value => Math.min(8, value + 0.5))}>
             <Plus className="size-4" />
           </IconButton>
           <IconButton
-            label="Fullscreen"
+            label={t('panels:comicReader.fullscreen')}
             onClick={() => {
               if (document.fullscreenElement) void document.exitFullscreen()
               else void root.current?.requestFullscreen?.()
@@ -204,18 +217,18 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       </Modal>
       {error && (
         <p role="alert" className="px-3 text-sm text-danger">
-          Progress could not be saved: {error}
+          {t('panels:comicReader.progressCouldNotBeSaved', { error: error })}
         </p>
       )}
       {imageError && (
         <p role="alert" className="px-3 text-sm text-danger">
-          This page could not be loaded. Try another page or rediscover the comic.
+          {t('panels:comicReader.thisPageCouldNotBeLoadedTryAnotherPage')}
         </p>
       )}
       {mode === 'single' ? (
         <div
           role="group"
-          aria-label="Comic page gestures"
+          aria-label={t('panels:comicReader.comicPageGestures')}
           className={`relative flex min-h-0 flex-1 ${fit === 'width' || fit === 'original' ? 'items-start overflow-auto' : 'items-center overflow-hidden'} justify-center`}
           style={{ touchAction: 'none' }}
           onPointerDown={event => {
@@ -309,26 +322,30 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
         </div>
       )}
       <footer className="flex shrink-0 items-center justify-center gap-3 border-t border-line pb-safe-2 pt-2">
-        <IconButton label="Previous page" disabled={page === 0} onClick={() => move(-1)}>
+        <IconButton label={t('panels:comicReader.previousPage')} disabled={page === 0} onClick={() => move(-1)}>
           <ChevronLeft className="size-5" />
         </IconButton>
-        <QuietButton onClick={() => setJump(true)} aria-label="Go to page">
+        <QuietButton onClick={() => setJump(true)} aria-label={t('panels:comicReader.goToPage')}>
           {page + 1} / {comic.pageCount}
         </QuietButton>
-        <IconButton label="Next page" disabled={page === comic.pageCount - 1} onClick={() => move(1)}>
+        <IconButton
+          label={t('panels:comicReader.nextPage')}
+          disabled={page === comic.pageCount - 1}
+          onClick={() => move(1)}
+        >
           <ChevronRight className="size-5" />
         </IconButton>
       </footer>
       <Modal
         open={jump}
         onOpenChange={setJump}
-        title="Go to page"
-        description="Choose a page in this comic."
+        title={t('panels:comicReader.goToPage')}
+        description={t('panels:comicReader.chooseAPageInThisComic')}
         portalContainer={root.current ?? undefined}
       >
         <div className="flex flex-wrap items-center gap-3 p-5">
           <Input
-            aria-label="Go to page"
+            aria-label={t('panels:comicReader.goToPage')}
             type="number"
             min={1}
             max={comic.pageCount}
@@ -340,16 +357,16 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
               if (mode === 'continuous') virtual.scrollToIndex(index)
             }}
           />
-          <span className="text-sm text-muted">of {comic.pageCount}</span>
+          <span className="text-sm text-muted">{t('panels:comicReader.of', { count: comic.pageCount })}</span>
           <Range
-            aria-label="Page position"
+            aria-label={t('panels:comicReader.pagePosition')}
             className="w-full"
             min={1}
             max={comic.pageCount}
             value={page + 1}
             onChange={event => move(Number(event.target.value) - 1 - page)}
           />
-          <QuietButton onClick={() => setJump(false)}>Done</QuietButton>
+          <QuietButton onClick={() => setJump(false)}>{t('panels:comicReader.done')}</QuietButton>
         </div>
       </Modal>
     </div>

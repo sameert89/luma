@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { LoaderCircle } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -52,7 +53,10 @@ export function FileAccess() {
     }
   }
   return (
-    <SettingsSection title="File management" description="Allow uploads, moves and deletion in writable libraries.">
+    <SettingsSection
+      title={t('files:fileAccess.fileManagement')}
+      description={t('files:fileAccess.allowUploadsMovesAndDeletionInWritableLibraries')}
+    >
       <label htmlFor={toggleId} className="flex items-center gap-2 text-sm">
         <Checkbox
           id={toggleId}
@@ -60,37 +64,41 @@ export function FileAccess() {
           disabled={busy || settings.isPending}
           onChange={event => void change(event.target.checked)}
         />
-        Enable file management
+        {t('files:fileAccess.enableFileManagement')}
       </label>
-      <p className="text-sm text-muted">
-        Saved for this server. Luma__Files__Enabled sets the initial default. Each editable library also needs
-        Writable=true and a :rw mount. Read-only libraries keep browsing and playback available.
-      </p>
+      <p className="text-sm text-muted">{t('files:fileAccess.savedForThisServerLumaFilesEnabledSetsThe')}</p>
       {settings.data?.enabled && (
         <div className="space-y-2">
           <QuietButton disabled={busy} aria-busy={checking} onClick={() => void checkStorage()}>
             {checking && <LoaderCircle className="size-4 motion-safe:animate-spin" aria-hidden="true" />}
-            {checking ? 'Checking media mounts…' : 'Check media mounts'}
+            {checking ? t('files:fileAccess.checkingMediaMounts') : t('files:fileAccess.checkMediaMounts')}
           </QuietButton>
           <p className="text-sm text-muted">
-            Recheck write access after changing mounts or permissions. This does not change the mount configuration.
+            {t('files:fileAccess.recheckWriteAccessAfterChangingMountsOrPermissionsThis')}
           </p>
         </div>
       )}
       <p role="status" className="text-sm text-muted">
         {checking
-          ? 'Checking library write access…'
+          ? t('files:fileAccess.checkingLibraryWriteAccess')
           : storage !== null
             ? storage.length === 0
-              ? 'Mount check complete. No media libraries are configured.'
-              : `Mount check complete. ${storage.filter(item => item.canWrite).length} of ${storage.length} libraries are writable. Read-only libraries keep browsing and playback available.`
+              ? t('files:fileAccess.mountCheckCompleteNoMediaLibrariesAreConfigured')
+              : t('files:fileAccess.mountCheckCompleteOfLibrariesAreWritableReadOnly', {
+                  value1: storage.filter(item => item.canWrite).length,
+                  value2: storage.length,
+                })
             : ''}
       </p>
       {storage?.map(item => (
         <p key={item.libraryId} className="text-sm text-muted">
           <strong>
             {item.name}:{' '}
-            {item.canWrite ? 'Writable' : item.configuredWritable ? 'Write access unavailable' : 'Configured read-only'}
+            {item.canWrite
+              ? t('files:fileAccess.writable')
+              : item.configuredWritable
+                ? t('files:fileAccess.writeAccessUnavailable')
+                : t('files:fileAccess.configuredReadOnly')}
             .
           </strong>
           {item.warning && ` ${item.warning}`}

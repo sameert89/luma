@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Pencil } from 'lucide-react'
@@ -57,9 +58,9 @@ export function RenameFileAction({
     try {
       const entries = await request<Entry[]>('/api/files/clipboard', undefined, 'POST', { mediaIds, folderIds })
       const entry = entries[0]
-      if (entries.length !== 1 || !entry) throw new Error('Select one file or folder to rename.')
+      if (entries.length !== 1 || !entry) throw new Error(t('files:renameFileAction.selectOneFileOrFolderToRename'))
       if (!capabilities?.libraries?.some(library => library.libraryId === entry.libraryId && library.writable))
-        throw new Error('This library is read-only.')
+        throw new Error(t('files:renameFileAction.thisLibraryIsReadOnly'))
       setTarget(entry)
       setName(entry.relativePath.split('/').at(-1) ?? '')
     } catch (error) {
@@ -71,7 +72,7 @@ export function RenameFileAction({
   async function rename() {
     if (!target || busy) return
     if (!name.trim() || name === '.' || name === '..' || /[/\\]/.test(name)) {
-      setError('Enter a file or folder name, not a path.')
+      setError(t('files:renameFileAction.enterAFileOrFolderNameNotAPath'))
       return
     }
     setBusy(true)
@@ -101,13 +102,18 @@ export function RenameFileAction({
   return (
     <>
       {iconOnly ? (
-        <IconButton label="Rename file" className={className} disabled={unavailable} onClick={() => void begin()}>
+        <IconButton
+          label={t('files:renameFileAction.renameFile')}
+          className={className}
+          disabled={unavailable}
+          onClick={() => void begin()}
+        >
           <Pencil className="size-4" />
         </IconButton>
       ) : (
         <QuietButton disabled={unavailable} onClick={() => void begin()}>
           <Pencil className="size-4" />
-          Rename
+          {t('files:renameFileAction.rename')}
         </QuietButton>
       )}
       <Modal
@@ -122,8 +128,8 @@ export function RenameFileAction({
             onQueued?.()
           }
         }}
-        title="Rename"
-        description={original || 'Rename the selected file or folder in its current folder.'}
+        title={t('files:renameFileAction.rename')}
+        description={original || t('files:renameFileAction.renameTheSelectedFileOrFolderInItsCurrent')}
       >
         <form
           className="space-y-4 p-5"
@@ -132,7 +138,7 @@ export function RenameFileAction({
             void rename()
           }}
         >
-          <Field label="Name">
+          <Field label={t('files:renameFileAction.name')}>
             <Input
               ref={input}
               value={name}
@@ -142,10 +148,10 @@ export function RenameFileAction({
           </Field>
           <div className="flex gap-2">
             <QuietButton type="submit" disabled={busy || !target || !name.trim() || name === original}>
-              {busy ? 'Working…' : 'Rename'}
+              {busy ? t('files:renameFileAction.working') : t('files:renameFileAction.rename')}
             </QuietButton>
             <QuietButton disabled={busy} onClick={() => setOpen(false)}>
-              Cancel
+              {t('files:renameFileAction.cancel')}
             </QuietButton>
           </div>
           {error && (

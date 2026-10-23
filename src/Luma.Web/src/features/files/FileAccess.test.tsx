@@ -57,9 +57,9 @@ for (const configuredWritable of [false, true]) {
         ]),
       )
       await waitFor(() => expect(button).toBeEnabled())
-      expect(screen.getByRole('status')).toHaveTextContent('Mount check complete. 1 of 2 libraries are writable.')
+      expect(screen.getByRole('status')).toHaveTextContent('Check complete. 1 of 2 libraries have write access.')
       expect(
-        screen.getByText(`Photos: ${configuredWritable ? 'Write access unavailable' : 'Configured read-only'}.`),
+        screen.getByText(`Photos: ${configuredWritable ? 'No write access' : 'Configured read-only'}.`),
       ).toBeVisible()
       expect(screen.getByText('Uploads: Writable.')).toBeVisible()
     }

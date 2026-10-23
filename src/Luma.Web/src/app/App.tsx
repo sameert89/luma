@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n'
 import { FileConflictDialog } from '../features/files/FileConflictDialog'
 import type { components } from '../lib/api/generated'
 import { ApplicationSettings } from './ApplicationSettings'
@@ -637,7 +638,7 @@ export function App() {
       if (next.has(id)) next.delete(id)
       else if (next.size + selectedFolders.size < 500) next.add(id)
       else {
-        showToast('Select at most 500 items at a time.', 'danger')
+        showToast(t('app:app.selectAtMost500ItemsAtATime'), 'danger')
         return old
       }
       return next
@@ -662,8 +663,7 @@ export function App() {
       } while (cursor && ids.size < 500)
       setSelected(ids)
       setSelectedFolders(new Set())
-      if (ids.size === 500 && more)
-        showToast('Selected the first 500 matching items; bulk operations support up to 500.')
+      if (ids.size === 500 && more) showToast(t('app:app.selectedTheFirst500MatchingItemsBulkOperationsSupport'))
     } catch (error) {
       showToast(errorMessage(error), 'danger')
     } finally {
@@ -692,7 +692,7 @@ export function App() {
         item = await first(nested)
       }
       if (!item) {
-        showToast('There is nothing here to show in a slideshow.', 'danger')
+        showToast(t('app:app.thereIsNothingHereToShowInASlideshow'), 'danger')
         return
       }
       setSlideshowFilters(nested)
@@ -766,19 +766,21 @@ export function App() {
   const home = section === 'library' && !filters.q && !hasViewOptions
   const idleSearch = section === 'search' && !filters.q && !hasViewOptions
   const navItems: NavigationItem[] = [
-    { id: 'library', label: 'Library', icon: Images },
-    { id: 'collections', label: 'Collections', icon: Bookmark },
+    { id: 'library', label: t('app:app.library'), icon: Images },
+    { id: 'collections', label: t('app:app.collections'), icon: Bookmark },
   ]
   const galleryFilters: Filters = filters
   const showAllMedia = section === 'search' || (!home && !filters.libraryId)
   const galleryTitle =
     section === 'reels'
-      ? 'Flick'
+      ? t('app:app.flick')
       : section === 'collections'
-        ? 'Collections'
+        ? t('app:app.collections')
         : filters.q
-          ? `Results for “${filters.q}”`
-          : (folders.data?.current.name ?? library?.name ?? (showAllMedia ? 'All media' : 'Library'))
+          ? t('app:app.resultsFor', { value1: filters.q })
+          : (folders.data?.current.name ??
+            library?.name ??
+            (showAllMedia ? t('app:app.allMedia') : t('app:app.library')))
   const showGallery = section !== 'collections' && (section === 'reels' || (!home && !idleSearch))
   const showBackgroundJobs = true
   // auto-fit/minmax has no equivalent in the fixed column-count scale. Cards still
@@ -788,7 +790,10 @@ export function App() {
   helpParams.set('from', section === 'help' ? helpOrigin : section)
   const folderCards =
     section === 'library' && folders.data?.items.length ? (
-      <section aria-label="Folders" className="grid grid-cols-[repeat(auto-fill,minmax(9rem,24rem))] gap-3 pb-4">
+      <section
+        aria-label={t('app:app.folders')}
+        className="grid grid-cols-[repeat(auto-fill,minmax(9rem,24rem))] gap-3 pb-4"
+      >
         {folders.data.items.map(folder => (
           <article
             key={folder.id}
@@ -797,7 +802,7 @@ export function App() {
             {/* One control opens the folder; its caption sits on the cover over a scrim that keeps white text legible on any photo or theme. */}
             <button
               type="button"
-              aria-label={`Open ${folder.name}`}
+              aria-label={t('app:app.open', { value1: folder.name })}
               title={folder.name}
               className="relative block w-full text-left focus-visible:ring-inset"
               onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}
@@ -826,7 +831,7 @@ export function App() {
               <label htmlFor={`folder-selection-${folder.id}`} className="absolute top-1 left-1 rounded-lg bg-canvas">
                 <Checkbox
                   id={`folder-selection-${folder.id}`}
-                  aria-label={`Select folder ${folder.name}`}
+                  aria-label={t('app:app.selectFolder', { value1: folder.name })}
                   checked={selectedFolders.has(folder.id)}
                   onChange={() =>
                     setSelectedFolders(previous => {
@@ -850,18 +855,18 @@ export function App() {
           </article>
         ))}
         {(folders.data.previousCursor || folders.data.nextCursor) && (
-          <nav aria-label="Folder pages" className="col-span-full flex items-center justify-center gap-3">
+          <nav aria-label={t('app:app.folderPages')} className="col-span-full flex items-center justify-center gap-3">
             <QuietButton
               disabled={!folders.data.previousCursor}
               onClick={() => setFolderCursor(folders.data?.previousCursor ?? undefined)}
             >
-              Previous folders
+              {t('app:app.previousFolders')}
             </QuietButton>
             <QuietButton
               disabled={!folders.data.nextCursor}
               onClick={() => setFolderCursor(folders.data?.nextCursor ?? undefined)}
             >
-              Next folders
+              {t('app:app.nextFolders')}
             </QuietButton>
           </nav>
         )}
@@ -889,7 +894,7 @@ export function App() {
         href="#collection"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-accent focus:p-3 focus:text-on-accent"
       >
-        Skip to collection
+        {t('app:app.skipToCollection')}
       </a>
       <StorageWarning
         onSettings={() => {
@@ -899,7 +904,7 @@ export function App() {
       />
       {restored.isError && (
         <p role="alert" className="p-3 text-danger">
-          Could not restore the open item: {errorMessage(restored.error)}
+          {t('app:app.couldNotRestoreTheOpenItem', { error: errorMessage(restored.error) })}
         </p>
       )}
       {section !== 'panels' && (
@@ -919,7 +924,14 @@ export function App() {
           actions={
             section === 'settings' ? (
               <QuietButton onClick={() => switchExperience(settingsOrigin)}>
-                Back to {settingsOrigin === 'flick' ? 'Flick' : settingsOrigin === 'panels' ? 'Panels' : 'Gallery'}
+                {t('app:app.backTo', {
+                  application:
+                    settingsOrigin === 'flick'
+                      ? t('app:app.flick')
+                      : settingsOrigin === 'panels'
+                        ? t('app:app.panels')
+                        : t('app:app.gallery'),
+                })}
               </QuietButton>
             ) : showBackgroundJobs && section !== 'reels' && section !== 'help' ? (
               <BackgroundJobsButton compact libraryId={home ? undefined : filters.libraryId} />
@@ -940,7 +952,7 @@ export function App() {
           hidden={section === 'reels' || section === 'panels'}
           className={`${section === 'reels' || section === 'panels' ? 'hidden' : 'hidden md:flex'} w-56 shrink-0 flex-col border-r border-line p-3`}
         >
-          <nav aria-label="Primary navigation" className="space-y-2">
+          <nav aria-label={t('app:app.primaryNavigation')} className="space-y-2">
             {navItems.map(item => {
               const Icon = item.icon
               const current = section === item.id
@@ -958,7 +970,9 @@ export function App() {
             })}
           </nav>
           <div className="mt-8 border-t border-line pt-4">
-            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted">Libraries</p>
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted">
+              {t('app:app.libraries')}
+            </p>
             {libraries.data?.map(item => (
               <QuietButton
                 key={item.id}
@@ -971,7 +985,7 @@ export function App() {
             ))}
           </div>
           <footer data-testid="desktop-version" className="mt-auto px-3 pt-4 text-left text-xs text-muted">
-            Luma v{packageJson.version}
+            {t('app:app.lumaV', { version: packageJson.version })}
           </footer>
         </aside>
         <main
@@ -984,7 +998,7 @@ export function App() {
             <Suspense
               fallback={
                 <p role="status" className="p-4">
-                  Loading Panels…
+                  {t('app:app.loadingPanels')}
                 </p>
               }
             >
@@ -1007,11 +1021,13 @@ export function App() {
                   }}
                 >
                   <CircleHelp className="size-4" />
-                  Open the Help guide
+                  {t('app:app.openTheHelpGuide')}
                 </QuietLink>
               </div>
               <section id="settings-general" className="scroll-mt-4">
-                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">General</h2>
+                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">
+                  {t('app:app.general')}
+                </h2>
                 <UpdateSettings onWhatsNew={() => setWhatsNewOpen(true)} />
                 <ThemePicker value={theme} onChange={setTheme} />
                 <AppearanceSettings appearance={appearance} />
@@ -1022,48 +1038,53 @@ export function App() {
                 <ApplicationSettings />
               </section>
               <section id="settings-gallery" className="scroll-mt-4">
-                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Gallery</h2>
+                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">
+                  {t('app:app.gallery')}
+                </h2>
                 <AlbumCoverSettings />
                 <SettingsSection
-                  title="Random media URL"
-                  description="Generate a reusable random-media link using your Gallery filters."
+                  title={t('app:app.randomMediaURL')}
+                  description={t('app:app.generateAReusableRandomMediaLinkUsingYourGallery')}
                 >
                   <RandomUrls filters={gallerySnapshot.current.filters} />
                 </SettingsSection>
                 <SettingsSection
-                  title="Metadata exchange"
-                  description="Download metadata and disliked paths from your library."
+                  title={t('app:app.metadataExchange')}
+                  description={t('app:app.downloadMetadataAndDislikedPathsFromYourLibrary')}
                 >
                   <MetadataExchange dislikes heading={false} />
                 </SettingsSection>
                 <HiddenFolders />
               </section>
               <section id="settings-flick" className="scroll-mt-4">
-                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Flick</h2>
+                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">{t('app:app.flick')}</h2>
                 <ReelsSortSettings />
-                <p className="px-5 pb-5 text-sm text-muted">
-                  Playback, mute and auto-scroll controls are in the Flick menu. Flick uses your theme canvas and keeps
-                  its own search and filters.
-                </p>
+                <p className="px-5 pb-5 text-sm text-muted">{t('app:app.playbackMuteAndAutoScrollControlsAreInThe')}</p>
               </section>
               <section id="settings-panels" className="scroll-mt-4">
-                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">Panels</h2>
+                <h2 className="border-b border-line px-5 py-6 text-3xl font-bold text-accent">{t('app:app.panels')}</h2>
                 <SettingsSection
-                  title="Comic locations and reader"
-                  description="Choose comic locations within your configured libraries. Saved reading mode and fit override deployment defaults."
+                  title={t('app:app.comicLocationsAndReader')}
+                  description={t('app:app.chooseComicLocationsWithinYourConfiguredLibrariesSavedReading')}
                 >
-                  <QuietButton onClick={() => switchExperience('panels')}>Manage comic locations in Panels</QuietButton>
+                  <QuietButton onClick={() => switchExperience('panels')}>
+                    {t('app:app.manageComicLocationsInPanels')}
+                  </QuietButton>
                 </SettingsSection>
               </section>
-              <SettingsSection title="About" description="Version and project information for this Luma installation.">
+              <SettingsSection
+                title={t('app:app.about')}
+                description={t('app:app.versionAndProjectInformationForThisLumaInstallation')}
+              >
                 <div className="flex flex-col items-start gap-2 text-sm">
                   <p>
-                    <span className="font-medium">Luma</span> <span className="text-muted">v{packageJson.version}</span>
+                    <span className="font-medium">{'Luma'}</span>{' '}
+                    <span className="text-muted">{t('app:app.v', { version: packageJson.version })}</span>
                   </p>
-                  <p className="text-muted">Created by Sameer Trivedi.</p>
+                  <p className="text-muted">{t('app:app.createdBySameerTrivedi')}</p>
                   <QuietLink href="https://github.com/sameert89/luma" target="_blank" rel="noreferrer">
                     <GitFork className="size-4" aria-hidden="true" />
-                    GitHub
+                    {t('app:app.gitHub')}
                   </QuietLink>
                 </div>
               </SettingsSection>
@@ -1081,16 +1102,16 @@ export function App() {
                       )}
                       <h1
                         className="min-w-0 truncate text-xl font-semibold sm:text-2xl"
-                        title={home ? 'Your libraries' : galleryTitle}
+                        title={home ? t('app:app.yourLibraries') : galleryTitle}
                       >
-                        {home ? 'Your libraries' : galleryTitle}
+                        {home ? t('app:app.yourLibraries') : galleryTitle}
                       </h1>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {showGallery && (
                         <>
                           <IconButton
-                            label={selecting ? 'Done selecting' : 'Select media'}
+                            label={selecting ? t('app:app.doneSelecting') : t('app:app.selectMedia')}
                             onClick={() => {
                               setSelecting(!selecting)
                               if (selecting) {
@@ -1109,7 +1130,11 @@ export function App() {
                             />
                           )}
                           {selecting && (
-                            <IconButton label="Select all" disabled={selectingAll} onClick={() => void selectAll()}>
+                            <IconButton
+                              label={t('app:app.selectAll')}
+                              disabled={selectingAll}
+                              onClick={() => void selectAll()}
+                            >
                               {selectingAll ? (
                                 <LoaderCircle className="size-4 motion-safe:animate-spin" />
                               ) : (
@@ -1160,7 +1185,7 @@ export function App() {
                     <>
                       {folders.data.ancestors.length > 0 && (
                         <nav
-                          aria-label="Folder breadcrumb"
+                          aria-label={t('app:app.folderBreadcrumb')}
                           className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm text-muted"
                         >
                           {[...folders.data.ancestors, folders.data.current].map((folder, index) => (
@@ -1181,13 +1206,17 @@ export function App() {
                   )}
                   {(selected.size > 0 || selectedFolders.size > 0) && (
                     <div className="flex items-center gap-3 rounded-2xl bg-surface p-3">
-                      <p className="text-sm">{selected.size + selectedFolders.size} selected</p>
+                      <p className="text-sm">
+                        {t('app:app.selected', {
+                          count: selected.size + selectedFolders.size,
+                        })}
+                      </p>
                       <Button className="min-h-10" disabled={!selected.size} onClick={() => setBulkOpen(true)}>
                         <Tag className="mr-2 size-4" />
-                        Edit tags
+                        {t('app:app.editTags')}
                       </Button>
                       <IconButton
-                        label="Clear selection"
+                        label={t('app:app.clearSelection')}
                         onClick={() => {
                           setSelected(new Set())
                           setSelectedFolders(new Set())
@@ -1204,17 +1233,17 @@ export function App() {
               ) : libraries.data?.length === 0 ? (
                 <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center">
                   <FolderOpen className="size-12 text-accent" />
-                  <h2 className="text-xl font-semibold">Connect your first library</h2>
+                  <h2 className="text-xl font-semibold">{t('app:app.connectYourFirstLibrary')}</h2>
                   <p className="leading-relaxed text-muted">
-                    Add a media folder in the server configuration, then restart Luma.
+                    {t('app:app.addAMediaFolderInTheServerConfigurationThen')}
                   </p>
                 </section>
               ) : idleSearch ? (
                 <section className="mx-auto flex max-w-lg flex-col items-center gap-4 p-10 text-center">
                   <Search className="size-12 text-muted" />
-                  <h2 className="text-xl font-semibold">Search your media</h2>
+                  <h2 className="text-xl font-semibold">{t('app:app.searchYourMedia')}</h2>
                   <p className="text-sm leading-relaxed text-muted">
-                    Type a search or open filters to choose exactly what to show.
+                    {t('app:app.typeASearchOrOpenFiltersToChooseExactly')}
                   </p>
                 </section>
               ) : home ? (
@@ -1227,7 +1256,7 @@ export function App() {
                       >
                         <button
                           type="button"
-                          aria-label={`Open ${item.name}`}
+                          aria-label={t('app:app.open', { value1: item.name })}
                           title={item.name}
                           className="relative block w-full text-left focus-visible:ring-inset"
                           onClick={() => visitLibrary(item)}
@@ -1252,7 +1281,7 @@ export function App() {
                                 {item.name}
                               </span>
                               {!item.rootFolderId && (
-                                <span className="block text-xs text-white/80">Start indexing</span>
+                                <span className="block text-xs text-white/80">{t('app:app.startIndexing')}</span>
                               )}
                             </span>
                           </span>
@@ -1284,7 +1313,7 @@ export function App() {
                     <Suspense
                       fallback={
                         <p role="status" className="p-4">
-                          Loading Flick…
+                          {t('app:app.loadingFlick')}
                         </p>
                       }
                     >
@@ -1359,8 +1388,8 @@ export function App() {
       <Modal
         open={filterOpen}
         onOpenChange={setFilterOpen}
-        title="Filters and sorting"
-        description="Narrow the current media view."
+        title={t('app:app.filtersAndSorting')}
+        description={t('app:app.narrowTheCurrentMediaView')}
         sheet
       >
         <FilterForm
@@ -1373,8 +1402,8 @@ export function App() {
       <Modal
         open={bulkOpen}
         onOpenChange={setBulkOpen}
-        title={`Tag ${selected.size} items`}
-        description="Add or remove a tag on every selected item."
+        title={t('app:app.tagItems', { count: selected.size })}
+        description={t('app:app.addOrRemoveATagOnEverySelectedItem')}
         sheet
       >
         <div className="overflow-auto p-5">
@@ -1395,10 +1424,10 @@ export function App() {
             triggerId.current = item.id
             setActive(item)
           }}
-          onRenameQueued={() => showToast('Rename queued. Follow progress in Background jobs.')}
+          onRenameQueued={() => showToast(t('app:app.renameQueuedFollowProgressInBackgroundJobs'))}
           onDeleteQueued={fallback => {
             triggerId.current = fallback?.id ?? null
-            showToast('Deletion queued. Follow progress in Background jobs.')
+            showToast(t('app:app.deletionQueuedFollowProgressInBackgroundJobs'))
           }}
           onWatchReels={watchOnReels}
           onClose={() => {

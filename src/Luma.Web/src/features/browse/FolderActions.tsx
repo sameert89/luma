@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EllipsisVertical, EyeOff, FileInput, ImageMinus, Info, RefreshCw } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -67,22 +68,22 @@ export function FolderActions({
   })
   const title =
     panel === 'info'
-      ? 'Folder information'
+      ? t('browse:folderActions.folderInformation')
       : panel === 'import'
-        ? 'Import folder metadata'
+        ? t('browse:folderActions.importFolderMetadata')
         : panel === 'hide'
-          ? 'Hide folder'
+          ? t('browse:folderActions.hideFolder')
           : panel === 'rescan'
             ? root
-              ? 'Rescan library'
-              : 'Rescan folder'
+              ? t('browse:folderActions.rescanLibrary')
+              : t('browse:folderActions.rescanFolder')
             : root
-              ? 'Library actions'
-              : 'Folder actions'
+              ? t('browse:folderActions.libraryActions')
+              : t('browse:folderActions.folderActions')
   return (
     <>
       <IconButton
-        label={`Folder actions for ${folder.name}`}
+        label={t('browse:folderActions.folderActionsFor', { value1: folder.name })}
         tone={tone}
         onClick={() => {
           setPanel('actions')
@@ -100,9 +101,7 @@ export function FolderActions({
         }}
         title={title}
         description={
-          panel === 'import'
-            ? 'Merge EXIF/XMP tags from every indexed photo and video in this folder and the folders inside it, regardless of the current filters. Originals stay unchanged.'
-            : folder.name
+          panel === 'import' ? t('browse:folderActions.mergeEXIFXMPTagsFromEveryIndexedPhotoAnd') : folder.name
         }
         sheet
       >
@@ -112,27 +111,29 @@ export function FolderActions({
               {extraActions?.(() => setPanel(null))}
               <QuietButton onClick={() => setPanel('rescan')}>
                 <RefreshCw className="size-4" />
-                {root ? 'Rescan library' : 'Rescan folder'}
+                {root ? t('browse:folderActions.rescanLibrary') : t('browse:folderActions.rescanFolder')}
               </QuietButton>
               <QuietButton onClick={() => setPanel('info')}>
                 <Info className="size-4" />
-                Folder information
+                {t('browse:folderActions.folderInformation')}
               </QuietButton>
               <QuietButton onClick={() => setPanel('import')}>
                 <FileInput className="size-4" />
-                Import folder metadata
+                {t('browse:folderActions.importFolderMetadata')}
               </QuietButton>
               {folder.coverOverride && (
                 <QuietButton disabled={resetCover.isPending} onClick={() => resetCover.mutate()}>
                   <ImageMinus className="size-4" />
-                  {resetCover.isPending ? 'Resetting cover…' : 'Reset album cover'}
+                  {resetCover.isPending
+                    ? t('browse:folderActions.resettingCover')
+                    : t('browse:folderActions.resetAlbumCover')}
                 </QuietButton>
               )}
               {/* A library root is the library itself; only folders inside it can be hidden. */}
               {!!folder.parentId && (
                 <QuietButton onClick={() => setPanel('hide')}>
                   <EyeOff className="size-4" />
-                  Hide folder
+                  {t('browse:folderActions.hideFolder')}
                 </QuietButton>
               )}
             </div>
@@ -146,15 +147,15 @@ export function FolderActions({
             <>
               <dl className="space-y-3 text-sm">
                 <div>
-                  <dt className="text-muted">Name</dt>
+                  <dt className="text-muted">{t('browse:folderActions.name')}</dt>
                   <dd className="break-words">{folder.name}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted">Library</dt>
-                  <dd className="break-words">{libraryName ?? 'Library'}</dd>
+                  <dt className="text-muted">{t('browse:folderActions.library')}</dt>
+                  <dd className="break-words">{libraryName ?? t('browse:folderActions.library')}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted">Location</dt>
+                  <dt className="text-muted">{t('browse:folderActions.location')}</dt>
                   <dd className="break-words">{[...ancestors, folder].map(item => item.name).join(' / ')}</dd>
                 </div>
               </dl>
@@ -164,28 +165,27 @@ export function FolderActions({
             (queued ? (
               <>
                 <p role="status" className="text-sm leading-relaxed">
-                  Rescan queued. Follow its progress in Background jobs; you can keep browsing meanwhile.
+                  {t('browse:folderActions.rescanQueuedFollowItsProgressInBackgroundJobsYou')}
                 </p>
-                <QuietButton onClick={() => setPanel(null)}>Done</QuietButton>
+                <QuietButton onClick={() => setPanel(null)}>{t('browse:folderActions.done')}</QuietButton>
               </>
             ) : (
               <>
                 <p className="text-sm leading-relaxed text-muted">
                   {root
-                    ? 'Checks every folder in this library for new, changed or removed photos and videos. On a large library this can take a long time and use significant disk and CPU.'
-                    : `Checks “${folder.name}” and every folder inside it for new, changed or removed photos and videos.`}
+                    ? t('browse:folderActions.checksEveryFolderInThisLibraryForNewChanged')
+                    : t('browse:folderActions.checksAndEveryFolderInsideItForNewChanged', { value1: folder.name })}
                 </p>
                 <MetadataModeSelect value={metadataMode} onChange={setChosenMode} />
                 <p className="text-sm leading-relaxed text-muted">
-                  This controls tag import only and becomes the library’s automatic tag-import setting. Thumbnail,
-                  poster and preview behavior is unchanged.
+                  {t('browse:folderActions.thisControlsTagImportOnlyAndBecomesTheLibrary')}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button disabled={rescan.isPending} onClick={() => rescan.mutate()}>
                     <RefreshCw className="mr-2 size-4" />
-                    {rescan.isPending ? 'Starting…' : 'Start rescan'}
+                    {rescan.isPending ? t('browse:folderActions.starting') : t('browse:folderActions.startRescan')}
                   </Button>
-                  <QuietButton onClick={() => setPanel('actions')}>Cancel</QuietButton>
+                  <QuietButton onClick={() => setPanel('actions')}>{t('browse:folderActions.cancel')}</QuietButton>
                 </div>
                 {rescan.isError && (
                   <p role="alert" className="text-sm text-danger">
@@ -204,15 +204,16 @@ export function FolderActions({
           {panel === 'hide' && (
             <>
               <p className="text-sm leading-relaxed text-muted">
-                “{folder.name}” and everything inside it will disappear from the library, search, reels and slideshows,
-                and will no longer be indexed. Nothing is deleted; show it again from Settings at any time.
+                {t('browse:folderActions.andEverythingInsideItWillDisappearFromTheLibrary', {
+                  folderName: folder.name,
+                })}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button disabled={hide.isPending} onClick={() => hide.mutate()}>
                   <EyeOff className="mr-2 size-4" />
-                  {hide.isPending ? 'Hiding…' : 'Hide folder'}
+                  {hide.isPending ? t('browse:folderActions.hiding') : t('browse:folderActions.hideFolder')}
                 </Button>
-                <QuietButton onClick={() => setPanel('actions')}>Cancel</QuietButton>
+                <QuietButton onClick={() => setPanel('actions')}>{t('browse:folderActions.cancel')}</QuietButton>
               </div>
               {hide.isError && (
                 <p role="alert" className="text-sm text-danger">

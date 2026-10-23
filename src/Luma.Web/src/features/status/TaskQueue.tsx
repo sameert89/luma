@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useQuery, useIsMutating, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
@@ -8,35 +9,35 @@ import type { components } from '../../lib/api/generated'
 type Task = components['schemas']['BackgroundTask']
 
 const kindLabels: Record<string, string> = {
-  indexing: 'Indexing',
-  upload: 'Upload',
-  comics: 'Comic discovery',
-  mkdir: 'New folder',
-  move: 'Move / rename',
-  copy: 'Copy',
-  recycle: 'Recycle',
-  restore: 'Restore',
-  delete: 'Permanent deletion',
-  purge: 'Recycle bin deletion',
-  import: 'Tag import',
-  xmp: 'XMP export',
-  dislikes: 'Disliked paths export',
+  indexing: t('status:taskQueue.indexing'),
+  upload: t('status:taskQueue.upload'),
+  comics: t('status:taskQueue.comicDiscovery'),
+  mkdir: t('status:taskQueue.newFolder'),
+  move: t('status:taskQueue.moveRename'),
+  copy: t('status:taskQueue.copy'),
+  recycle: t('status:taskQueue.recycle'),
+  restore: t('status:taskQueue.restore'),
+  delete: t('status:taskQueue.permanentDeletion'),
+  purge: t('status:taskQueue.recycleBinDeletion'),
+  import: t('status:taskQueue.tagImport'),
+  xmp: t('status:taskQueue.xMPExport'),
+  dislikes: t('status:taskQueue.dislikedPathsExport'),
 }
 const stateLabels: Record<string, string> = {
-  queued: 'Queued',
-  waitingForClient: 'Waiting for upload data',
-  paused: 'Paused',
-  reserved: 'Reserved',
-  published: 'Published',
-  deleting: 'Deleting',
-  finalizing: 'Finalizing',
-  needsAttention: 'Needs attention',
-  running: 'Running',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-  failed: 'Failed',
-  interrupted: 'Interrupted',
-  expired: 'Expired',
+  queued: t('status:taskQueue.queued'),
+  waitingForClient: t('status:taskQueue.waitingForUploadData'),
+  paused: t('status:taskQueue.paused'),
+  reserved: t('status:taskQueue.reserved'),
+  published: t('status:taskQueue.published'),
+  deleting: t('status:taskQueue.deleting'),
+  finalizing: t('status:taskQueue.finalizing'),
+  needsAttention: t('status:taskQueue.needsAttention'),
+  running: t('status:taskQueue.running'),
+  completed: t('status:taskQueue.completed'),
+  cancelled: t('status:taskQueue.cancelled'),
+  failed: t('status:taskQueue.failed'),
+  interrupted: t('status:taskQueue.interrupted'),
+  expired: t('status:taskQueue.expired'),
 }
 const stateTones: Record<string, string> = {
   running: 'text-accent',
@@ -56,18 +57,27 @@ const label = (task: Task) => kindLabels[task.kind] ?? task.kind
 
 function progress(task: Task) {
   if (task.kind === 'upload')
-    return `${task.processed.toLocaleString()} bytes uploaded · ${task.pending.toLocaleString()} bytes remaining`
+    return t('status:taskQueue.bytesUploadedBytesRemaining', {
+      value1: task.processed.toLocaleString(),
+      value2: task.pending.toLocaleString(),
+    })
   if (['mkdir', 'copy', 'move', 'recycle', 'restore', 'delete', 'purge'].includes(task.kind))
     return task.state === 'completed'
-      ? 'Operation completed'
+      ? t('status:taskQueue.operationCompleted')
       : task.state === 'needsAttention'
-        ? 'Inspect operation evidence before continuing. This library is protected from further mutations.'
-        : 'Operation in progress'
-  const failed = task.failed ? ` · ${task.failed.toLocaleString()} failed` : ''
+        ? t('status:taskQueue.inspectOperationEvidenceBeforeContinuingThisLibraryIsProtected')
+        : t('status:taskQueue.operationInProgress')
+  const failed = task.failed ? t('status:taskQueue.failedCount', { count: task.failed }) : ''
   if (task.kind === 'indexing')
-    return `${task.processed.toLocaleString()} found${task.pending ? ` · ${task.pending.toLocaleString()} previews to prepare` : ''}${failed}`
-  if (task.kind === 'import') return `${task.processed.toLocaleString()} checked${failed}`
-  return `${task.processed.toLocaleString()} exported${failed}`
+    return t('status:taskQueue.indexingProgress', {
+      count: task.processed,
+      pending: task.pending ? t('status:taskQueue.previewsToPrepare', { count: task.pending }) : '',
+      failed,
+    })
+  return t(task.kind === 'import' ? 'status:taskQueue.importProgress' : 'status:taskQueue.exportProgress', {
+    count: task.processed,
+    failed,
+  })
 }
 
 const refresh = (client: QueryClient) =>
@@ -102,18 +112,21 @@ export function TaskQueue() {
   const finished = tasks.data?.filter(task => !isActive(task)).length ?? 0
   const running = (tasks.data?.length ?? 0) - finished
   return (
-    <section aria-label="Task queue" className="space-y-3">
+    <section aria-label={t('status:taskQueue.taskQueue')} className="space-y-3">
       <div className="flex items-center justify-between gap-3 py-2">
         <p className="text-sm font-semibold">
-          Jobs{running > 0 && <span className="font-normal text-muted"> · {running} active</span>}
+          {t('status:taskQueue.jobs')}
+          {running > 0 && (
+            <span className="font-normal text-muted">{t('status:taskQueue.active', { running: running })}</span>
+          )}
         </p>
         <QuietButton disabled={!finished || clear.isPending} onClick={() => clear.mutate()}>
-          {clear.isPending ? 'Clearing…' : 'Clear finished'}
+          {clear.isPending ? t('status:taskQueue.clearing') : t('status:taskQueue.clearFinished')}
         </QuietButton>
       </div>
       {indexing.data?.cachePressure && (
         <p role="status" className="text-sm text-danger">
-          Preview storage is full, so preview preparation is paused.
+          {t('status:taskQueue.previewStorageIsFullSoPreviewPreparationIsPaused')}
         </p>
       )}
       {clear.isError && (
@@ -123,12 +136,12 @@ export function TaskQueue() {
       )}
       {!!starting && (
         <p role="status" className="text-sm text-muted">
-          Starting operation…
+          {t('status:taskQueue.startingOperation')}
         </p>
       )}
       {tasks.isPending && (
         <p role="status" className="text-sm text-muted">
-          Loading tasks…
+          {t('status:taskQueue.loadingTasks')}
         </p>
       )}
       {tasks.isError && (
@@ -139,7 +152,9 @@ export function TaskQueue() {
       {tasks.data?.map(task => (
         <TaskRow key={task.id} task={task} />
       ))}
-      {tasks.isSuccess && !tasks.data.length && <p className="text-sm text-muted">No background tasks.</p>}
+      {tasks.isSuccess && !tasks.data.length && (
+        <p className="text-sm text-muted">{t('status:taskQueue.noBackgroundTasks')}</p>
+      )}
     </section>
   )
 }
@@ -185,29 +200,26 @@ function TaskRow({ task }: { task: Task }) {
       )}
       {task.id.startsWith('file-') && task.state === 'needsAttention' && (
         <QuietButton className="mt-2" onClick={() => setReviewing(true)}>
-          Review recovery
+          {t('status:taskQueue.reviewRecovery')}
         </QuietButton>
       )}
       <div className="mt-2 flex flex-wrap gap-2">
         {isActive(task) ? (
           confirming ? (
             <div className="space-y-2">
-              <p className="text-sm leading-relaxed">
-                Files found so far stay in your library, and their previews are made as you view them. Each folder you
-                open is finished then, including its tags if the library imports tags.
-              </p>
+              <p className="text-sm leading-relaxed">{t('status:taskQueue.filesFoundSoFarStayInYourLibraryAnd')}</p>
               <div className="flex flex-wrap gap-2">
                 <QuietButton disabled={busy} onClick={() => action.mutate('cancel')}>
-                  {busy ? 'Stopping…' : 'Stop indexing'}
+                  {busy ? t('status:taskQueue.stopping') : t('status:taskQueue.stopIndexing')}
                 </QuietButton>
                 <QuietButton disabled={busy} onClick={() => setConfirming(false)}>
-                  Keep running
+                  {t('status:taskQueue.keepRunning')}
                 </QuietButton>
               </div>
             </div>
           ) : (
             <QuietButton
-              aria-label={`Cancel ${name}`}
+              aria-label={t('status:taskQueue.cancel', { value1: name })}
               disabled={
                 busy ||
                 (task.id.startsWith('file-') && task.state !== 'queued') ||
@@ -215,22 +227,26 @@ function TaskRow({ task }: { task: Task }) {
               }
               onClick={() => (task.kind === 'indexing' ? setConfirming(true) : action.mutate('cancel'))}
             >
-              {busy ? 'Cancelling…' : 'Cancel'}
+              {busy ? t('status:taskQueue.cancelling') : t('status:taskQueue.cancel2')}
             </QuietButton>
           )
         ) : (
           <>
             {canQueueAgain(task) && (
-              <QuietButton aria-label={`Queue ${name} again`} disabled={busy} onClick={() => action.mutate('queue')}>
-                Queue again
+              <QuietButton
+                aria-label={t('status:taskQueue.queueAgain', { value1: name })}
+                disabled={busy}
+                onClick={() => action.mutate('queue')}
+              >
+                {t('status:taskQueue.queueAgain2')}
               </QuietButton>
             )}
             <QuietButton
-              aria-label={`Clear ${name}`}
+              aria-label={t('status:taskQueue.clear', { value1: name })}
               disabled={busy || task.state === 'needsAttention'}
               onClick={() => action.mutate('clear')}
             >
-              Clear
+              {t('status:taskQueue.clear2')}
             </QuietButton>
           </>
         )}

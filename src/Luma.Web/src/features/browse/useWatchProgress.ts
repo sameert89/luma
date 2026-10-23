@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { request, type Media } from './api'
@@ -54,7 +55,7 @@ export function useWatchProgress(item: Media, video: RefObject<HTMLVideoElement 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
-        if (!response.ok) throw new Error('Could not save playback progress')
+        if (!response.ok) throw new Error(t('browse:useWatchProgress.couldNotSavePlaybackProgress'))
         const value = (await response.json()) as Progress
         if (client.getQueryCache().find({ queryKey: ['watch-progress', item.id] }))
           client.setQueryData(['watch-progress', item.id], value)

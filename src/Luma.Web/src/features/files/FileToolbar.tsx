@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { conflictBatch, withFileConflict } from './fileConflicts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
@@ -33,10 +34,10 @@ export function FileManagementButton({
   const writable = capabilities.libraries?.some(item => (!libraryId || item.libraryId === libraryId) && item.writable)
   return (
     <IconButton
-      label="File management"
+      label={t('files:fileToolbar.fileManagement')}
       aria-pressed={active && writable}
       disabled={!writable}
-      title={writable ? 'File management' : 'This library is read-only'}
+      title={writable ? t('files:fileToolbar.fileManagement') : t('files:fileToolbar.thisLibraryIsReadOnly')}
       onClick={onToggle}
     >
       <FolderCog className="size-4" />
@@ -93,7 +94,7 @@ export function FileToolbar({
         entry => !capabilities?.libraries?.some(library => library.libraryId === entry.libraryId && library.writable),
       )
     )
-      throw new Error('The selection includes a read-only library.')
+      throw new Error(t('files:fileToolbar.theSelectionIncludesAReadOnlyLibrary'))
     return entries
   }
   async function capture(kind: 'move' | 'copy') {
@@ -103,7 +104,9 @@ export function FileToolbar({
       const entries = await selection()
       setClipboard({ kind, entries })
       setMessage(
-        `${entries.length} items ready to ${kind === 'move' ? 'move' : 'copy'}. Open a destination folder and choose Paste.`,
+        t(kind === 'move' ? 'files:fileToolbar.clipboardMove' : 'files:fileToolbar.clipboardCopy', {
+          count: entries.length,
+        }),
       )
       onClipboard?.()
     } catch (error) {
@@ -126,7 +129,7 @@ export function FileToolbar({
     try {
       if (kind === 'mkdir' && location.data) {
         if (!name.trim() || /[/\\]/.test(name) || name === '.' || name === '..')
-          throw new Error('Enter a folder name, not a path.')
+          throw new Error(t('files:fileToolbar.enterAFolderNameNotAPath'))
         await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
           libraryId: location.data.libraryId,
           kind: 'mkdir',
@@ -186,7 +189,10 @@ export function FileToolbar({
     } finally {
       if (queued || skipped)
         setMessage(
-          `${queued} operation${queued === 1 ? '' : 's'} queued.${skipped ? ` ${skipped} skipped.` : ''} Follow progress in Background jobs.`,
+          t('files:fileToolbar.operationsQueued', {
+            count: queued,
+            skipped: skipped ? t('common:counts.skipped', { count: skipped }) : '',
+          }),
         )
       pasteController.current = null
       void client.invalidateQueries({ queryKey: ['tasks'] })
@@ -228,20 +234,21 @@ export function FileToolbar({
     <>
       <div
         role="group"
-        aria-label="File actions"
+        aria-label={t('files:fileToolbar.fileActions')}
         className="flex flex-wrap items-center gap-1 border-t border-line pt-2"
       >
         <QuietButton disabled={busy || !count} onClick={() => void capture('move')}>
           <Scissors className="size-4" />
-          Cut
+          {t('files:fileToolbar.cut')}
         </QuietButton>
         <QuietButton disabled={busy || !count} onClick={() => void capture('copy')}>
           <Copy className="size-4" />
-          Copy
+          {t('files:fileToolbar.copy')}
         </QuietButton>
         <QuietButton disabled={busy || !canPaste || !location.data} onClick={() => void execute('paste')}>
           <ClipboardPaste className="size-4" />
-          Paste{clipboard ? ` (${clipboard.entries.length})` : ''}
+          {t('files:fileToolbar.paste')}
+          {clipboard ? ` (${clipboard.entries.length})` : ''}
         </QuietButton>
         <RenameFileAction
           libraryId={libraryId}
@@ -250,7 +257,7 @@ export function FileToolbar({
           disabled={busy}
           onQueued={() => {
             onQueued?.()
-            setMessage('Rename queued. Follow progress in Background jobs.')
+            setMessage(t('files:fileToolbar.renameQueuedFollowProgressInBackgroundJobs'))
           }}
         />
         <QuietButton
@@ -261,28 +268,32 @@ export function FileToolbar({
           }}
         >
           <Trash2 className="size-4" />
-          Delete
+          {t('files:fileToolbar.delete')}
         </QuietButton>
         <QuietButton disabled={busy || !location.data} onClick={() => setDialog('mkdir')}>
           <FolderPlus className="size-4" />
-          New folder
+          {t('files:fileToolbar.newFolder')}
         </QuietButton>
         <QuietButton disabled={busy || !location.data} onClick={() => setDialog('upload')}>
           <Upload className="size-4" />
-          Upload
+          {t('files:fileToolbar.upload')}
         </QuietButton>
         {busy && pasteController.current && (
-          <QuietButton onClick={() => pasteController.current?.abort()}>Cancel remaining</QuietButton>
+          <QuietButton onClick={() => pasteController.current?.abort()}>
+            {t('files:fileToolbar.cancelRemaining')}
+          </QuietButton>
         )}
         {clipboard && (
-          <IconButton label="Clear file clipboard" onClick={() => setClipboard(null)}>
+          <IconButton label={t('files:fileToolbar.clearFileClipboard')} onClick={() => setClipboard(null)}>
             <X className="size-4" />
           </IconButton>
         )}
       </div>
-      {!location.data && <p className="text-sm text-muted">Open a folder to paste, upload, or create a folder.</p>}
+      {!location.data && (
+        <p className="text-sm text-muted">{t('files:fileToolbar.openAFolderToPasteUploadOrCreateA')}</p>
+      )}
       {clipboard && !canPaste && (
-        <p className="text-sm text-muted">Open a folder in the source library to paste these items.</p>
+        <p className="text-sm text-muted">{t('files:fileToolbar.openAFolderInTheSourceLibraryToPaste')}</p>
       )}
       {message && (
         <p role="status" className="text-sm text-muted">
@@ -299,11 +310,17 @@ export function FileToolbar({
         onOpenChange={open => {
           if (!open) setDialog(null)
         }}
-        title={dialog === 'mkdir' ? 'New folder' : dialog === 'delete' ? 'Delete selected items' : 'Upload'}
+        title={
+          dialog === 'mkdir'
+            ? t('files:fileToolbar.newFolder')
+            : dialog === 'delete'
+              ? t('files:fileToolbar.deleteSelectedItems')
+              : t('files:fileToolbar.upload')
+        }
         description={
           dialog === 'delete'
-            ? `${count} selected items will be queued for deletion.`
-            : `In ${location.data?.relativePath || '/'}`
+            ? t('files:fileToolbar.selectedForDeletion', { count })
+            : t('files:fileToolbar.in', { value1: location.data?.relativePath || '/' })
         }
       >
         <div className="space-y-4 p-5">
@@ -315,11 +332,11 @@ export function FileToolbar({
               }}
               className="space-y-3"
             >
-              <Field label="Folder name">
+              <Field label={t('files:fileToolbar.folderName')}>
                 <Input value={name} onChange={event => setName(event.target.value)} />
               </Field>
               <QuietButton type="submit" disabled={busy || !name.trim()}>
-                Create folder
+                {t('files:fileToolbar.createFolder')}
               </QuietButton>
             </form>
           )}
@@ -327,10 +344,14 @@ export function FileToolbar({
             <>
               <label htmlFor={permanentId} className="flex items-center gap-2 text-sm">
                 <Checkbox id={permanentId} checked={permanent} onChange={event => setPermanent(event.target.checked)} />
-                Permanently delete. This cannot be undone.
+                {t('files:fileToolbar.permanentlyDeleteThisCannotBeUndone')}
               </label>
               <QuietButton disabled={busy} onClick={() => void execute('delete')}>
-                {busy ? 'Queuing…' : permanent ? 'Delete permanently' : 'Move to recycle bin'}
+                {busy
+                  ? t('files:fileToolbar.queuing')
+                  : permanent
+                    ? t('files:fileToolbar.deletePermanently')
+                    : t('files:fileToolbar.moveToRecycleBin')}
               </QuietButton>
             </>
           )}
@@ -362,20 +383,21 @@ export function RecycleBinSettings() {
     <>
       <QuietButton disabled={!capabilities?.accessConfigured || !available.length} onClick={() => setOpen(true)}>
         <Trash2 className="size-4" />
-        Recycle bin
+        {t('files:fileToolbar.recycleBin')}
       </QuietButton>
       <Modal
         open={open}
         onOpenChange={setOpen}
-        title="Recycle bin"
-        description="Restore deleted content or permanently remove it."
+        title={t('files:fileToolbar.recycleBin')}
+        description={t('files:fileToolbar.restoreDeletedContentOrPermanentlyRemoveIt')}
       >
         <div className="p-5">
-          <Field label="Library">
+          <Field label={t('files:fileToolbar.library')}>
             <Select value={libraryId ?? ''} onChange={event => setChosen(Number(event.target.value))}>
               {available.map(item => (
                 <option key={item.libraryId} value={item.libraryId}>
-                  {libraries?.find(library => library.id === item.libraryId)?.name ?? `Library ${item.libraryId}`}
+                  {libraries?.find(library => library.id === item.libraryId)?.name ??
+                    t('files:fileToolbar.library2', { value1: item.libraryId })}
                 </option>
               ))}
             </Select>
@@ -426,8 +448,8 @@ function RecycleBin({ libraryId }: { libraryId: number }) {
   }
   return (
     <div className="space-y-4 p-5">
-      {queued && <p role="status">Queued. Follow progress in Background jobs.</p>}
-      <Field label="Alternative restore path (optional; relative to library)">
+      {queued && <p role="status">{t('files:fileToolbar.queuedFollowProgressInBackgroundJobs')}</p>}
+      <Field label={t('files:fileToolbar.alternativeRestorePathOptionalRelativeToLibrary')}>
         <Input value={alternate} onChange={event => setAlternate(event.target.value)} />
       </Field>
       {(trash.error || error) && (
@@ -438,26 +460,34 @@ function RecycleBin({ libraryId }: { libraryId: number }) {
       {trash.data?.map(item => (
         <article key={item.id} className="space-y-2 rounded-lg border border-line p-3">
           <p className="break-all font-medium">{item.source}</p>
-          <p className="text-sm text-muted">Deleted {new Date(item.createdAt).toLocaleString()}</p>
+          <p className="text-sm text-muted">
+            {t('files:fileToolbar.deleted', { date: new Date(item.createdAt).toLocaleString() })}
+          </p>
           <div className="flex flex-wrap gap-2">
             <QuietButton disabled={busy} onClick={() => void run(item, 'restore')}>
-              Restore
+              {t('files:fileToolbar.restore')}
             </QuietButton>
             <QuietButton
               disabled={busy}
               onClick={() => (purging === item.id ? void run(item, 'purge') : setPurging(item.id))}
             >
-              {purging === item.id ? 'Confirm permanent deletion' : 'Permanently delete'}
+              {purging === item.id
+                ? t('files:fileToolbar.confirmPermanentDeletion')
+                : t('files:fileToolbar.permanentlyDelete')}
             </QuietButton>
-            {purging === item.id && <QuietButton onClick={() => setPurging(null)}>Cancel</QuietButton>}
+            {purging === item.id && (
+              <QuietButton onClick={() => setPurging(null)}>{t('files:fileToolbar.cancel')}</QuietButton>
+            )}
           </div>
         </article>
       ))}
-      {trash.data?.length === 0 && <p className="text-sm text-muted">Recycle bin is empty.</p>}
+      {trash.data?.length === 0 && <p className="text-sm text-muted">{t('files:fileToolbar.recycleBinIsEmpty')}</p>}
       <div className="flex gap-2">
-        {before && <QuietButton onClick={() => setBefore(undefined)}>Newest</QuietButton>}
+        {before && <QuietButton onClick={() => setBefore(undefined)}>{t('files:fileToolbar.newest')}</QuietButton>}
         {trash.data?.length === 100 && (
-          <QuietButton onClick={() => setBefore(trash.data?.at(-1)?.createdAt)}>Older items</QuietButton>
+          <QuietButton onClick={() => setBefore(trash.data?.at(-1)?.createdAt)}>
+            {t('files:fileToolbar.olderItems')}
+          </QuietButton>
         )}
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { conflictBatch, withFileConflict } from '../files/fileConflicts'
 import type { components } from '../../lib/api/generated'
 import { request } from '../browse/api'
@@ -78,7 +79,7 @@ const writeUnavailable = (error: unknown) =>
   error instanceof ApiError && ['media_not_writable', 'read_only_library'].includes(error.problem?.code ?? '')
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds))
 export async function addUploads(files: File[], libraryId: number, destination: string) {
-  if (files.length > 10000) throw new Error('Choose at most 10,000 files at once.')
+  if (files.length > 10000) throw new Error(t('uploads:uploadQueue.chooseAtMost10000FilesAtOnce'))
   const resumed = new Set<File>()
   const batch = conflictBatch()
   for (const file of files) {
@@ -100,7 +101,7 @@ export async function addUploads(files: File[], libraryId: number, destination: 
   for (const file of files.filter(file => !resumed.has(file))) {
     const parts = (file.webkitRelativePath || file.name).split('/')
     parts.pop()
-    if (parts.length > 127) throw new Error('Folder upload exceeds the depth limit.')
+    if (parts.length > 127) throw new Error(t('uploads:uploadQueue.folderUploadExceedsTheDepthLimit'))
     for (let depth = 1; depth <= parts.length; depth++)
       folders.add([destination, ...parts.slice(0, depth)].filter(Boolean).join('/'))
   }
@@ -213,7 +214,8 @@ async function transfer(item: QueuedUpload) {
     update(item.key, { id: session.id, offset: session.committedOffset })
     if (session.state === 'paused')
       session = await request<Session>(`/api/files/uploads/${session.id}/resume`, controller.signal, 'POST')
-    if (session.state === 'cancelled') throw new Error('This server upload was cancelled. Start a new upload.')
+    if (session.state === 'cancelled')
+      throw new Error(t('uploads:uploadQueue.thisServerUploadWasCancelledStartANewUpload'))
     let offset = session.committedOffset
     let failures = 0
     const start = performance.now(),
@@ -234,7 +236,7 @@ async function transfer(item: QueuedUpload) {
           const problem = (await response.json().catch(() => ({}))) as components['schemas']['ApiProblem']
           throw new ApiError(response.status, {
             ...problem,
-            title: problem.title ?? `Upload failed (${response.status}).`,
+            title: problem.title ?? t('uploads:uploadQueue.uploadFailed', { value1: response.status }),
           })
         }
         session = (await response.json()) as Session
@@ -285,7 +287,7 @@ async function transfer(item: QueuedUpload) {
       update(item.key, {
         state: 'failed',
         controller: undefined,
-        error: error instanceof Error ? error.message : 'Upload interrupted.',
+        error: error instanceof Error ? error.message : t('uploads:uploadQueue.uploadInterrupted'),
       })
   }
 }
@@ -340,7 +342,7 @@ export async function uploadAction(key: string, action: 'pause' | 'resume' | 'ca
     update(key, {
       state: 'failed',
       controller: undefined,
-      error: error instanceof Error ? error.message : 'Could not update upload.',
+      error: error instanceof Error ? error.message : t('uploads:uploadQueue.couldNotUpdateUpload'),
     })
     throw error
   }

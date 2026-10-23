@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n'
 import { RenameFileAction } from '../files/RenameFileAction'
 import { DeleteMediaAction } from '../files/DeleteMediaAction'
 import { readSetting } from '../../app/uiDefaults'
@@ -246,14 +247,14 @@ export function Viewer({
           if (!open) onExitComplete?.()
         }}
         title={item.fileName}
-        description="Media viewer. Use Left and Right arrows to navigate, I for details, and Escape to close."
+        description={t('browse:viewer.mediaViewerUseLeftAndRightArrowsToNavigate')}
         wide
         hideHeader
         restoreFocus={restoreFocus}
       >
         <section
           className="relative flex min-h-0 flex-1 items-center justify-center bg-black"
-          aria-label="Media preview"
+          aria-label={t('browse:viewer.mediaPreview')}
         >
           <div className="flex h-full w-full items-center justify-center overflow-hidden">
             <MediaStage
@@ -284,16 +285,16 @@ export function Viewer({
               {slideshow && (
                 <QuietButton
                   className="border-transparent bg-canvas/85 tabular-nums"
-                  aria-label={`Slide duration, ${slideSeconds} seconds`}
+                  aria-label={t('browse:viewer.slideDurationSeconds', { value1: slideSeconds })}
                   onClick={() =>
                     setSlideSeconds(value => slideChoices[(slideChoices.indexOf(value) + 1) % slideChoices.length])
                   }
                 >
-                  {slideSeconds} s
+                  {t('browse:viewer.s', { slideSeconds: slideSeconds })}
                 </QuietButton>
               )}
               <IconButton
-                label="Slideshow"
+                label={t('browse:viewer.slideshow')}
                 aria-pressed={slideshow}
                 className="border-transparent bg-canvas/85"
                 onClick={() => setSlideshow(value => !value)}
@@ -301,7 +302,7 @@ export function Viewer({
                 {slideshow ? <Pause className="size-5" /> : <Presentation className="size-5" />}
               </IconButton>
               <IconButton
-                label="Close viewer"
+                label={t('browse:viewer.closeViewer')}
                 className="border-transparent bg-canvas/85"
                 onClick={() => setOpen(false)}
               >
@@ -317,10 +318,14 @@ export function Viewer({
             faded={chromeHidden}
             menuOpen={menuOpen}
             onMenuOpenChange={setMenuOpen}
-            menuLabel="Viewer menu"
+            menuLabel={t('browse:viewer.menu')}
             className="bottom-24 phone-portrait:bottom-32"
           >
-            <IconButton label="View options" className={actionButton} onClick={() => setOptionsOpen(true)}>
+            <IconButton
+              label={t('browse:viewer.viewOptions')}
+              className={actionButton}
+              onClick={() => setOptionsOpen(true)}
+            >
               <Settings2 className="size-4" />
             </IconButton>
             <RenameFileAction
@@ -351,16 +356,24 @@ export function Viewer({
                 else setOpen(false)
               }}
             />
-            <IconButton label="Media details" className={actionButton} onClick={() => setDetailsOpen(true)}>
+            <IconButton
+              label={t('browse:viewer.mediaDetails')}
+              className={actionButton}
+              onClick={() => setDetailsOpen(true)}
+            >
               <Info className="size-4" />
             </IconButton>
             {motion && onWatchReels && (
-              <IconButton label="Watch on Flick" className={actionButton} onClick={() => onWatchReels(item)}>
+              <IconButton
+                label={t('browse:viewer.watchOnFlick')}
+                className={actionButton}
+                onClick={() => onWatchReels(item)}
+              >
                 <Clapperboard className="size-4" />
               </IconButton>
             )}
             <IconButton
-              label="Previous item"
+              label={t('browse:viewer.previousItem')}
               className={actionButton}
               disabled={!previous}
               onClick={() => previous && navigate(previous, 'previous')}
@@ -368,7 +381,7 @@ export function Viewer({
               <ChevronLeft className="size-4" />
             </IconButton>
             <IconButton
-              label="Next item"
+              label={t('browse:viewer.nextItem')}
               className={actionButton}
               disabled={!next}
               onClick={() => next && navigate(next, 'next')}
@@ -386,8 +399,8 @@ export function Viewer({
       <Modal
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
-        title="Media details"
-        description="Tags and file information."
+        title={t('browse:viewer.mediaDetails')}
+        description={t('browse:viewer.tagsAndFileInformation')}
         sheet
       >
         <div className="space-y-6 overflow-auto p-5">
@@ -397,41 +410,41 @@ export function Viewer({
               onClick={() => prefer(item.preference === 'liked' ? 'neutral' : 'liked')}
             >
               <Heart className={`size-4 ${item.preference === 'liked' ? 'fill-accent text-accent' : ''}`} />
-              Like
+              {t('browse:viewer.like')}
             </QuietButton>
             <QuietButton
               aria-pressed={item.preference === 'disliked'}
               onClick={() => prefer(item.preference === 'disliked' ? 'neutral' : 'disliked')}
             >
               <HeartCrack className={`size-4 ${item.preference === 'disliked' ? 'text-danger' : ''}`} />
-              Dislike
+              {t('browse:viewer.dislike')}
             </QuietButton>
           </div>
           <div>
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
               <Tag className="size-4 text-accent" />
-              Tags
+              {t('browse:viewer.tags')}
             </h2>
             <TagEditor key={item.id} mediaIds={[item.id]} tags={item.tags} />
           </div>
-          <section aria-label="Gallery covers" className="flex flex-wrap items-center gap-2">
+          <section aria-label={t('browse:viewer.galleryCovers')} className="flex flex-wrap items-center gap-2">
             <QuietButton
               disabled={cover.isPending || item.availability === 'missing'}
               onClick={() => cover.mutate({ folder: coverFolder, mediaId: item.id })}
             >
-              Use as folder cover
+              {t('browse:viewer.useAsFolderCover')}
             </QuietButton>
             {rootFolder && (
               <QuietButton
                 disabled={cover.isPending || item.availability === 'missing'}
                 onClick={() => cover.mutate({ folder: rootFolder, mediaId: item.id })}
               >
-                Use as library cover
+                {t('browse:viewer.useAsLibraryCover')}
               </QuietButton>
             )}
             {cover.isSuccess && (
               <p role="status" className="text-sm text-ink">
-                Cover saved.
+                {t('browse:viewer.coverSaved')}
               </p>
             )}
             {cover.isError && (

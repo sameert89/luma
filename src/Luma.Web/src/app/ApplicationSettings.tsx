@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Checkbox } from '../components/ui/Controls'
@@ -33,8 +34,8 @@ export function ApplicationSettings() {
   }
   return (
     <SettingsSection
-      title="Applications"
-      description="Enable or hide applications for everyone using this server. Saved choices override deployment environment defaults."
+      title={t('app:applicationSettings.applications')}
+      description={t('app:applicationSettings.enableOrHideApplicationsForEveryoneUsingThisServer')}
     >
       {(['flickEnabled', 'panelsEnabled'] as const).map(key => (
         <label key={key} className="flex items-center gap-2 text-sm">
@@ -43,7 +44,10 @@ export function ApplicationSettings() {
             disabled={busy || !flags}
             onChange={event => void change(key, event.target.checked)}
           />
-          Enable {key === 'flickEnabled' ? 'Flick' : 'Panels'}
+          {t('app:applicationSettings.enableApplication', {
+            application:
+              key === 'flickEnabled' ? t('app:applicationSettings.flick') : t('app:applicationSettings.panels'),
+          })}
         </label>
       ))}
       {error && (
