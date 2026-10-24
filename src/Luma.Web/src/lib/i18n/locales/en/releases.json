@@ -3,9 +3,11 @@
     {
       "version": "2.0.0-beta.12",
       "date": "2026-10-24",
-      "headline": "Clearer text, lighter builds",
+      "headline": "Reliable uploads and lighter builds",
       "changes": [
         "More natural wording throughout Settings, Help, uploads and file management.",
+        "Resume interrupted uploads from Background jobs and let busy servers retry automatically.",
+        "A brief full-screen introduction when you first open each app, with animation preferences respected.",
         "Docker builds now compile one app at a time to ease memory pressure on small servers."
       ]
     },
@@ -32,9 +34,7 @@
       "version": "2.0.0-beta.9",
       "date": "2026-10-21",
       "headline": "Delete from Flick",
-      "changes": [
-        "Delete files from Flick and continue watching the next reel."
-      ]
+      "changes": ["Delete files from Flick and continue watching the next reel."]
     },
     {
       "version": "2.0.0-beta.8",
@@ -49,9 +49,7 @@
       "version": "2.0.0-beta.7",
       "date": "2026-10-20",
       "headline": "Viewer deletion and saved position",
-      "changes": [
-        "Delete from the Gallery viewer and return to your last viewed photo."
-      ]
+      "changes": ["Delete from the Gallery viewer and return to your last viewed photo."]
     },
     {
       "version": "2.0.0-beta.6",
@@ -75,9 +73,7 @@
       "version": "2.0.0-beta.4",
       "date": "2026-10-19",
       "headline": "Compact mobile search",
-      "changes": [
-        "Expand and collapse search on phones across Gallery, Collections, Flick and Panels."
-      ]
+      "changes": ["Expand and collapse search on phones across Gallery, Collections, Flick and Panels."]
     },
     {
       "version": "2.0.0-beta.3",
@@ -111,33 +107,25 @@
       "version": "1.0.11",
       "date": "2026-10-01",
       "headline": "Refresh and default Reels order",
-      "changes": [
-        "Choose a default Reels order and refresh Gallery without starting a scan."
-      ]
+      "changes": ["Choose a default Reels order and refresh Gallery without starting a scan."]
     },
     {
       "version": "1.0.10",
       "date": "2026-09-25",
       "headline": "Faster Reels and restored sessions",
-      "changes": [
-        "Faster Reels browsing and automatic restoration of your last view and filters."
-      ]
+      "changes": ["Faster Reels browsing and automatic restoration of your last view and filters."]
     },
     {
       "version": "1.0.9",
       "date": "2026-09-22",
       "headline": "Smooth browsing during scans",
-      "changes": [
-        "Browse large libraries smoothly while indexing runs in the background."
-      ]
+      "changes": ["Browse large libraries smoothly while indexing runs in the background."]
     },
     {
       "version": "1.0.8",
       "date": "2026-09-22",
       "headline": "Faster folders and resilient scans",
-      "changes": [
-        "Faster folder covers and reliable scan recovery after a server restart."
-      ]
+      "changes": ["Faster folder covers and reliable scan recovery after a server restart."]
     },
     {
       "version": "1.0.7",
