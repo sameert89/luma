@@ -129,14 +129,14 @@ test('scoped reels bound media, auto-scroll, stop inactive playback and restore 
   await expect(page.getByTestId('media-cell')).toHaveCount(3)
   await page.goto('/flick?q=stage6&order=desc&mediaType=motion')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
-  await expect(reels.locator('video')).toHaveCount(1)
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveCount(1)
   await expect(page).toHaveURL(/mediaType=motion/)
   await expect(page).toHaveURL(/q=stage6/)
   await expect(page.getByRole('button', { name: 'Switch application, Flick', exact: true })).toBeVisible()
   await reels.getByRole('button', { name: 'Flick menu' }).click()
   await reels.getByRole('button', { name: 'Auto-scroll' }).click()
   await expect(reels.getByRole('button', { name: 'Auto-scroll' })).toHaveAttribute('aria-pressed', 'true')
-  const old = await reels.locator('video').elementHandle()
+  const old = await reels.locator('[data-reel-state="current"] video').elementHandle()
   await expect.poll(() => old!.evaluate(v => v.paused)).toBe(false)
   const seek = reels.getByRole('slider', { name: 'Seek video', exact: true })
   await seek.focus()
@@ -146,9 +146,11 @@ test('scoped reels bound media, auto-scroll, stop inactive playback and restore 
   await reels.getByRole('button', { name: 'Auto-scroll' }).click()
   await reels.getByRole('button', { name: 'Next', exact: true }).click()
   await expect.poll(() => old!.evaluate(v => v.paused && !v.getAttribute('src'))).toBe(true)
-  await expect(reels.locator('video')).toHaveCount(1)
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveCount(1)
   await expect(reels.getByRole('status')).toContainText('copy its stream URL')
-  expect(await reels.locator('img,video').count()).toBeLessThanOrEqual(1)
+  expect(
+    await reels.locator('[data-reel-state="current"] img, [data-reel-state="current"] video').count(),
+  ).toBeLessThanOrEqual(1)
   expect(await reels.locator('link[rel=preload]').count()).toBeLessThanOrEqual(1)
   await page.screenshot({ path: `test-results/stage6-reels-${test.info().project.name}.png` })
   await switchExperience(page, 'Gallery')
@@ -231,8 +233,8 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await expect(page).not.toHaveURL(/media=/)
   await page.goto('/flick?q=stage6&mediaType=motion&order=desc')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
-  await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1495/original')
-  const reelBounds = await reels.locator('video').boundingBox()
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveAttribute('src', '/api/media/1495/original')
+  const reelBounds = await reels.locator('[data-reel-state="current"] video').boundingBox()
   const reelX = reelBounds!.x + reelBounds!.width / 2
   const reelY = reelBounds!.y + reelBounds!.height / 2
   await session.send('Input.dispatchTouchEvent', {
@@ -244,5 +246,30 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
     touchPoints: [{ x: reelX, y: reelY - 80, id: 0 }],
   })
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1490/original')
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveAttribute('src', '/api/media/1490/original')
+})
+
+test('Flick promotes the same buffered video element without posters or loading overlays', async ({ page }) => {
+  // Reuse the valid fixture bytes for the second clip, preserving normal Range requests.
+  await page.route('**/api/media/1490/original', async route => {
+    const response = await route.fetch({ url: 'http://127.0.0.1:4173/api/media/1495/original' })
+    await route.fulfill({ response })
+  })
+  await page.goto('/flick?q=stage6&order=desc&mediaType=video')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
+  const current = reels.locator('[data-reel-state="current"] video')
+  await expect(current).toHaveAttribute('src', '/api/media/1495/original')
+  await expect.poll(() => current.evaluate(video => !video.paused)).toBe(true)
+  const prepared = reels.locator('[data-reel-state="prepared"] video')
+  await expect(prepared).toHaveAttribute('src', '/api/media/1490/original')
+  await expect.poll(() => prepared.evaluate(video => video.readyState)).toBeGreaterThanOrEqual(3)
+  await expect(prepared).toHaveJSProperty('paused', true)
+  const samePlayer = await prepared.elementHandle()
+  await reels.getByRole('button', { name: 'Flick menu', exact: true }).click()
+  await reels.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect.poll(() => current.evaluate((video, expected) => video === expected, samePlayer)).toBe(true)
+  await expect.poll(() => current.evaluate(video => !video.paused && video.currentTime > 0)).toBe(true)
+  await expect(reels.locator('video[poster]')).toHaveCount(0)
+  await expect(reels.getByTestId('buffering')).toHaveCount(0)
+  expect(await reels.locator('video').count()).toBeLessThanOrEqual(2)
 })

@@ -46,7 +46,7 @@ test('reels keep rating and the menu within thumb reach and loop by default', as
   await switchExperience(page, 'Flick')
   await expect(page).toHaveURL(/mediaType=motion/)
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
-  await expect(reels.locator('video')).toHaveJSProperty('loop', true)
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveJSProperty('loop', true)
   const like = reels.getByRole('button', { name: 'Like', exact: true })
   const dislike = reels.getByRole('button', { name: 'Dislike', exact: true })
   const menu = reels.getByRole('button', { name: 'Flick menu' })

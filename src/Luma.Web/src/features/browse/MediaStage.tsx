@@ -53,6 +53,12 @@ export function MediaStage({
   reels = false,
   muted = false,
   suspended = false,
+  preparing = false,
+  presented = true,
+  onPlaybackStarted,
+  onPlaybackFailed,
+  playbackSettings,
+  onPlaybackSettingsChange,
   loop = false,
   autoPlay = false,
   autoplayNext,
@@ -72,6 +78,12 @@ export function MediaStage({
   reels?: boolean
   muted?: boolean
   suspended?: boolean
+  preparing?: boolean
+  presented?: boolean
+  onPlaybackStarted?: () => void
+  onPlaybackFailed?: () => void
+  playbackSettings?: { volume: number; rate: number }
+  onPlaybackSettingsChange?: (value: { volume: number; rate: number }) => void
   loop?: boolean
   autoPlay?: boolean
   autoplayNext?: boolean
@@ -103,7 +115,11 @@ export function MediaStage({
   const seekStrip = useRef<HTMLDivElement>(null)
   const resumePlayback = useRef(false)
   const playbackSuspended = useRef(suspended)
-  playbackSuspended.current = suspended
+  playbackSuspended.current = suspended || preparing
+  const playbackStarted = useRef(onPlaybackStarted)
+  playbackStarted.current = onPlaybackStarted
+  const playbackFailed = useRef(onPlaybackFailed)
+  playbackFailed.current = onPlaybackFailed
   const autoPlayRef = useRef(autoPlay)
   autoPlayRef.current = autoPlay
   const navigateRef = useRef(onNavigate)
@@ -145,9 +161,11 @@ export function MediaStage({
   const optionsOpen = controlledOptionsOpen ?? localOptionsOpen
   const setOptionsOpen = onOptionsOpenChange ?? setLocalOptionsOpen
   const [playing, setPlaying] = useState(false)
-  const [volume, setVolume] = useState(1)
+  const [frameReadyId, setFrameReadyId] = useState<number | null>(null)
+  const frameReady = frameReadyId === item.id
+  const [volume, setVolume] = useState(playbackSettings?.volume ?? 1)
   const [viewerMuted, setViewerMuted] = useState(false)
-  const [rate, setRate] = useState(1)
+  const [rate, setRate] = useState(playbackSettings?.rate ?? 1)
   const [seekVisible, setSeekVisible] = useState(false)
   const [burst, setBurst] = useState<{ dislike: boolean; key: number } | null>(null)
   const [buffering, setBuffering] = useState(false)
@@ -169,6 +187,7 @@ export function MediaStage({
     setOriginalId(null)
     setFailure('')
     setPlaying(false)
+    setFrameReadyId(null)
     setSeekVisible(false)
     setBurst(null)
     setBuffering(false)
@@ -191,6 +210,18 @@ export function MediaStage({
     window.clearTimeout(holdTimer.current)
     window.clearTimeout(bufferTimer.current)
   }, [item.id])
+  useLayoutEffect(() => {
+    if (presented || !playbackSettings) return
+    setVolume(playbackSettings.volume)
+    setRate(playbackSettings.rate)
+    if (video.current) {
+      video.current.volume = playbackSettings.volume
+      video.current.playbackRate = playbackSettings.rate
+    }
+  }, [presented, playbackSettings?.volume, playbackSettings?.rate])
+  useEffect(() => {
+    if (presented) onPlaybackSettingsChange?.({ volume, rate })
+  }, [presented, volume, rate, onPlaybackSettingsChange])
   const displayFill = fill
   zoomRef.current = zoom
   panRef.current = pan
@@ -253,7 +284,7 @@ export function MediaStage({
   }
   function togglePlay() {
     const player = video.current
-    if (!player) return
+    if (!player || playbackSuspended.current) return
     const starting = player.paused
     if (starting)
       void player
@@ -444,30 +475,12 @@ export function MediaStage({
   }, [skip, flash])
   useEffect(() => {
     const player = video.current
-    let disposed = false
     if (player) {
       player.volume = volume
       player.playbackRate = rate
     }
     if (player && !player.getAttribute('src')) player.src = originalUrl
-    if ((reels || autoPlayRef.current) && player && !playbackSuspended.current)
-      void player
-        .play()
-        .then(() => {
-          if (playbackSuspended.current) player.pause()
-        })
-        .catch(error => {
-          if (!disposed)
-            setFailure(
-              current =>
-                current ||
-                (player.error || (error instanceof DOMException && error.name === 'NotSupportedError')
-                  ? t('browse:mediaStage.thisVideoCouldNotPlayCopyItsStreamURL')
-                  : t('browse:mediaStage.autoplayWasBlockedPressPlayToStart')),
-            )
-        })
     return () => {
-      disposed = true
       if (player) {
         player.pause()
         player.removeAttribute('src')
@@ -476,25 +489,59 @@ export function MediaStage({
     }
   }, [reels, originalUrl])
   useEffect(() => {
+    const player = video.current
+    let disposed = false
+    if ((reels || autoPlayRef.current) && player && !playbackSuspended.current)
+      void player
+        .play()
+        .then(() => {
+          if (video.current !== player) return
+          if (playbackSuspended.current) {
+            player.pause()
+            return
+          }
+          if (!disposed) {
+            setFrameReadyId(item.id)
+            playbackStarted.current?.()
+          }
+        })
+        .catch(error => {
+          if (!disposed) {
+            playbackFailed.current?.()
+            setFailure(
+              current =>
+                current ||
+                (player.error || (error instanceof DOMException && error.name === 'NotSupportedError')
+                  ? t('browse:mediaStage.thisVideoCouldNotPlayCopyItsStreamURL')
+                  : t('browse:mediaStage.autoplayWasBlockedPressPlayToStart')),
+            )
+          }
+        })
+    return () => {
+      disposed = true
+    }
+  }, [reels, originalUrl, preparing])
+  useEffect(() => {
     // Starting a slideshow on a paused video starts it; later items autoplay on load.
     if (autoPlay && video.current?.paused && !playbackSuspended.current) void video.current.play().catch(() => {})
   }, [autoPlay])
   useEffect(() => {
     const player = video.current
     if (!player) return
-    if (suspended) {
+    if (suspended || preparing) {
       resumePlayback.current ||= !player.paused
       player.pause()
     } else if (resumePlayback.current) {
       resumePlayback.current = false
       void player.play().catch(() => setFailure(t('browse:mediaStage.pressPlayToResumePlayback')))
     }
-  }, [suspended, item.id])
+  }, [suspended, preparing, item.id])
   // Lock-screen, headset and notification controls, and background playback metadata.
   useEffect(() => {
     if (
       !isVideo ||
       suspended ||
+      !presented ||
       typeof navigator === 'undefined' ||
       !('mediaSession' in navigator) ||
       typeof MediaMetadata === 'undefined'
@@ -527,6 +574,8 @@ export function MediaStage({
         /* action unsupported here */
       }
     }
+    // A prepared player may already be playing when it becomes the presented clip.
+    syncSession()
     return () => {
       for (const [action] of handlers) {
         try {
@@ -538,10 +587,10 @@ export function MediaStage({
       session.metadata = null
     }
     // skipBy only reads the video ref; handlers need rebinding when the item changes.
-  }, [item.id, isVideo, suspended, item.fileName, item.preview.status, item.preview.url])
+  }, [item.id, isVideo, suspended, presented, item.fileName, item.preview.status, item.preview.url])
   function syncSession() {
     const player = video.current
-    if (!player || suspended || !('mediaSession' in navigator)) return
+    if (!player || suspended || !presented || !('mediaSession' in navigator)) return
     navigator.mediaSession.playbackState = player.paused ? 'paused' : 'playing'
     try {
       if (Number.isFinite(player.duration) && player.duration > 0)
@@ -562,6 +611,7 @@ export function MediaStage({
     return () => window.removeEventListener('keydown', listener)
   }, [])
   function key(event: KeyboardEvent) {
+    if (!presented || playbackSuspended.current) return
     const dialog = host.current?.closest('[role="dialog"]')
     const dialogs = document.querySelectorAll('[role="dialog"]')
     if (dialogs.length && dialogs[dialogs.length - 1] !== dialog) return
@@ -723,7 +773,7 @@ export function MediaStage({
             aria-label={item.fileName}
             ref={video}
             src={originalUrl}
-            poster={item.preview.status === 'ready' ? item.preview.url : undefined}
+            poster={!reels && item.preview.status === 'ready' ? item.preview.url : undefined}
             playsInline
             loop={loop}
             muted={reels ? muted : viewerMuted || volume === 0}
@@ -749,18 +799,30 @@ export function MediaStage({
               ready()
               syncSession()
             }}
-            onCanPlay={ready}
+            onLoadedData={event => {
+              if (event.currentTarget === video.current) setFrameReadyId(item.id)
+            }}
+            onCanPlay={event => {
+              ready()
+              // Keep the prepared frame/buffer without asking for the rest of the file.
+              if (preparing) event.currentTarget.preload = 'none'
+            }}
             onDurationChange={syncSession}
             onRateChange={syncSession}
-            onPlaying={() => {
+            onPlaying={event => {
+              if (event.currentTarget !== video.current) return
+              // Playing also covers browsers that skip loadeddata in data-saving modes.
+              setFrameReadyId(item.id)
+              if (!playbackSuspended.current) playbackStarted.current?.()
               ready()
               if (!video.current?.error) setFailure('')
             }}
             onError={() => {
               ready()
+              if (!preparing) playbackFailed.current?.()
               setFailure(t('browse:mediaStage.thisVideoCouldNotPlayCopyItsStreamURL'))
             }}
-            className={`motion-media pointer-events-none h-full w-full ${displayFill ? 'object-cover' : 'object-contain'}`}
+            className={`pointer-events-none h-full w-full ${!reels || (frameReady && presented) ? 'motion-media' : frameReady ? '' : 'opacity-0'} ${displayFill ? 'object-cover' : 'object-contain'}`}
           >
             {captions.track}
           </video>
@@ -814,7 +876,7 @@ export function MediaStage({
             </QuietButton>
           </div>
         )}
-        {isVideo && buffering && (
+        {isVideo && buffering && !reels && (
           <div
             className="pointer-events-none absolute flex size-16 items-center justify-center rounded-full bg-canvas/60"
             data-testid="buffering"
@@ -823,7 +885,7 @@ export function MediaStage({
             <span className="sr-only">{t('browse:mediaStage.buffering')}</span>
           </div>
         )}
-        {isVideo && reels && !playing && !buffering && (
+        {isVideo && reels && presented && !playing && !buffering && (frameReady || failure) && (
           <IconButton
             label={t('browse:mediaStage.playVideo')}
             className="absolute border-transparent bg-canvas/85"
@@ -882,7 +944,7 @@ export function MediaStage({
             captions={<CaptionControls captions={captions} />}
           />
         )}
-        {isVideo && reels && (
+        {isVideo && reels && presented && (
           <>
             <div data-chrome className="absolute bottom-14 left-3 flex gap-2">
               <CaptionControls captions={captions} />

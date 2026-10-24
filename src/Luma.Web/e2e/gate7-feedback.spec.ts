@@ -119,14 +119,14 @@ test('prepares an unindexed folder starting from what is on screen', async ({ pa
 test('reels reveal seeking from its strip and fade it again', async ({ page }) => {
   await page.goto('/flick?q=feedback&order=desc')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
-  await expect(reels.locator('video')).toHaveCount(1)
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveCount(1)
   const strip = reels.getByTestId('reels-seek')
   const seek = reels.getByRole('slider', { name: 'Seek video', exact: true })
   await expect(seek).toBeEnabled()
   await expect(strip).toHaveAttribute('data-visible', 'false')
   await expect(strip).toHaveCSS('opacity', '0')
 
-  const bounds = (await reels.locator('video').boundingBox())!
+  const bounds = (await reels.locator('[data-reel-state="current"] video').boundingBox())!
   // Above the mobile navigation, inside the strip that holds the seek control.
   await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height - 100)
   await expect(strip).toHaveAttribute('data-visible', 'true')
@@ -144,11 +144,11 @@ test('reels reveal seeking from its strip and fade it again', async ({ page }) =
 test('double tapping a reel likes it without toggling playback', async ({ page }) => {
   await page.goto('/flick?mediaType=video&preference=neutral')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
-  await expect(reels.locator('video')).toHaveCount(1)
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveCount(1)
   const like = reels.getByRole('button', { name: 'Like', exact: true })
   await expect(like).toHaveAttribute('aria-pressed', 'false')
 
-  const bounds = (await reels.locator('video').boundingBox())!
+  const bounds = (await reels.locator('[data-reel-state="current"] video').boundingBox())!
   // Clear of the centred play affordance, the control column and the seek strip.
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height * 0.35)
   await page.mouse.down()
