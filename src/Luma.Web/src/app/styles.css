@@ -553,19 +553,27 @@
 }
 .app-introduction {
   position: fixed;
-  top: 5rem;
-  left: 50%;
+  inset: 0;
   z-index: 40;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  max-width: calc(100% - 2rem);
-  padding: 0.5rem 0.75rem;
-  transform: translateX(-50%);
-  border: 1px solid var(--color-line);
-  border-radius: 1rem;
-  background: var(--color-surface);
+  justify-content: center;
+  gap: 1rem;
+  pointer-events: none;
+  background: var(--color-canvas);
   color: var(--color-ink);
+  animation: luma-app-intro 420ms ease-out both;
+}
+@keyframes luma-app-intro {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  28%,
+  65% {
+    opacity: 1;
+  }
 }
 @keyframes luma-atmosphere {
   from {
@@ -575,28 +583,9 @@
     transform: translate3d(1%, 1%, 0) scale(1.04);
   }
 }
-@keyframes luma-flick-intro {
-  from {
-    opacity: 0;
-    transform: translateX(-0.75rem);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
 @media (prefers-reduced-motion: no-preference) {
   :root[data-animation='system'] .appearance-atmosphere {
     animation: luma-atmosphere 14s ease-in-out infinite alternate;
-  }
-  :root[data-animation='system'] .app-introduction-gallery > svg {
-    animation: luma-dialog-in 180ms ease-out;
-  }
-  :root[data-animation='system'] .app-introduction-flick > svg {
-    animation: luma-flick-intro 150ms ease-out;
-  }
-  :root[data-animation='system'] .app-introduction-panels > svg {
-    animation: luma-sheet-in 180ms ease-out;
   }
 }
 /* Keep lifecycle animation events for closing primitives and like feedback while
@@ -607,4 +596,10 @@
   animation-iteration-count: 1 !important;
   transition-duration: 0s !important;
   scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-introduction {
+    display: none;
+  }
 }
