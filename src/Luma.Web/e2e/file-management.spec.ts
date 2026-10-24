@@ -315,7 +315,7 @@ for (const [kind, choice] of [
     await conflict.getByRole('button', { name: choice, exact: true }).click()
     await expect(conflict).toBeHidden()
     await expect(
-      page.getByRole('status').filter({ hasText: choice === 'Replace' ? '2 operations queued' : '2 skipped' }),
+      page.getByRole('status').filter({ hasText: choice === 'Replace' ? 'Added 2 tasks' : '2 skipped' }),
     ).toBeVisible()
     expect(requests.filter(request => request.replaceExisting).length).toBe(choice === 'Replace' ? 2 : 0)
   })

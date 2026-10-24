@@ -149,7 +149,7 @@ test('Panels exposes discovery, browses folders and keeps reader tools in popups
   await page.route('**/api/panels/comics/9', route => route.fulfill({ json: comic }))
   await page.route('**/api/panels/comics/9/progress', route => route.fulfill({ status: 204 }))
   await page.goto('/panels')
-  await expect(page.getByText(/Looking for comics… 3 checked/)).toBeVisible()
+  await expect(page.getByText(/Looking through your comics… 3 checked/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Background jobs, running' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Continue reading' })).toBeVisible()
   await expect(page.getByRole('progressbar', { name: 'Reading progress for DBZ volume 1' })).toHaveAttribute(
