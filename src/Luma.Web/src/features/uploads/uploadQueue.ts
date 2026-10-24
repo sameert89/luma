@@ -98,13 +98,15 @@ const targetPath = (destination: string, file: File) =>
 const unfinished = (item: QueuedUpload) => !['completed', 'cancelled', 'skipped'].includes(item.state)
 const sameFile = (item: QueuedUpload, file: File) => item.size === file.size && item.lastModified === file.lastModified
 
-export function resumeUpload(key: string, file: File) {
-  const item = queue.find(item => item.key === key)
+export async function resumeUpload(key: string, file: File) {
+  let item = queue.find(item => item.key === key)
   if (!item || !unfinished(item)) return
   if (file.name !== item.target.split('/').at(-1) || !sameFile(item, file))
     throw new Error(t('uploads:uploadQueue.chooseOriginalFile', { name: item.target }))
+  item = (await previousUpload(item.libraryId, item.target)) ?? item
+  if (!sameFile(item, file)) throw new Error(t('uploads:uploadQueue.chooseOriginalFile', { name: item.target }))
   // Repeated selection must never launch a second transfer for a live session.
-  update(key, { file, ...(!active.has(key) ? { state: 'queued', error: undefined } : {}) })
+  update(item.key, { file, ...(!active.has(item.key) ? { state: 'queued', error: undefined } : {}) })
   pump()
 }
 
@@ -146,7 +148,7 @@ export async function addUploads(files: File[], libraryId: number, destination: 
     const previous = await previousUpload(libraryId, target)
     if (previous) {
       if (!sameFile(previous, file)) throw new Error(t('uploads:uploadQueue.unfinishedUpload', { name: target }))
-      resumeUpload(previous.key, file)
+      await resumeUpload(previous.key, file)
       resumed.add(file)
     }
   }
@@ -198,7 +200,7 @@ export async function addUploads(files: File[], libraryId: number, destination: 
     const existing = queue.find(item => item.libraryId === libraryId && item.target === target && unfinished(item))
     if (existing) {
       if (!sameFile(existing, file)) throw new Error(t('uploads:uploadQueue.unfinishedUpload', { name: target }))
-      resumeUpload(existing.key, file)
+      await resumeUpload(existing.key, file)
       continue
     }
     const key = `upload-${Date.now()}-${++sequence}`

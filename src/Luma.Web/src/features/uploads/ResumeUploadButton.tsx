@@ -25,12 +25,9 @@ export function ResumeUploadButton({ item, onError }: { item: QueuedUpload; onEr
           const file = event.target.files?.[0]
           event.target.value = ''
           if (!file) return
-          try {
-            resumeUpload(item.key, file)
-            onError('')
-          } catch (error) {
-            onError(String(error))
-          }
+          void resumeUpload(item.key, file)
+            .then(() => onError(''))
+            .catch(error => onError(String(error)))
         }}
       />
     </>

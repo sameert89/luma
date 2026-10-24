@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { expect, it, vi } from 'vitest'
 import { TaskQueue } from './TaskQueue'
 const uploads = vi.hoisted(() => ({
-  resumeUpload: vi.fn(),
+  resumeUpload: vi.fn().mockResolvedValue(undefined),
   uploadAction: vi.fn().mockResolvedValue(undefined),
   items: [
     {

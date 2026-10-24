@@ -217,7 +217,7 @@ describe('resuming batches and waiting for a busy server', () => {
     )
     const queue = await import('./uploadQueue')
     const changed = new File(['abc'], 'original.jpg', { lastModified: 456 })
-    expect(() => queue.resumeUpload('saved', changed)).toThrow('same size and modification date')
+    await expect(queue.resumeUpload('saved', changed)).rejects.toThrow('same size and modification date')
     await expect(queue.addUploads([changed], 1, '')).rejects.toThrow('unfinished upload')
     expect(queue.uploadSnapshot()).toHaveLength(1)
     expect(mocks.request).not.toHaveBeenCalled()
@@ -299,7 +299,7 @@ it('recovers the actual server session from an old duplicated queue and retires 
     }
   })
   const queue = await import('./uploadQueue')
-  await queue.addUploads([new File([], 'same.jpg', { lastModified: 123 })], 1, '')
+  await queue.resumeUpload('duplicate', new File([], 'same.jpg', { lastModified: 123 }))
   await waitFor(() => expect(queue.uploadSnapshot().find(item => item.key === 'original')?.state).toBe('completed'))
   expect(queue.uploadSnapshot().find(item => item.key === 'duplicate')?.state).toBe('cancelled')
   expect(mocks.request.mock.calls.some(call => call[0] === '/api/files/uploads')).toBe(false)

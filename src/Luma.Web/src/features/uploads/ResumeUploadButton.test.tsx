@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { ResumeUploadButton } from './ResumeUploadButton'
 import { resumeUpload } from './uploadQueue'
-vi.mock('./uploadQueue', () => ({ resumeUpload: vi.fn(), uploadAction: vi.fn() }))
+vi.mock('./uploadQueue', () => ({ resumeUpload: vi.fn().mockResolvedValue(undefined), uploadAction: vi.fn() }))
 
 it('opens a per-upload picker and attaches the chosen file to its original queue entry', async () => {
   const file = new File(['abc'], 'original.jpg', { lastModified: 123 })
