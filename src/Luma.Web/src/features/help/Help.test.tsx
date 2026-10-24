@@ -33,7 +33,7 @@ describe('Help guide', () => {
     render(<Help onBack={() => {}} />)
     const libraries = section('Libraries, folders and gallery')
     expect(libraries).toHaveTextContent('Date sorts use the folder’s last-change date')
-    expect(libraries).toHaveTextContent('To check for file changes on disk, choose Rescan folder or Rescan library')
+    expect(libraries).toHaveTextContent('Pull down inside a folder to check its files')
     expect(libraries).toHaveTextContent('To stop filtering your results, use Clear all filters instead')
     expect(section('Flick')).toHaveTextContent('Vertical swipes move between reels')
     expect(section('Background jobs')).toHaveTextContent('without affecting your files or scan history')

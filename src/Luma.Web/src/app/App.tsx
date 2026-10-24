@@ -617,20 +617,34 @@ export function App() {
       apply({ ...libraryMemory.current, q: undefined }, 'library')
     else apply({}, 'search')
   }
-  // Pulling down the gallery refreshes what is on screen and asks the server to do nothing else.
-  // It used to queue a folder scan, and people read the job appearing in the queue as the app
-  // starting something heavy they had not asked for; finding files added on disk is Rescan
-  // folder's job, which says so. Resetting rather than invalidating starts the listing over from
-  // its first page: invalidating would refetch every page still held, one after another.
-  // The gallery is not remounted here: it is the gallery that holds the pull spinner, and a pull
-  // only ever starts at the top, so the reset alone is a refresh. The header button, which can be
-  // pressed deep in a listing, remounts it as well to land back at the top.
+  // Reset listings to their first page without remounting the pull indicator.
   async function refreshView() {
     await Promise.all([
       client.resetQueries({ queryKey: ['media'] }),
       client.resetQueries({ queryKey: ['folders'] }),
       client.invalidateQueries({ queryKey: ['libraries'] }),
     ])
+  }
+  async function pullRefresh() {
+    try {
+      const folderId =
+        section === 'library' ? (folders.data?.current.id ?? filters.folderId ?? library?.rootFolderId) : undefined
+      if (folderId) {
+        const settings = libraries.data?.find(
+          item => item.id === (folders.data?.current.libraryId ?? filters.libraryId),
+        )
+        await request<components['schemas']['ScanAccepted']>(`/api/folders/${folderId}/scans`, undefined, 'POST', {
+          metadataMode: settings?.metadataMode ?? 'embedded',
+          prioritize: true,
+          shallow: true,
+        })
+        // Background scan checkpoints refresh results as discovery finishes.
+        await Promise.all(['tasks', 'indexing', 'scan'].map(key => client.invalidateQueries({ queryKey: [key] })))
+      }
+      await refreshView()
+    } catch (error) {
+      showToast(errorMessage(error), 'danger')
+    }
   }
   function select(id: number) {
     setSelected(old => {
@@ -934,7 +948,10 @@ export function App() {
                 })}
               </QuietButton>
             ) : showBackgroundJobs && section !== 'reels' && section !== 'help' ? (
-              <BackgroundJobsButton compact libraryId={home ? undefined : filters.libraryId} />
+              <BackgroundJobsButton
+                compact
+                libraryId={home ? undefined : (filters.libraryId ?? folders.data?.current.libraryId)}
+              />
             ) : undefined
           }
         />
@@ -1352,7 +1369,7 @@ export function App() {
                       revealMediaId={revealMediaId}
                       onRevealComplete={finishReveal}
                       onScrollPosition={recordScroll}
-                      onPullRefresh={refreshView}
+                      onPullRefresh={pullRefresh}
                     />
                   )}
                 </>

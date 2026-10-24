@@ -64,16 +64,21 @@ export function usePullToRefresh(
         setRefreshing(false)
       }
     }
+    function cancel() {
+      origin = null
+      pulled = 0
+      setDistance(0)
+    }
     // Not passive: a committed pull must be able to stop the browser from scrolling with it.
     element.addEventListener('touchstart', begin, { passive: true })
     element.addEventListener('touchmove', move, { passive: false })
     element.addEventListener('touchend', end)
-    element.addEventListener('touchcancel', end)
+    element.addEventListener('touchcancel', cancel)
     return () => {
       element.removeEventListener('touchstart', begin)
       element.removeEventListener('touchmove', move)
       element.removeEventListener('touchend', end)
-      element.removeEventListener('touchcancel', end)
+      element.removeEventListener('touchcancel', cancel)
     }
   }, [scrollerRef, enabled])
   return { distance, refreshing }

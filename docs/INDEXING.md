@@ -86,3 +86,12 @@ this way, including those orphaned by a cancelled or failed scan.
 
 `waiting` is the right home for deferred work: showing an item adopts its own job,
 and a scan that rediscovers the media promotes the rest back to `pending`.
+
+
+Pulling down inside a Gallery folder explicitly requests a shallow scan through
+`POST /api/folders/{id}/scans` with `shallow: true` and `prioritize: true`,
+using that library’s saved tag-import mode. This works with refresh-on-open
+disabled. A library root stays a single-directory scan; existing covering scans
+are prioritized instead of duplicated. Background scan checkpoints update the
+view as discovery finishes. Search and other unscoped views only reload their
+indexed results, as does the separate Refresh collection menu action.
