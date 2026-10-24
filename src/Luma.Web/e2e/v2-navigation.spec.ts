@@ -48,7 +48,7 @@ test('Flick search, settings return and boot warning work without covering playe
     }),
   )
   await page.goto('/flick')
-  const warning = page.getByRole('status').filter({ hasText: 'Read-only media' })
+  const warning = page.getByRole('status').filter({ hasText: 'Your media is read-only' })
   await expect(warning).toBeVisible()
   await warning.getByRole('button', { name: 'Details' }).click()
   await expect(page).toHaveURL(/settings.*from=flick/)

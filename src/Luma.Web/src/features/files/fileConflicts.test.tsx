@@ -18,7 +18,9 @@ test('Replace retries only after explicit confirmation and carries the overwrite
     return { id: 'queued' }
   })
   const result = withFileConflict(action, { batch: conflictBatch(), target: 'photos/photo.jpg' })
-  expect(await screen.findByRole('dialog', { name: 'An item already exists' })).toHaveTextContent('photos/photo.jpg')
+  expect(await screen.findByRole('dialog', { name: 'This name is already taken' })).toHaveTextContent(
+    'photos/photo.jpg',
+  )
   expect(action).toHaveBeenCalledTimes(1)
   await userEvent.click(screen.getByRole('button', { name: 'Replace' }))
   expect(await result).toEqual({ id: 'queued' })
@@ -33,7 +35,7 @@ test('Skip all resolves simultaneous conflicts in one batch and does not affect 
   const batch = conflictBatch()
   const first = withFileConflict(action, { batch, target: 'one.jpg' })
   const second = withFileConflict(action, { batch, target: 'two.jpg' })
-  await screen.findByRole('dialog', { name: 'An item already exists' })
+  await screen.findByRole('dialog', { name: 'This name is already taken' })
   await userEvent.click(screen.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts' }))
   await userEvent.click(screen.getByRole('button', { name: 'Skip' }))
   expect(await Promise.all([first, second])).toEqual([null, null])

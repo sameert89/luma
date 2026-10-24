@@ -34,18 +34,18 @@ describe('Help guide', () => {
     const libraries = section('Libraries, folders and gallery')
     expect(libraries).toHaveTextContent('Date sorts use the folder’s last-change date')
     expect(libraries).toHaveTextContent('To check for file changes on disk, choose Rescan folder or Rescan library')
-    expect(libraries).toHaveTextContent('Your filters still apply when the row is hidden')
+    expect(libraries).toHaveTextContent('To stop filtering your results, use Clear all filters instead')
     expect(section('Flick')).toHaveTextContent('Vertical swipes move between reels')
-    expect(section('Background jobs')).toHaveTextContent('Your files and scan history stay intact')
+    expect(section('Background jobs')).toHaveTextContent('without affecting your files or scan history')
     expect(section('Photo and video viewer')).toHaveTextContent(
       'Watch progress is shared by everyone using this Luma server',
     )
     expect(section('Gestures and keyboard shortcuts')).toHaveTextContent('Videos in the normal viewer only')
     expect(section('Settings')).toHaveTextContent('Videos aren’t included')
     expect(section('Photo and video viewer')).toHaveTextContent('Captions use plain text, without custom fonts')
-    expect(section('Photo and video viewer')).toHaveTextContent('Turn on CC to load captions')
+    expect(section('Photo and video viewer')).toHaveTextContent('Turn on CC and pick a track')
     expect(section('Luma 2.0 applications and files')).toHaveTextContent(
-      'Each app remembers its own search and filters',
+      'each app remembers its own search and filters',
     )
     expect(screen.queryByText(/Install Luma/)).not.toBeInTheDocument()
   })

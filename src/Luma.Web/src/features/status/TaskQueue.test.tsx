@@ -136,7 +136,7 @@ it('explains what stopping indexing means before cancelling it', async () => {
   renderQueue()
   const cancelled = () => fetcher.mock.calls.some(([url]) => url.endsWith('/cancel'))
   await userEvent.click(await screen.findByRole('button', { name: 'Cancel Indexing' }))
-  expect(screen.getByText(/You can open any folder to finish indexing it/)).toBeVisible()
+  expect(screen.getByText(/finish scanning individual folders/)).toBeVisible()
   await userEvent.click(screen.getByRole('button', { name: 'Keep running' }))
   expect(cancelled()).toBe(false)
   await userEvent.click(screen.getByRole('button', { name: 'Cancel Indexing' }))

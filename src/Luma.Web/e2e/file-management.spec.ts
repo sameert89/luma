@@ -46,7 +46,7 @@ test('file toolbar stays hidden until requested, keeps a cut clipboard across fo
   await page.getByRole('navigation', { name: 'Folder breadcrumb' }).getByRole('button').first().click()
   await expect(page.getByRole('button', { name: 'Open Trips', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Paste (1)' }).click()
-  await expect(page.getByRole('status').filter({ hasText: '1 operation queued' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Added 1 task' })).toBeVisible()
   expect(posts).toEqual([
     { libraryId: 1, kind: 'move', mediaId: expect.any(Number), destination: 'destination/photo.jpg' },
   ])
@@ -251,7 +251,7 @@ for (const choice of ['Replace', 'Skip'] as const) {
     await upload.getByRole('button', { name: 'Close', exact: true }).click()
     await expect(upload).toBeHidden()
     release()
-    const conflict = page.getByRole('dialog', { name: 'An item already exists', exact: true })
+    const conflict = page.getByRole('dialog', { name: 'This name is already taken', exact: true })
     await expect(conflict).toBeVisible()
     await conflict.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts' }).check()
     await conflict.getByRole('button', { name: choice, exact: true }).click()
@@ -310,7 +310,7 @@ for (const [kind, choice] of [
     await cells.nth(1).getByRole('checkbox').check()
     await page.getByRole('button', { name: kind, exact: true }).click()
     await page.getByRole('button', { name: 'Paste (2)', exact: true }).click()
-    const conflict = page.getByRole('dialog', { name: 'An item already exists', exact: true })
+    const conflict = page.getByRole('dialog', { name: 'This name is already taken', exact: true })
     await conflict.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts' }).check()
     await conflict.getByRole('button', { name: choice, exact: true }).click()
     await expect(conflict).toBeHidden()

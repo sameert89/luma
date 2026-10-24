@@ -444,7 +444,7 @@ describe('browsing shell', () => {
     renderApp()
     await userEvent.click(await screen.findByRole('button', { name: 'Open Photos' }))
     const dialog = screen.getByRole('dialog', { name: 'Set up library' })
-    expect(dialog).toHaveTextContent('Choose which embedded tags to import for this library.')
+    expect(dialog).toHaveTextContent('Bring in tags from your files’ metadata, with optional XMP sidecars.')
     await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Automatic tag import' }), 'none')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Index folders as I open them' }))
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('folderId')).toBe('5'))
@@ -578,7 +578,7 @@ describe('browsing shell', () => {
   it('explains how to connect an empty library', async () => {
     emptyApi()
     renderApp()
-    expect(await screen.findByRole('heading', { name: 'Connect your first library' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Add your first library' })).toBeVisible()
     expect(screen.getByRole('combobox', { name: 'Search media' })).toBeDefined()
   })
   it('opens filters from the keyboard and restores focus after Escape', async () => {
@@ -1119,14 +1119,14 @@ it('organizes settings under consistent headings without an installation panel',
     'Updates',
     'Theme & appearance',
     'Random media URL',
-    'Metadata exchange',
+    'Import & export tags',
     'Libraries',
     'Hidden folders',
     'About',
   ]) {
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
   }
-  expect(screen.getAllByRole('heading', { name: 'Metadata exchange' })).toHaveLength(1)
+  expect(screen.getAllByRole('heading', { name: 'Import & export tags' })).toHaveLength(1)
   expect(screen.getByRole('heading', { name: 'About' }).closest('section')).toHaveTextContent(
     `Luma v${packageJson.version}`,
   )
@@ -1344,7 +1344,7 @@ describe('folder actions', () => {
     await waitFor(() => expect(posted()).toHaveLength(1))
     expect(posted()[0][0]).toBe('/api/folders/2/scans')
     expect(JSON.parse(String((posted()[0][1] as RequestInit).body))).toEqual({ metadataMode: 'none' })
-    expect(await within(dialog).findByRole('status')).toHaveTextContent('Rescan queued')
+    expect(await within(dialog).findByRole('status')).toHaveTextContent('Added this scan to Background jobs.')
   })
 
   it('orders folders by their date for date sorts and by name for every other sort', async () => {

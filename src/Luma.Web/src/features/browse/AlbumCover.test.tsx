@@ -44,7 +44,7 @@ it('draws automatic covers in the Settings style, switching live, while a manual
   )
   expect(cover(container)).toBe('blurred-foreground')
   expect([...container.querySelectorAll('img')].every(image => image.getAttribute('src') === '/chosen')).toBe(true)
-  expect(screen.getByText(/Your handpicked covers stay as they are/)).toBeInTheDocument()
+  expect(screen.getByText(/To replace a handpicked cover/)).toBeInTheDocument()
 })
 
 it('shows a placeholder when a folder has no prepared cover', () => {
