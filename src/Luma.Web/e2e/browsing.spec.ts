@@ -358,7 +358,7 @@ test('browses cached media and returns focus to the last viewed item', async ({ 
   })
   await (await viewerAction(page, 'Media details')).click()
   const details = page.getByRole('dialog', { name: 'Media details' })
-  await expect(details.getByRole('heading', { level: 2, name: 'Tags' })).toBeVisible()
+  await expect(details.getByRole('heading', { level: 2, name: 'Tags', exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
   const currentTitle = await viewer.locator('header').textContent()
   const next = await viewerAction(page, 'Next item')
