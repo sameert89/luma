@@ -273,7 +273,7 @@ test('opening an unindexed folder discovers its files and prepares previews with
   await expect
     .poll(() => cell.locator('img').evaluate(image => (image as HTMLImageElement).naturalWidth))
     .toBeGreaterThan(0)
-  await cell.getByRole('button').click()
+  await cell.getByRole('button', { name: 'Open new-photo.jpg', exact: true }).click()
   await expect(page.getByRole('dialog').getByRole('img')).toBeVisible()
   expect(libraryScans).toBe(0)
   await page.keyboard.press('Escape')

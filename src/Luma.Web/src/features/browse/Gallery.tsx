@@ -429,7 +429,7 @@ export function Gallery({
                     )}
                     {item.preference === 'liked' && (
                       <Heart
-                        className="pointer-events-none absolute right-2 top-2 size-4 fill-accent text-accent"
+                        className="pointer-events-none absolute right-12 top-2 size-4 fill-accent text-accent"
                         aria-label={t('browse:gallery.liked')}
                       />
                     )}
