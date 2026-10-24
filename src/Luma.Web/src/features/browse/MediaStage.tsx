@@ -854,7 +854,7 @@ export function MediaStage({
         {boosted && (
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-1 rounded-full bg-canvas/80 px-3 py-1 text-sm font-semibold text-ink sm:top-6"
+            className={`pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-canvas/80 px-3 py-1 text-sm font-semibold text-ink ${reels ? 'top-4 sm:top-6' : 'top-20 sm:top-24'}`}
           >
             <FastForward className="size-4" />
             2×
