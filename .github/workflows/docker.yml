@@ -1,0 +1,48 @@
+name: Docker build
+on:
+  push:
+    paths: ['Dockerfile', '.dockerignore', 'docker/**', 'src/**', 'global.json', 'Directory.Build.props', '.github/workflows/docker.yml']
+  pull_request:
+    paths: ['Dockerfile', '.dockerignore', 'docker/**', 'src/**', 'global.json', 'Directory.Build.props', '.github/workflows/docker.yml']
+permissions:
+  contents: read
+jobs:
+  image:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            memory=2g
+            memory-swap=2g
+          buildkitd-config: docker/buildkitd.toml
+      - name: Build native image within the builder memory budget
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: luma:smoke
+      - name: Check API and frontend in the published image
+        shell: bash
+        run: |
+          docker run -d --name luma-smoke -p 127.0.0.1:5080:5080 luma:smoke
+          trap 'docker logs luma-smoke; docker rm -f luma-smoke' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:5080/api/status > /tmp/status.json; then
+              curl --fail --silent http://127.0.0.1:5080/ > /tmp/index.html
+              python3 - <<'PY'
+          import json
+          assert json.load(open('/tmp/status.json'))['status'] == 'ready'
+          assert '/assets/' in open('/tmp/index.html').read()
+          PY
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
