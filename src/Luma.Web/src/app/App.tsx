@@ -1,3 +1,4 @@
+import { clipboardSnapshot, subscribeClipboard } from '../features/files/clipboard'
 import { t } from '../lib/i18n'
 import { FileConflictDialog } from '../features/files/FileConflictDialog'
 import type { components } from '../lib/api/generated'
@@ -26,7 +27,7 @@ import {
   Tag,
   X,
 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
 import { Checkbox, IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
@@ -248,6 +249,7 @@ export function App() {
     if (unseenRelease()) setWhatsNewOpen(true)
   }, [])
   const [fileManaging, setFileManaging] = useState(false)
+  const clipboard = useSyncExternalStore(subscribeClipboard, clipboardSnapshot)
   const [selectedFolders, setSelectedFolders] = useState(new Set<number>())
   const [selecting, setSelecting] = useState(false)
   const [selectingAll, setSelectingAll] = useState(false)
@@ -658,26 +660,55 @@ export function App() {
       return next
     })
   }
+  function selectFolder(id: number) {
+    setSelectedFolders(previous => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else if (next.size + selected.size < 500) next.add(id)
+      else showToast(t('app:app.selectAtMost500ItemsAtATime'), 'danger')
+      return next
+    })
+  }
   async function selectAll() {
     setSelectingAll(true)
     try {
       const ids = new Set<number>()
+      const folderIds = new Set<number>()
       let cursor: string | undefined
       let more = false
-      do {
-        const page = await request<MediaPage>(
-          `/api/media?${queryString({ ...galleryFilters, limit: Math.min(200, 500 - ids.size), cursor })}`,
+      if (section === 'library' && folders.data) {
+        do {
+          const page = await request<FolderPage>(
+            `/api/folders?${new URLSearchParams({
+              parentId: String(folders.data.current.id),
+              limit: String(Math.min(100, 500 - folderIds.size)),
+              sort: folderSort,
+              order: folderOrder,
+              ...(cursor ? { cursor } : {}),
+            })}`,
+          )
+          for (const folder of page.items) folderIds.add(folder.id)
+          cursor = page.nextCursor ?? undefined
+          more = !!cursor
+        } while (cursor && folderIds.size < 500)
+      }
+      cursor = undefined
+      while (ids.size + folderIds.size < 500) {
+        const page: MediaPage = await request<MediaPage>(
+          `/api/media?${queryString({ ...galleryFilters, limit: Math.min(200, 500 - folderIds.size - ids.size), cursor })}`,
         )
         for (const item of page.items) {
           ids.add(item.id)
-          if (ids.size === 500) break
+          if (ids.size + folderIds.size === 500) break
         }
         cursor = page.nextCursor ?? undefined
-        more = !!cursor
-      } while (cursor && ids.size < 500)
+        more ||= !!cursor
+        if (!cursor) break
+      }
       setSelected(ids)
-      setSelectedFolders(new Set())
-      if (ids.size === 500 && more) showToast(t('app:app.selectedTheFirst500MatchingItemsBulkOperationsSupport'))
+      setSelectedFolders(folderIds)
+      if (ids.size + folderIds.size === 500 && more)
+        showToast(t('app:app.selectedTheFirst500MatchingItemsBulkOperationsSupport'))
     } catch (error) {
       showToast(errorMessage(error), 'danger')
     } finally {
@@ -816,10 +847,15 @@ export function App() {
             {/* One control opens the folder; its caption sits on the cover over a scrim that keeps white text legible on any photo or theme. */}
             <button
               type="button"
-              aria-label={t('app:app.open', { value1: folder.name })}
+              aria-label={t(selecting ? 'app:app.selectFolder' : 'app:app.open', { value1: folder.name })}
+              aria-pressed={selecting ? selectedFolders.has(folder.id) : undefined}
               title={folder.name}
               className="relative block w-full text-left focus-visible:ring-inset"
-              onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}
+              onClick={() =>
+                selecting
+                  ? selectFolder(folder.id)
+                  : apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })
+              }
             >
               <AlbumCover
                 images={folder.coverImages}
@@ -847,25 +883,20 @@ export function App() {
                   id={`folder-selection-${folder.id}`}
                   aria-label={t('app:app.selectFolder', { value1: folder.name })}
                   checked={selectedFolders.has(folder.id)}
-                  onChange={() =>
-                    setSelectedFolders(previous => {
-                      const next = new Set(previous)
-                      if (next.has(folder.id)) next.delete(folder.id)
-                      else if (next.size + selected.size < 500) next.add(folder.id)
-                      return next
-                    })
-                  }
+                  onChange={() => selectFolder(folder.id)}
                 />
               </label>
             )}
-            <div className="absolute top-1.5 right-1.5">
-              <FolderActions
-                folder={folder}
-                libraryName={library?.name}
-                ancestors={[...folders.data!.ancestors, folders.data!.current]}
-                tone="overlay"
-              />
-            </div>
+            {!selecting && (
+              <div className="absolute top-1.5 right-1.5">
+                <FolderActions
+                  folder={folder}
+                  libraryName={library?.name}
+                  ancestors={[...folders.data!.ancestors, folders.data!.current]}
+                  tone="overlay"
+                />
+              </div>
+            )}
           </article>
         ))}
         {(folders.data.previousCursor || folders.data.nextCursor) && (
@@ -1180,10 +1211,10 @@ export function App() {
                       )}
                     </div>
                   </div>
-                  {showGallery && fileManaging && (
+                  {showGallery && (fileManaging || clipboard) && (
                     <FileToolbar
                       libraryId={filters.libraryId}
-                      folderId={filters.folderId}
+                      folderId={filters.folderId ?? folders.data?.current.id ?? library?.rootFolderId ?? undefined}
                       selected={selected}
                       selectedFolders={selectedFolders}
                       onClipboard={() => {
@@ -1210,6 +1241,7 @@ export function App() {
                               <button
                                 type="button"
                                 className="rounded-full px-2 py-1 hover:bg-surface hover:text-ink"
+                                disabled={selecting}
                                 onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}
                               >
                                 {folder.name}

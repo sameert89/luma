@@ -105,7 +105,12 @@
     "operationsQueued_one": "Added {{count}} task to Background jobs.{{skipped}}",
     "operationsQueued_other": "Added {{count}} tasks to Background jobs.{{skipped}}",
     "selectedForDeletion_one": "Delete {{count}} selected item?",
-    "selectedForDeletion_other": "Delete {{count}} selected items?"
+    "selectedForDeletion_other": "Delete {{count}} selected items?",
+    "restoreAll": "Restore all",
+    "emptyBin": "Empty bin",
+    "emptyBinPrompt": "Permanently delete everything in this library’s recycle bin? This can’t be undone.",
+    "purgePrompt": "Permanently delete “{{name}}”? This can’t be undone.",
+    "loading": "Loading…"
   },
   "renameFileAction": {
     "selectOneFileOrFolderToRename": "Select one file or folder to rename.",
@@ -128,5 +133,9 @@
   "storageWarning": {
     "readOnly": "Your media is read-only.",
     "details": "Details"
+  },
+  "mediaMenu": {
+    "actionsFor": "File actions for {{name}}",
+    "properties": "Properties"
   }
 }

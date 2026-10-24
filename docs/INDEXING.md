@@ -95,3 +95,5 @@ disabled. A library root stays a single-directory scan; existing covering scans
 are prioritized instead of duplicated. Background scan checkpoints update the
 view as discovery finishes. Search and other unscoped views only reload their
 indexed results, as does the separate Refresh collection menu action.
+
+After a successful traversal, missing child folders and their descendants are hidden from browsing while retaining their IDs and metadata. A shallow refresh detects removal of immediate child folders without walking their old contents; folders elsewhere stay untouched. Rediscovered folders keep their identity. Failed or interrupted scans never reconcile missing folders.

@@ -79,6 +79,7 @@
   "theUploadIsNoLongerWaitingForData": "This upload is no longer accepting data.",
   "theUploadSessionOrStagingSpaceLimitHasBeen": "The server has reached its upload or temporary-storage limit.",
   "theUploadedFileSizeDoesNotMatchTheDurable": "The uploaded file size doesn’t match the saved upload details.",
+  "thisItemIsNoLongerOnDisk": "This item is no longer on disk. Refresh its parent folder to update the list.",
   "thisLibraryIsReadOnly": "This library is read-only.",
   "thisOperationChangedReloadItsEvidenceBeforeContinuing": "This task changed. Check its files again before continuing.",
   "thisOperationIsAlreadyActive": "This task is already running.",

@@ -25,6 +25,77 @@ public sealed class FileOperationTests
         return await operations.GetAsync(row.Id, default);
     }
 
+    [Theory]
+    [InlineData("folder")]
+    [InlineData("file")]
+    [InlineData("mixed")]
+    public async Task Clipboard_materializes_nullable_union_columns_for_every_selection(string selection)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var entries = (await db.QueryAsync<FileClipboardEntry>("""
+            SELECT LibraryId,RelativePath,Id AS MediaId,NULL AS FolderId FROM Media WHERE @selection IN ('file','mixed')
+            UNION ALL
+            SELECT LibraryId,RelativePath,NULL AS MediaId,Id AS FolderId FROM Folders WHERE ParentId IS NOT NULL AND @selection IN ('folder','mixed')
+            """, new { selection })).ToArray();
+        Assert.Equal(selection == "mixed" ? 2 : 1, entries.Length);
+        Assert.All(entries, entry => Assert.Equal(1, entry.LibraryId));
+        Assert.All(entries, entry => Assert.True(entry.MediaId.HasValue ^ entry.FolderId.HasValue));
+        if (selection != "file") Assert.Contains(entries, entry => entry.RelativePath == "album" && entry.FolderId.HasValue);
+    }
+
+    [Fact]
+    public async Task Recycle_paging_keeps_items_with_identical_deletion_timestamps()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, _) = Services(f);
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("""
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<101)
+            INSERT INTO FileOperations(Id,LibraryId,Kind,Source,IsDirectory,SourceSize,SourceModifiedTicks,State,CreatedAt)
+            SELECT printf('%032x',x),1,'recycle','photo-'||x,0,0,0,'completed','2026-10-24T00:00:00Z' FROM n;
+            """);
+        var first = await operations.TrashAsync(1, null, default);
+        Assert.Equal(100, first.Count);
+        var last = first[^1];
+        var second = await operations.TrashAsync(1, last.CreatedAt + "|" + last.Id, default);
+        Assert.Single(second);
+        Assert.DoesNotContain(second[0].Id, first.Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task A_missing_original_returns_a_useful_not_found_error_without_queuing_work()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, _) = Services(f);
+        var error = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "gone", "renamed"), default));
+        Assert.Equal("source_missing", error.Code);
+        await using var db = await f.Database.OpenAsync(default);
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM FileOperations"));
+    }
+
+    [Theory]
+    [InlineData("restore")]
+    [InlineData("purge")]
+    public async Task Admitted_recycle_actions_disappear_immediately_and_cancelled_ones_return(string kind)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var recycled = await RunAsync(operations, worker, f, new(1, "recycle", "photo.jpg"));
+        Assert.Single(await operations.TrashAsync(1, null, default));
+        var accepted = await operations.QueueAsync(new(1, kind, "photo.jpg", RecycleId: recycled.Id), default);
+        Assert.Empty(await operations.TrashAsync(1, null, default));
+        await operations.CancelAsync(accepted.Id, default);
+        Assert.Single(await operations.TrashAsync(1, null, default));
+        Assert.Equal("completed", (await RunAsync(operations, worker, f, new(1, kind, "photo.jpg", RecycleId: recycled.Id))).State);
+        Assert.False(Directory.Exists(Path.Combine(f.Root.Path, ".luma-trash", recycled.Id)));
+    }
+
     [Fact]
     public async Task Recycle_and_restore_keep_identity_tags_preferences_and_hidden_state()
     {

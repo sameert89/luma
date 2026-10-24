@@ -14,6 +14,37 @@ namespace Luma.Server.Tests;
 public sealed class FolderRescanAndSuggestionTests
 {
     [Fact]
+    public async Task A_shallow_scan_retires_a_missing_folder_subtree_and_rediscovery_keeps_its_id()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "gone", "inner"));
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "keep", "nested"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "gone", "inner", "photo.jpg"), "original");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var id = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='gone'");
+        var rootId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE ParentId IS NULL");
+        Directory.Delete(Path.Combine(f.Root.Path, "gone"), recursive: true);
+        var scan = await f.NewScanAsync();
+        scan.FolderId = rootId;
+        scan.Recursive = false;
+        await db.ExecuteAsync("UPDATE Scans SET FolderId=@FolderId,Recursive=0 WHERE Id=@Id", scan);
+        await f.Scanner.ScanAsync(scan, f.Root, default);
+        Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Folders WHERE Missing=1"));
+        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE FileName='photo.jpg'"));
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ProcessingJobs WHERE State='pending'"));
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Folders WHERE Missing=1 AND RelativePath LIKE 'keep%'"));
+        var signer = new Luma.Server.Features.Media.CursorSigner(f.Database);
+        await signer.InitializeAsync(default);
+        var browser = new Luma.Server.Features.Libraries.LibraryBrowser(f.Database, signer);
+        Assert.Equal("keep", Assert.Single((await browser.FoldersAsync(1, null, 10, null, default)).Items).Name);
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "gone"));
+        await f.ScanAsync();
+        Assert.Equal(id, await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='gone' AND Missing=0"));
+        Assert.Equal(2, (await browser.FoldersAsync(1, null, 10, null, default)).Items.Count);
+    }
+
+    [Fact]
     public async Task Library_refresh_settings_default_to_watcher_and_validate_updates()
     {
         await using var f = await PipelineFixture.CreateAsync();

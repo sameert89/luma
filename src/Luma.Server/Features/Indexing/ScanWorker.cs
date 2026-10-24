@@ -175,9 +175,18 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                 """, new { scan.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
             if (owned == 1)
                 await db.ExecuteAsync(new CommandDefinition($"""
+                    UPDATE Folders SET Missing=1 WHERE LibraryId=@LibraryId AND Recycled=0
+                      AND ParentId IS NOT NULL AND COALESCE(LastSeenScanId,0)<>@Id
+                      AND (@FolderId IS NULL OR ParentId=@FolderId OR @Recursive AND Id IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId))
+                      AND Id NOT IN ({Luma.Server.Features.Libraries.HiddenFolders.Descendants});
+                    UPDATE Folders SET Missing=1 WHERE Id IN (
+                      SELECT a.DescendantId FROM Folders f INDEXED BY IX_Folders_Missing
+                      JOIN FolderAncestry a ON a.AncestorId=f.Id WHERE f.Missing=1 AND f.LibraryId=@LibraryId);
                     UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND LastSeenScanId<>@Id
                       AND (@FolderId IS NULL OR FolderId=@FolderId OR @Recursive AND FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId))
                       AND FolderId NOT IN ({Luma.Server.Features.Libraries.HiddenFolders.Descendants});
+                    UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND Availability='present'
+                      AND FolderId IN (SELECT Id FROM Folders INDEXED BY IX_Folders_Missing WHERE Missing=1 AND LibraryId=@LibraryId);
                     UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
                       (SELECT Id FROM Media WHERE LibraryId=@LibraryId AND Availability='missing');
                     UPDATE Libraries SET Availability='available' WHERE Id=@LibraryId;
@@ -450,7 +459,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             "SELECT Id FROM Folders WHERE LibraryId=@Id AND PathKey=@key", new { root.Id, key }, tx, cancellationToken: ct));
         if (existing is { } id)
         {
-            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET LastSeenScanId=@scanId,RelativePath=@path WHERE Id=@id", new { scanId, path, id }, tx, cancellationToken: ct));
+            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET LastSeenScanId=@scanId,RelativePath=@path,Missing=0 WHERE Id=@id", new { scanId, path, id }, tx, cancellationToken: ct));
             folders[key] = id;
             return id;
         }

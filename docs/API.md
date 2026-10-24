@@ -246,3 +246,11 @@ Distinct upload destinations and file operations can be admitted and finalized c
 `UploadRequest` accepts optional `replaceExisting: true` after user confirmation. `POST /api/files/uploads/{id}/finalize?replaceExisting=true` explicitly authorizes replacement at publication. By default, existing physical or indexed destinations return a conflict. A skipped session that already has uploaded bytes must be cancelled to release staging and reservations.
 
 `FileOperation.ReplacementId` is the persisted dependent operation for replacement. A replacement's recycle step cannot be claimed independently or cancelled separately; cancelling an unstarted parent also cancels its queued dependent step. Older databases gain this field through migration 34. Recycled identities remain distinct from the incoming file and can be restored to an unused alternative path. Missing media IDs do not serve original content from a reused path.
+
+### File management corrections (schema 35)
+
+`GET /api/files/trash` excludes items already admitted for restoration or permanent deletion. Cancelling the pending operation makes the item available again. The `before` cursor accepts `CreatedAt|Id` for stable paging across identical timestamps; existing timestamp-only cursors still work. The UI queues bulk restoration/deletion in bounded batches and follows completion between items.
+
+A missing original at file-operation admission returns `source_missing` (404), with guidance to refresh its parent. Clipboard response fields and nullable IDs retain their original contract. Successful scans hide missing folder subtrees using a retained `Folders.Missing` flag; rediscovery clears the flag without changing IDs. Ordinary browse requests remain database-only.
+
+Completed and cancelled uploads remove only their validated, empty staging directory. An idle worker retires historical empty upload directories in pages of 16 using the terminal-session index. Active, paused, unknown and nonempty staging directories are retained.

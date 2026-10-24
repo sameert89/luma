@@ -79,6 +79,7 @@
   "theUploadIsNoLongerWaitingForData": "The upload is no longer waiting for data.",
   "theUploadSessionOrStagingSpaceLimitHasBeen": "The upload session or staging-space limit has been reached.",
   "theUploadedFileSizeDoesNotMatchTheDurable": "The uploaded file size does not match the durable session.",
+  "thisItemIsNoLongerOnDisk": "This item is no longer on disk. Refresh its parent folder to update the list.",
   "thisLibraryIsReadOnly": "This library is read-only.",
   "thisOperationChangedReloadItsEvidenceBeforeContinuing": "This operation changed. Reload its evidence before continuing.",
   "thisOperationIsAlreadyActive": "This operation is already active.",

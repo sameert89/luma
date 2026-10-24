@@ -1,3 +1,4 @@
+import { MediaFileMenu } from '../files/MediaFileMenu'
 import { t } from '../../lib/i18n'
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -387,8 +388,11 @@ export function Gallery({
                     <button
                       data-media-id={item.id}
                       className="block w-full text-left"
-                      aria-label={t('browse:gallery.open', { value1: item.fileName })}
-                      onClick={() => onOpen(item)}
+                      aria-label={t(selecting ? 'browse:gallery.select' : 'browse:gallery.open', {
+                        value1: item.fileName,
+                      })}
+                      aria-pressed={selecting ? selected.has(item.id) : undefined}
+                      onClick={() => (selecting ? onSelect(item.id) : onOpen(item))}
                     >
                       <CachedImage
                         key={`${item.thumbnail.url}:${item.thumbnail.status}`}
@@ -428,6 +432,11 @@ export function Gallery({
                         className="pointer-events-none absolute right-2 top-2 size-4 fill-accent text-accent"
                         aria-label={t('browse:gallery.liked')}
                       />
+                    )}
+                    {!selecting && (
+                      <div className="absolute top-1 right-1">
+                        <MediaFileMenu item={item} />
+                      </div>
                     )}
                     {selecting && (
                       <span className="absolute left-2 top-2 flex size-11 items-center justify-center rounded-lg bg-canvas/90">

@@ -149,6 +149,7 @@ public sealed class UploadSessions(Database database, FileOperations operations,
                 var path = MutationPaths.Internal(root, MutationPaths.UploadDirectory, id);
                 try { File.Delete(path); }
                 catch (DirectoryNotFoundException) { /* No staging was created, or it was already removed. */ }
+                MutationPaths.RemoveEmptyStaging(root, MutationPaths.UploadDirectory, id);
             }
             // Release the durable reservation only after staging deletion succeeds. A crash
             // before this checkpoint leaves a cancellable session, never untracked staged bytes.

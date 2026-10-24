@@ -77,6 +77,45 @@ async function visitGallery() {
 }
 
 describe('browsing shell', () => {
+  it('selects folders across pages and uses the entire folder card to toggle without navigating', async () => {
+    browsingApi()
+    const fallback = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.startsWith('/api/folders?')) {
+        const cursor = new URL(url, window.location.href).searchParams.get('cursor')
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              current: { id: 2, libraryId: 1, parentId: 1, name: 'Trips' },
+              ancestors: [],
+              items: [{ id: cursor ? 4 : 3, libraryId: 1, parentId: 2, name: cursor ? 'Older' : 'Holiday' }],
+              nextCursor: cursor ? null : 'next-folders',
+              previousCursor: null,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return fallback(input, init)
+    })
+    renderApp('/?libraryId=1&folderId=2')
+    await screen.findByRole('button', { name: 'Open Holiday' })
+    await userEvent.click(screen.getByRole('button', { name: 'Select media' }))
+    const card = screen.getByRole('button', { name: 'Select folder Holiday' })
+    await userEvent.click(card)
+    expect(card).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('checkbox', { name: 'Select folder Holiday' })).toBeChecked()
+    expect(window.location.search).toContain('folderId=2')
+    await userEvent.click(card)
+    expect(card).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(screen.getByRole('button', { name: 'Select all' }))
+    await screen.findByText('2 selected')
+    expect(card).toHaveAttribute('aria-pressed', 'true')
+    expect(window.location.search).toContain('folderId=2')
+    expect(screen.queryByRole('button', { name: 'Folder actions for Holiday' })).not.toBeInTheDocument()
+  })
+
   it('restores the last screen and filters when the PWA relaunches at its start URL', async () => {
     browsingApi()
     resetStorage()

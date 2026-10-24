@@ -18,6 +18,28 @@ public sealed class UploadSessionTests
     }
 
     [Fact]
+    public async Task Cancelling_removes_empty_staging_and_idle_cleanup_keeps_unfinished_bytes()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (_, uploads, worker) = Services(f);
+        var cancelled = await uploads.CreateAsync(new(1, "cancel.jpg", 3), default);
+        await uploads.AppendAsync(cancelled.Id, 0, new MemoryStream("abc"u8.ToArray()), 3, default);
+        await uploads.ChangeStateAsync(cancelled.Id, "cancel", default);
+        var cancelledDirectory = Path.Combine(f.Root.Path, ".luma-uploads", cancelled.Id);
+        Assert.False(Directory.Exists(cancelledDirectory));
+        // Simulate the historical leftover, alongside active staging and unknown data.
+        Directory.CreateDirectory(cancelledDirectory);
+        var active = await uploads.CreateAsync(new(1, "active.jpg", 3), default);
+        await uploads.AppendAsync(active.Id, 0, new MemoryStream("abc"u8.ToArray()), 3, default);
+        var unknown = Path.Combine(f.Root.Path, ".luma-uploads", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(unknown);
+        await worker.CleanupOldUploadsAsync(default);
+        Assert.False(Directory.Exists(cancelledDirectory));
+        Assert.Equal("abc", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, ".luma-uploads", active.Id, "content")));
+        Assert.True(Directory.Exists(unknown));
+    }
+
+    [Fact]
     public async Task Retrying_creation_after_a_lost_response_returns_the_durable_session()
     {
         await using var f = await PipelineFixture.CreateAsync();
@@ -128,6 +150,7 @@ public sealed class UploadSessionTests
         await db.ExecuteAsync("UPDATE FileOperations SET State='running'");
         await worker.ExecuteOperationAsync(await operations.GetAsync(finalized.OperationId!, default), false, default);
         Assert.Equal("completed", (await uploads.GetAsync(upload.Id, default)).State);
+        Assert.False(Directory.Exists(Path.Combine(f.Root.Path, ".luma-uploads", upload.Id)));
         Assert.Equal("abcdef", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
         Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans WHERE State='queued'"));
         Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE RelativePath='photo.jpg'"));
