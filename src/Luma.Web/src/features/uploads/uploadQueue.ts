@@ -1,5 +1,5 @@
 import { t } from '../../lib/i18n'
-import { conflictBatch, withFileConflict } from '../files/fileConflicts'
+import { conflictBatch, withFileConflict, waitForFileSlot } from '../files/fileConflicts'
 import type { components } from '../../lib/api/generated'
 import { request } from '../browse/api'
 import { waitForOperation, type OperationAccepted } from '../files/operations'
@@ -27,6 +27,7 @@ const storageKey = 'luma-upload-sessions-v1'
 const listeners = new Set<() => void>()
 let queue: QueuedUpload[] = []
 let workers = 0
+const active = new Set<string>()
 let sequence = 0
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) ?? '[]') as QueuedUpload[]
@@ -37,7 +38,7 @@ try {
         typeof item.target === 'string' &&
         Number.isSafeInteger(item.size),
     )
-    .map(item => ({ ...item, state: 'reselect' }))
+    .map(item => ({ ...item, target: item.target.split('/').filter(Boolean).join('/'), state: 'reselect' }))
 } catch {
   /* Server sessions remain authoritative if browser state is corrupt. */
 }
@@ -78,22 +79,74 @@ function update(key: string, value: Partial<QueuedUpload>) {
 const writeUnavailable = (error: unknown) =>
   error instanceof ApiError && ['media_not_writable', 'read_only_library'].includes(error.problem?.code ?? '')
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds))
+function uploadDelay(milliseconds: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer)
+      reject(signal.reason)
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort)
+      resolve()
+    }, milliseconds)
+    signal.addEventListener('abort', abort, { once: true })
+    if (signal.aborted) abort()
+  })
+}
+const targetPath = (destination: string, file: File) =>
+  [destination, file.webkitRelativePath || file.name].join('/').split('/').filter(Boolean).join('/')
+const unfinished = (item: QueuedUpload) => !['completed', 'cancelled', 'skipped'].includes(item.state)
+const sameFile = (item: QueuedUpload, file: File) => item.size === file.size && item.lastModified === file.lastModified
+
+export function resumeUpload(key: string, file: File) {
+  const item = queue.find(item => item.key === key)
+  if (!item || !unfinished(item)) return
+  if (file.name !== item.target.split('/').at(-1) || !sameFile(item, file))
+    throw new Error(t('uploads:uploadQueue.chooseOriginalFile', { name: item.target }))
+  // Repeated selection must never launch a second transfer for a live session.
+  update(key, { file, ...(!active.has(key) ? { state: 'queued', error: undefined } : {}) })
+  pump()
+}
+
+// Older clients could persist another request for an already reserved path. Resolve
+// ambiguous entries against the server before choosing which checkpoint to resume.
+async function previousUpload(libraryId: number, target: string) {
+  const candidates = queue.filter(item => item.libraryId === libraryId && item.target === target && unfinished(item))
+  if (candidates.length < 2) return candidates[0]
+  const running = candidates.find(item => active.has(item.key))
+  if (running) return running
+  const found: { item: QueuedUpload; session: Session }[] = []
+  for (const item of candidates) {
+    try {
+      const session = await waitForFileSlot(() => request<Session>(`/api/files/uploads/${item.id ?? item.requestId}`))
+      found.push({ item, session })
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 404) throw error
+    }
+  }
+  const live = found.filter(({ session }) => !['completed', 'cancelled'].includes(session.state))
+  if (new Set(live.map(({ session }) => session.id)).size > 1)
+    throw new Error(t('uploads:uploadQueue.unfinishedUpload', { name: target }))
+  const chosen = live[0] ?? found.find(({ session }) => session.state === 'completed')
+  const primary = chosen?.item ?? candidates[0]
+  for (const item of candidates) {
+    if (item.key !== primary.key) update(item.key, { state: 'cancelled', file: undefined })
+  }
+  if (chosen) update(primary.key, { id: chosen.session.id, offset: chosen.session.committedOffset })
+  else update(primary.key, { id: undefined })
+  return queue.find(item => item.key === primary.key)!
+}
+
 export async function addUploads(files: File[], libraryId: number, destination: string) {
   if (files.length > 10000) throw new Error(t('uploads:uploadQueue.chooseAtMost10000FilesAtOnce'))
   const resumed = new Set<File>()
   const batch = conflictBatch()
   for (const file of files) {
-    const target = [destination, file.webkitRelativePath || file.name].filter(Boolean).join('/')
-    const previous = queue.find(
-      item =>
-        item.libraryId === libraryId &&
-        item.target === target &&
-        item.size === file.size &&
-        item.lastModified === file.lastModified &&
-        !['completed', 'cancelled', 'skipped'].includes(item.state),
-    )
+    const target = targetPath(destination, file)
+    const previous = await previousUpload(libraryId, target)
     if (previous) {
-      update(previous.key, { file, state: 'queued', error: undefined })
+      if (!sameFile(previous, file)) throw new Error(t('uploads:uploadQueue.unfinishedUpload', { name: target }))
+      resumeUpload(previous.key, file)
       resumed.add(file)
     }
   }
@@ -137,9 +190,15 @@ export async function addUploads(files: File[], libraryId: number, destination: 
   }
   let skipped = 0
   for (const file of files.filter(file => !resumed.has(file))) {
-    const target = [destination, file.webkitRelativePath || file.name].filter(Boolean).join('/')
+    const target = targetPath(destination, file)
     if ([...skippedFolders].some(folder => target.startsWith(folder + '/'))) {
       skipped++
+      continue
+    }
+    const existing = queue.find(item => item.libraryId === libraryId && item.target === target && unfinished(item))
+    if (existing) {
+      if (!sameFile(existing, file)) throw new Error(t('uploads:uploadQueue.unfinishedUpload', { name: target }))
+      resumeUpload(existing.key, file)
       continue
     }
     const key = `upload-${Date.now()}-${++sequence}`
@@ -148,7 +207,7 @@ export async function addUploads(files: File[], libraryId: number, destination: 
       {
         key,
         libraryId,
-        target: [destination, file.webkitRelativePath || file.name].filter(Boolean).join('/'),
+        target: targetPath(destination, file),
         file,
         size: file.size,
         lastModified: file.lastModified,
@@ -165,12 +224,14 @@ export async function addUploads(files: File[], libraryId: number, destination: 
 }
 function pump() {
   while (workers < 2) {
-    const item = queue.find(item => item.state === 'queued' && item.file)
+    const item = queue.find(item => item.state === 'queued' && item.file && !active.has(item.key))
     if (!item) break
     workers++
+    active.add(item.key)
     update(item.key, { state: 'uploading' })
     void transfer(item).finally(() => {
       workers--
+      active.delete(item.key)
       pump()
     })
   }
@@ -190,8 +251,10 @@ async function transfer(item: QueuedUpload) {
       waiting: () => update(item.key, { state: 'waiting' }),
       conflicting: () => update(item.key, { state: 'conflict' }),
     }
+    const sessionRequest = (path: string, method = 'GET') =>
+      waitForFileSlot(() => request<Session>(path, controller.signal, method), controller.signal, options.waiting)
     const admitted: Session | null = item.id
-      ? await request<Session>(`/api/files/uploads/${item.id}`, controller.signal)
+      ? await sessionRequest(`/api/files/uploads/${item.id}`)
       : await withFileConflict(async replaceExisting => {
           replacing ||= replaceExisting
           if (replacing) update(item.key, { replaceExisting: true })
@@ -212,12 +275,12 @@ async function transfer(item: QueuedUpload) {
     }
     let session: Session = admitted
     update(item.key, { id: session.id, offset: session.committedOffset })
-    if (session.state === 'paused')
-      session = await request<Session>(`/api/files/uploads/${session.id}/resume`, controller.signal, 'POST')
+    if (session.state === 'paused') session = await sessionRequest(`/api/files/uploads/${session.id}/resume`, 'POST')
     if (session.state === 'cancelled')
       throw new Error(t('uploads:uploadQueue.thisServerUploadWasCancelledStartANewUpload'))
     let offset = session.committedOffset
     let failures = 0
+    let delays = 0
     const start = performance.now(),
       initial = offset
     while (offset < item.size && !['completed', 'finalizing'].includes(session.state)) {
@@ -240,14 +303,19 @@ async function transfer(item: QueuedUpload) {
           })
         }
         session = (await response.json()) as Session
+        update(item.key, { state: 'uploading' })
         offset = session.committedOffset
         failures = 0
+        delays = 0
         update(item.key, { offset, speed: (offset - initial) / Math.max((performance.now() - start) / 1000, 0.1) })
       } catch (error) {
         controller.signal.throwIfAborted()
-        if (writeUnavailable(error) || ++failures > 4) throw error
-        await sleep(1000 * 2 ** (failures - 1))
-        session = await request<Session>(`/api/files/uploads/${session.id}`, controller.signal)
+        const transient =
+          error instanceof ApiError && ([429, 503].includes(error.status) || error.problem?.code === 'database_busy')
+        if (writeUnavailable(error) || (!transient && ++failures > 4)) throw error
+        update(item.key, { state: 'waiting' })
+        await uploadDelay(Math.min(5000, 500 * 2 ** Math.min(delays++, 4)), controller.signal)
+        session = await sessionRequest(`/api/files/uploads/${session.id}`)
         offset = session.committedOffset
       }
     }
@@ -277,13 +345,16 @@ async function transfer(item: QueuedUpload) {
         break
       } catch (error) {
         if (writeUnavailable(error) || (error instanceof ApiError && error.status === 409) || attempt >= 4) throw error
-        await sleep(1000 * 2 ** attempt)
-        session = await request<Session>(`/api/files/uploads/${session.id}`, controller.signal)
+        await uploadDelay(1000 * 2 ** attempt, controller.signal)
+        session = await sessionRequest(`/api/files/uploads/${session.id}`)
       }
     }
     update(item.key, { state: 'completed', offset: item.size, controller: undefined, file: undefined })
   } catch (error) {
-    if (!['paused', 'cancelled', 'cancelling'].includes(queue.find(entry => entry.key === item.key)?.state ?? ''))
+    if (
+      !controller.signal.aborted &&
+      !['paused', 'cancelled', 'cancelling'].includes(queue.find(entry => entry.key === item.key)?.state ?? '')
+    )
       update(item.key, {
         state: 'failed',
         controller: undefined,
@@ -295,6 +366,7 @@ export async function uploadAction(key: string, action: 'pause' | 'resume' | 'ca
   const item = queue.find(item => item.key === key)
   if (!item) return
   if (action === 'resume') {
+    if (active.has(key) && !item.controller?.signal.aborted) return
     if (!item.file) {
       update(key, { state: 'reselect' })
       return

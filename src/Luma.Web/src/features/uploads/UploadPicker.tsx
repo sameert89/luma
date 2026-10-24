@@ -2,6 +2,7 @@ import { t, stateLabel } from '../../lib/i18n'
 import { useRef, useState, useSyncExternalStore } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
 import { FileUp, FolderUp, UploadCloud } from 'lucide-react'
+import { ResumeUploadButton } from './ResumeUploadButton'
 import { droppedFiles } from './droppedFiles'
 import { addUploads, subscribeUploads, uploadSnapshot, uploadAction } from './uploadQueue'
 export function UploadPicker({ libraryId, destination }: { libraryId: number; destination: string }) {
@@ -131,12 +132,8 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
                 {t('uploads:uploadPicker.pause')}
               </QuietButton>
             )}
-            {['paused', 'failed'].includes(item.state) && (
-              <QuietButton
-                onClick={() => void uploadAction(item.key, 'resume').catch(error => setError(String(error)))}
-              >
-                {t('uploads:uploadPicker.resumeRetry')}
-              </QuietButton>
+            {['paused', 'failed', 'reselect'].includes(item.state) && (
+              <ResumeUploadButton item={item} onError={setError} />
             )}
             {!['completed', 'cancelled', 'skipped', 'finalizing'].includes(item.state) && (
               <QuietButton

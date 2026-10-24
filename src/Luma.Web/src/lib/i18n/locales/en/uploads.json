@@ -17,7 +17,10 @@
     "filesQueued_one": "Added {{count}} file to your uploads.{{skipped}}",
     "filesQueued_other": "Added {{count}} files to your uploads.{{skipped}}",
     "uploadsInQueue_one": "{{count}} upload in queue",
-    "uploadsInQueue_other": "{{count}} uploads in queue"
+    "uploadsInQueue_other": "{{count}} uploads in queue",
+    "reselectFile": "Choose file to resume",
+    "reselectUpload": "Choose the original file for {{name}}",
+    "reselectToResume": "Choose the original file to continue from the saved position."
   },
   "droppedFiles": {
     "folderUploadExceedsTheDepthLimit": "There are too many nested folders in this upload.",
@@ -29,6 +32,8 @@
     "thisServerUploadWasCancelledStartANewUpload": "Choose the file again to restart this cancelled upload.",
     "uploadFailed": "Upload failed ({{value1}}).",
     "uploadInterrupted": "Upload interrupted.",
-    "couldNotUpdateUpload": "Couldn’t update this upload."
+    "couldNotUpdateUpload": "Couldn’t update this upload.",
+    "chooseOriginalFile": "Choose the original “{{name}}” file with the same size and modification date.",
+    "unfinishedUpload": "There’s an unfinished upload for “{{name}}”. Resume it with the original file, or cancel it before uploading a different version."
   }
 }

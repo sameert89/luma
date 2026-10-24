@@ -1,3 +1,4 @@
+import { waitForFileSlot } from './fileConflicts'
 import { t } from '../../lib/i18n'
 import type { components } from '../../lib/api/generated'
 import { request } from '../browse/api'
@@ -6,7 +7,7 @@ export type OperationAccepted = components['schemas']['FileOperationAccepted']
 export async function waitForOperation(id: string, signal?: AbortSignal) {
   while (true) {
     signal?.throwIfAborted()
-    const result = await request<FileOperation>(`/api/files/operations/${id}`, signal)
+    const result = await waitForFileSlot(() => request<FileOperation>(`/api/files/operations/${id}`, signal), signal)
     if (result.state === 'completed') return result
     if (['needsAttention', 'failed', 'cancelled'].includes(result.state))
       throw new Error(

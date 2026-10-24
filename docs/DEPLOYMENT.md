@@ -151,7 +151,15 @@ The example allows 100 GiB files and 200 GiB of active upload reservations. The
 default for each limit is 1 TiB. Reservations do not reserve physical disk space;
 monitor actual media-volume space. Uploads allow at most 128 active sessions and
 1–4 concurrent chunk transfers. Native folder picking preserves relative paths.
-After refresh, reselect the matching files to resume durable upload offsets.
+After closing or refreshing Luma, use **Choose file to resume** beside an upload in
+Background jobs or the upload window. Choose the unchanged original file; Luma
+checks its name, size and modification date and resumes the server’s saved byte
+position. Reselecting a batch in its original destination also resumes matching
+entries. Older duplicate queue entries are checked against the server before
+choosing a session; missing aliases are retired without creating more uploads.
+Temporary database, capacity and path contention waits automatically with bounded
+backoff. Pause and Cancel interrupt these waits; write-access and recovery errors
+still require attention.
 
 Preserve same-origin browser headers behind a proxy. Cross-site requests remain
 rejected. Allow PATCH bodies of at least 8 MiB (for nginx, `client_max_body_size
