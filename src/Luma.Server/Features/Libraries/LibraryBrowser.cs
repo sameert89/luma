@@ -19,9 +19,10 @@ public sealed record HiddenFolderSummary(long Id, long LibraryId, string Library
 public sealed record FolderPage(FolderSummary Current, IReadOnlyList<FolderSummary> Ancestors, IReadOnlyList<FolderSummary> Items, string? NextCursor, string? PreviousCursor);
 public static class HiddenFolders
 {
-    // Every folder at or beneath a folder the person hid. Non-correlated, so SQLite
-    // evaluates it once per statement; the partial index keeps it free when nothing is hidden.
-    public const string Descendants = "SELECT a.DescendantId FROM Folders h INDEXED BY IX_Folders_Hidden JOIN FolderAncestry a ON a.AncestorId=h.Id WHERE h.Hidden=1 UNION SELECT a.DescendantId FROM Folders r INDEXED BY IX_Folders_Recycled JOIN FolderAncestry a ON a.AncestorId=r.Id WHERE r.Recycled=1 UNION SELECT a.DescendantId FROM Folders absent INDEXED BY IX_Folders_Missing JOIN FolderAncestry a ON a.AncestorId=absent.Id WHERE absent.Missing=1 UNION SELECT f.Id FROM PanelSources s INDEXED BY IX_PanelSources_Gallery JOIN Folders f ON f.LibraryId=s.LibraryId AND (s.PathKey='' OR f.PathKey=s.PathKey OR (f.PathKey>=s.PathKey||'/' AND f.PathKey<s.PathKey||'0')) WHERE s.ExcludeFromGallery=1";
+    // Hidden/recycled subtrees and missing folders. Scans already mark every missing
+    // descendant, so read that partial index directly instead of expanding ancestry again.
+    // Non-correlated: SQLite evaluates it once per statement, with no source I/O.
+    public const string Descendants = "SELECT a.DescendantId FROM Folders h INDEXED BY IX_Folders_Hidden JOIN FolderAncestry a ON a.AncestorId=h.Id WHERE h.Hidden=1 UNION SELECT a.DescendantId FROM Folders r INDEXED BY IX_Folders_Recycled JOIN FolderAncestry a ON a.AncestorId=r.Id WHERE r.Recycled=1 UNION SELECT absent.Id FROM Folders absent INDEXED BY IX_Folders_Missing WHERE absent.Missing=1 UNION SELECT f.Id FROM PanelSources s INDEXED BY IX_PanelSources_Gallery JOIN Folders f ON f.LibraryId=s.LibraryId AND (s.PathKey='' OR f.PathKey=s.PathKey OR (f.PathKey>=s.PathKey||'/' AND f.PathKey<s.PathKey||'0')) WHERE s.ExcludeFromGallery=1";
 }
 public sealed class LibraryBrowser(Database database, CursorSigner cursors, ILogger<LibraryBrowser>? logger = null)
 {

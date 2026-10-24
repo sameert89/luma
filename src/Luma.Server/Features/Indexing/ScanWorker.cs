@@ -180,8 +180,8 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
                       AND (@FolderId IS NULL OR ParentId=@FolderId OR @Recursive AND Id IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId))
                       AND Id NOT IN ({Luma.Server.Features.Libraries.HiddenFolders.Descendants});
                     UPDATE Folders SET Missing=1 WHERE Id IN (
-                      SELECT a.DescendantId FROM Folders f INDEXED BY IX_Folders_Missing
-                      JOIN FolderAncestry a ON a.AncestorId=f.Id WHERE f.Missing=1 AND f.LibraryId=@LibraryId);
+                      SELECT a.DescendantId FROM Folders f JOIN FolderAncestry a ON a.AncestorId=f.Id
+                      WHERE f.LibraryId=@LibraryId AND f.ParentId=@FolderId AND f.Missing=1 AND NOT @Recursive);
                     UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND LastSeenScanId<>@Id
                       AND (@FolderId IS NULL OR FolderId=@FolderId OR @Recursive AND FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId))
                       AND FolderId NOT IN ({Luma.Server.Features.Libraries.HiddenFolders.Descendants});
