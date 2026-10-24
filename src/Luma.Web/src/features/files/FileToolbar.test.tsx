@@ -45,7 +45,7 @@ test('deletion queues every selected file without polling and closes the dialog'
   expect(screen.getByRole('checkbox')).not.toBeChecked()
   expect(vi.mocked(request).mock.calls.some(call => call[2] === 'POST')).toBe(false)
   await user.click(screen.getByRole('button', { name: 'Move to recycle bin' }))
-  await screen.findByText('2 operations queued. Check Background jobs for progress.')
+  await screen.findByText('Added 2 tasks to Background jobs.')
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   const posts = vi.mocked(request).mock.calls.filter(call => call[0] === '/api/files/items')
   expect(posts.map(call => call[3])).toEqual([
@@ -79,7 +79,7 @@ test('copy retains the clipboard after paste and upload opens a dedicated dialog
   view.folder(5)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Paste (1)' })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: 'Paste (1)' }))
-  await screen.findByText('1 operation queued. Check Background jobs for progress.')
+  await screen.findByText('Added 1 task to Background jobs.')
   expect(screen.getByRole('button', { name: 'Paste (1)' })).toBeEnabled()
   await user.click(screen.getByRole('button', { name: 'Upload' }))
   expect(screen.getByRole('dialog', { name: 'Upload' })).toHaveTextContent('Upload drop zone')

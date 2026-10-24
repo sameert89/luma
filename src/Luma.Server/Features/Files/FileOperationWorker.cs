@@ -9,6 +9,9 @@ namespace Luma.Server.Features.Files;
 public sealed class FileOperationWorker(FileOperations operations, Database database,
     ILogger<FileOperationWorker> logger) : BackgroundService
 {
+    private string? cleanupAfter;
+    private bool cleanupFinished;
+
     // Tests can stop execution at durable boundaries without guessing timing.
     internal Action<string>? Checkpoint { get; set; }
 
@@ -32,7 +35,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                       AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.ReplacementId=o.Id)
                       ORDER BY o.CreatedAt LIMIT 1) AND State='queued' RETURNING *
                     """, cancellationToken: stoppingToken));
-                if (row is null) { await Task.Delay(500, stoppingToken); continue; }
+                if (row is null) { await CleanupOldUploadsAsync(stoppingToken); await Task.Delay(500, stoppingToken); continue; }
                 await ExecuteOperationAsync(row, recovering: false, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
@@ -42,6 +45,30 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 await Task.Delay(1000, stoppingToken);
             }
         }
+    }
+
+    // Retire historical empty upload directories in small batches while the queue is idle.
+    // Never enumerate staging or remove paused/unfinished content.
+    internal async Task CleanupOldUploadsAsync(CancellationToken ct)
+    {
+        if (cleanupFinished) return;
+        await using var db = await database.OpenAsync(ct);
+        var rows = (await db.QueryAsync<Luma.Server.Features.Uploads.UploadSession>(new CommandDefinition("""
+            SELECT * FROM UploadSessions INDEXED BY IX_UploadSessions_Cleanup WHERE Id>@after
+              AND State IN ('completed','cancelled') ORDER BY Id LIMIT 16
+            """, new { after = cleanupAfter ?? "" }, cancellationToken: ct))).ToArray();
+        foreach (var row in rows)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var root = operations.WritableRoot(row.LibraryId);
+                MutationPaths.RemoveEmptyStaging(root, MutationPaths.UploadDirectory, row.Id);
+            }
+            catch (ApiRequestException) { /* An unavailable mount must not block other libraries. */ }
+        }
+        if (rows.Length > 0) cleanupAfter = rows[^1].Id;
+        cleanupFinished = rows.Length < 16;
     }
 
     internal async Task RecoverAsync(CancellationToken ct)
@@ -182,6 +209,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 await StateAsync(row, "finalizing", ct);
                 Checkpoint?.Invoke("before-metadata");
                 await ReconcileAsync(row, root, ct);
+                CleanupStaging(root, row);
                 Checkpoint?.Invoke("completed");
             }
         }
@@ -294,6 +322,14 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         }
         tx.Commit();
         row.State = "completed";
+    }
+
+    private static void CleanupStaging(LibraryOptions root, FileOperation row)
+    {
+        if (row.Kind == "recycle") return; // The recycle bin owns this content until restored or purged.
+        var category = row.Kind == "upload" ? MutationPaths.UploadDirectory
+            : row.Kind is "restore" or "purge" ? MutationPaths.TrashDirectory : MutationPaths.OperationsDirectory;
+        MutationPaths.RemoveEmptyStaging(root, category, row.UploadId ?? row.RecycleId ?? row.Id);
     }
 
     internal static async Task<long> EnsureFolderAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, string path, CancellationToken ct)

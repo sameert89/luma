@@ -1,7 +1,7 @@
 import { t } from '../../lib/i18n'
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Clapperboard, Images, X } from 'lucide-react'
-import { Checkbox, Field, IconButton, Input, QuietButton, Range, Select } from '../../components/ui/Controls'
+import { BookOpen, Clapperboard, Images } from 'lucide-react'
+import { Checkbox, Field, Input, QuietButton, Range, Select } from '../../components/ui/Controls'
 import { SettingsSection } from '../../components/ui/SettingsSection'
 import { backgroundImage, readAppearance, sanitizeAppearance, type Appearance } from './preferences'
 import { loadBackground, removeBackground, saveBackground } from './backgroundStore'
@@ -228,15 +228,19 @@ export function AppearanceSettings({ appearance }: { appearance: AppearanceContr
   )
 }
 export function AppIntroduction({ experience, appearance }: { experience: Experience; appearance: Appearance }) {
-  const [visible, setVisible] = useState(false)
+  const [introduced, setIntroduced] = useState<Experience | null>(null)
+  const [reduceMotion, setReduceMotion] = useState(
+    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+  )
+  const enabled = appearance.splashes && appearance.motion === 'system' && !reduceMotion
   useEffect(() => {
-    setVisible(false)
-    if (
-      !appearance.splashes ||
-      appearance.motion !== 'system' ||
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    )
-      return
+    const media = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    const changed = () => setReduceMotion(media?.matches ?? false)
+    media?.addEventListener?.('change', changed)
+    return () => media?.removeEventListener?.('change', changed)
+  }, [])
+  useEffect(() => {
+    if (!enabled) return
     const key = `luma-introduction-${experience}`
     try {
       if (sessionStorage.getItem(key)) return
@@ -244,11 +248,14 @@ export function AppIntroduction({ experience, appearance }: { experience: Experi
     } catch {
       return
     }
-    setVisible(true)
-    const timeout = setTimeout(() => setVisible(false), 900)
+    setIntroduced(experience)
+  }, [experience, enabled])
+  useEffect(() => {
+    if (!introduced) return
+    const timeout = setTimeout(() => setIntroduced(null), 420)
     return () => clearTimeout(timeout)
-  }, [experience, appearance.splashes, appearance.motion])
-  if (!visible) return null
+  }, [introduced])
+  if (!enabled || introduced !== experience) return null
   const Icon = experience === 'gallery' ? Images : experience === 'flick' ? Clapperboard : BookOpen
   const name =
     experience === 'gallery'
@@ -258,11 +265,8 @@ export function AppIntroduction({ experience, appearance }: { experience: Experi
         : t('app:appearance.panels')
   return (
     <div className={`app-introduction app-introduction-${experience}`} role="status">
-      <Icon className="size-7 text-accent" aria-hidden="true" />
-      <span className="font-semibold">{t('app:appearance.luma', { name: name })}</span>
-      <IconButton label={t('app:appearance.dismissIntroduction')} onClick={() => setVisible(false)}>
-        <X className="size-4" />
-      </IconButton>
+      <Icon className="size-12 text-accent" aria-hidden="true" />
+      <span className="text-2xl font-semibold">{t('app:appearance.luma', { name: name })}</span>
     </div>
   )
 }

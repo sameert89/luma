@@ -1,3 +1,5 @@
+import { Button } from '../../components/ui/Button'
+import { waitForOperation } from './operations'
 import { t } from '../../lib/i18n'
 import { conflictBatch, withFileConflict } from './fileConflicts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -51,6 +53,7 @@ export function FileToolbar({
   selectedFolders = new Set<number>(),
   onQueued,
   onClipboard,
+  compact = false,
 }: {
   libraryId?: number
   folderId?: number
@@ -58,6 +61,7 @@ export function FileToolbar({
   selectedFolders?: Set<number>
   onQueued?: () => void
   onClipboard?: () => void
+  compact?: boolean
 }) {
   const capabilities = useCapabilities().data
   const clipboard = useSyncExternalStore(subscribeClipboard, clipboardSnapshot)
@@ -200,7 +204,7 @@ export function FileToolbar({
     }
   }
   useEffect(() => {
-    if (!writable || dialog) return
+    if (!writable || dialog || compact) return
     function shortcuts(event: KeyboardEvent) {
       if (
         busy ||
@@ -245,11 +249,13 @@ export function FileToolbar({
           <Copy className="size-4" />
           {t('files:fileToolbar.copy')}
         </QuietButton>
-        <QuietButton disabled={busy || !canPaste || !location.data} onClick={() => void execute('paste')}>
-          <ClipboardPaste className="size-4" />
-          {t('files:fileToolbar.paste')}
-          {clipboard ? ` (${clipboard.entries.length})` : ''}
-        </QuietButton>
+        {!compact && (
+          <QuietButton disabled={busy || !canPaste || !location.data} onClick={() => void execute('paste')}>
+            <ClipboardPaste className="size-4" />
+            {t('files:fileToolbar.paste')}
+            {clipboard ? ` (${clipboard.entries.length})` : ''}
+          </QuietButton>
+        )}
         <RenameFileAction
           libraryId={libraryId}
           mediaIds={[...selected]}
@@ -270,29 +276,33 @@ export function FileToolbar({
           <Trash2 className="size-4" />
           {t('files:fileToolbar.delete')}
         </QuietButton>
-        <QuietButton disabled={busy || !location.data} onClick={() => setDialog('mkdir')}>
-          <FolderPlus className="size-4" />
-          {t('files:fileToolbar.newFolder')}
-        </QuietButton>
-        <QuietButton disabled={busy || !location.data} onClick={() => setDialog('upload')}>
-          <Upload className="size-4" />
-          {t('files:fileToolbar.upload')}
-        </QuietButton>
+        {!compact && (
+          <>
+            <QuietButton disabled={busy || !location.data} onClick={() => setDialog('mkdir')}>
+              <FolderPlus className="size-4" />
+              {t('files:fileToolbar.newFolder')}
+            </QuietButton>
+            <QuietButton disabled={busy || !location.data} onClick={() => setDialog('upload')}>
+              <Upload className="size-4" />
+              {t('files:fileToolbar.upload')}
+            </QuietButton>
+          </>
+        )}
         {busy && pasteController.current && (
           <QuietButton onClick={() => pasteController.current?.abort()}>
             {t('files:fileToolbar.cancelRemaining')}
           </QuietButton>
         )}
-        {clipboard && (
+        {!compact && clipboard && (
           <IconButton label={t('files:fileToolbar.clearFileClipboard')} onClick={() => setClipboard(null)}>
             <X className="size-4" />
           </IconButton>
         )}
       </div>
-      {!location.data && (
+      {!compact && !location.data && (
         <p className="text-sm text-muted">{t('files:fileToolbar.openAFolderToPasteUploadOrCreateA')}</p>
       )}
-      {clipboard && !canPaste && (
+      {!compact && clipboard && !canPaste && (
         <p className="text-sm text-muted">{t('files:fileToolbar.openAFolderInTheSourceLibraryToPaste')}</p>
       )}
       {message && (
@@ -409,49 +419,81 @@ export function RecycleBinSettings() {
   )
 }
 
-function RecycleBin({ libraryId }: { libraryId: number }) {
+export function RecycleBin({ libraryId }: { libraryId: number }) {
   const [queued, setQueued] = useState(false)
   const [before, setBefore] = useState<string>()
-  const [alternate, setAlternate] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [purging, setPurging] = useState<string | null>(null)
+  const [purging, setPurging] = useState<FileOperation | 'all' | null>(null)
+  const running = useRef(false)
+  const controller = useRef<AbortController | null>(null)
   const client = useQueryClient()
+  const url = `/api/files/trash?libraryId=${libraryId}`
   const trash = useQuery({
     queryKey: ['trash', libraryId, before],
     queryFn: ({ signal }) =>
-      request<FileOperation[]>(
-        `/api/files/trash?libraryId=${libraryId}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
-        signal,
-      ),
+      request<FileOperation[]>(`${url}${before ? `&before=${encodeURIComponent(before)}` : ''}`, signal),
   })
-  async function run(item: FileOperation, kind: string) {
+  async function run(kind: 'restore' | 'purge', item?: FileOperation) {
+    if (running.current) return
+    running.current = true
+    const abort = new AbortController()
+    controller.current = abort
     setBusy(true)
     setError('')
+    setPurging(null)
     try {
-      const result = await request<OperationAccepted>('/api/files/operations', undefined, 'POST', {
-        libraryId,
-        kind,
-        source: item.source,
-        recycleId: item.id,
-        ...(kind === 'restore' && alternate ? { destination: alternate } : {}),
-      })
-      void result
-      setQueued(true)
-      setPurging(null)
-      for (const key of ['trash', 'media', 'folders', 'tasks']) void client.invalidateQueries({ queryKey: [key] })
+      // Re-read the first page after each bounded batch. Accepted entries are excluded
+      // by the server, so bulk actions include older pages without retaining the bin.
+      do {
+        const page = item ? [item] : await request<FileOperation[]>(url, abort.signal)
+        if (!page.length) break
+        for (const entry of page) {
+          abort.signal.throwIfAborted()
+          const result = await request<OperationAccepted>('/api/files/operations', abort.signal, 'POST', {
+            libraryId,
+            kind,
+            source: entry.source,
+            recycleId: entry.id,
+          })
+          setQueued(true)
+          // Remove admitted rows immediately; they cannot be submitted a second time.
+          client.setQueriesData<FileOperation[]>({ queryKey: ['trash', libraryId] }, old =>
+            old?.filter(row => row.id !== entry.id),
+          )
+          void client.invalidateQueries({ queryKey: ['tasks'] })
+          // Bulk work stays bounded even for a bin larger than the operation queue.
+          if (!item) await waitForOperation(result.id, abort.signal)
+        }
+      } while (!item)
     } catch (error) {
-      setError(errorMessage(error))
+      if (!abort.signal.aborted) setError(errorMessage(error))
     } finally {
+      for (const key of ['trash', 'media', 'folders', 'tasks']) void client.invalidateQueries({ queryKey: [key] })
+      controller.current = null
+      running.current = false
       setBusy(false)
     }
   }
+  useEffect(() => () => controller.current?.abort(), [])
   return (
     <div className="space-y-4 p-5">
+      <div className="flex flex-wrap gap-2">
+        <QuietButton disabled={busy || !trash.data?.length} onClick={() => void run('restore')}>
+          {t('files:fileToolbar.restoreAll')}
+        </QuietButton>
+        <QuietButton className="text-danger" disabled={busy || !trash.data?.length} onClick={() => setPurging('all')}>
+          <Trash2 className="size-4" />
+          {t('files:fileToolbar.emptyBin')}
+        </QuietButton>
+        {busy && (
+          <QuietButton onClick={() => controller.current?.abort()}>
+            {t('files:fileToolbar.cancelRemaining')}
+          </QuietButton>
+        )}
+      </div>
       {queued && <p role="status">{t('files:fileToolbar.queuedFollowProgressInBackgroundJobs')}</p>}
-      <Field label={t('files:fileToolbar.alternativeRestorePathOptionalRelativeToLibrary')}>
-        <Input value={alternate} onChange={event => setAlternate(event.target.value)} />
-      </Field>
+      {trash.isPending && <p role="status">{t('files:fileToolbar.loading')}</p>}
       {(trash.error || error) && (
         <p role="alert" className="text-sm text-danger">
           {error || errorMessage(trash.error)}
@@ -464,32 +506,55 @@ function RecycleBin({ libraryId }: { libraryId: number }) {
             {t('files:fileToolbar.deleted', { date: new Date(item.createdAt).toLocaleString() })}
           </p>
           <div className="flex flex-wrap gap-2">
-            <QuietButton disabled={busy} onClick={() => void run(item, 'restore')}>
+            <QuietButton disabled={busy} onClick={() => void run('restore', item)}>
               {t('files:fileToolbar.restore')}
             </QuietButton>
-            <QuietButton
-              disabled={busy}
-              onClick={() => (purging === item.id ? void run(item, 'purge') : setPurging(item.id))}
-            >
-              {purging === item.id
-                ? t('files:fileToolbar.confirmPermanentDeletion')
-                : t('files:fileToolbar.permanentlyDelete')}
+            <QuietButton className="text-danger" disabled={busy} onClick={() => setPurging(item)}>
+              <Trash2 className="size-4" />
+              {t('files:fileToolbar.permanentlyDelete')}
             </QuietButton>
-            {purging === item.id && (
-              <QuietButton onClick={() => setPurging(null)}>{t('files:fileToolbar.cancel')}</QuietButton>
-            )}
           </div>
         </article>
       ))}
       {trash.data?.length === 0 && <p className="text-sm text-muted">{t('files:fileToolbar.recycleBinIsEmpty')}</p>}
       <div className="flex gap-2">
-        {before && <QuietButton onClick={() => setBefore(undefined)}>{t('files:fileToolbar.newest')}</QuietButton>}
+        {before && (
+          <QuietButton disabled={busy} onClick={() => setBefore(undefined)}>
+            {t('files:fileToolbar.newest')}
+          </QuietButton>
+        )}
         {trash.data?.length === 100 && (
-          <QuietButton onClick={() => setBefore(trash.data?.at(-1)?.createdAt)}>
+          <QuietButton
+            disabled={busy}
+            onClick={() => {
+              const last = trash.data?.at(-1)
+              if (last) setBefore(`${last.createdAt}|${last.id}`)
+            }}
+          >
             {t('files:fileToolbar.olderItems')}
           </QuietButton>
         )}
       </div>
+      <Modal
+        open={purging !== null}
+        onOpenChange={open => {
+          if (!open) setPurging(null)
+        }}
+        title={t(purging === 'all' ? 'files:fileToolbar.emptyBin' : 'files:fileToolbar.permanentlyDelete')}
+        description={t(purging === 'all' ? 'files:fileToolbar.emptyBinPrompt' : 'files:fileToolbar.purgePrompt', {
+          name: purging && purging !== 'all' ? purging.source : '',
+        })}
+      >
+        <div className="flex flex-wrap gap-2 p-5">
+          <Button
+            className="bg-danger text-white"
+            onClick={() => void run('purge', purging === 'all' || !purging ? undefined : purging)}
+          >
+            {t('files:fileToolbar.confirmPermanentDeletion')}
+          </Button>
+          <QuietButton onClick={() => setPurging(null)}>{t('files:fileToolbar.cancel')}</QuietButton>
+        </div>
+      </Modal>
     </div>
   )
 }

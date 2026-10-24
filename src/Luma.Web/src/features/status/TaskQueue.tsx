@@ -1,6 +1,8 @@
+import { ResumeUploadButton } from '../uploads/ResumeUploadButton'
+import { subscribeUploads, uploadSnapshot, uploadAction } from '../uploads/uploadQueue'
 import { t } from '../../lib/i18n'
 import { useQuery, useIsMutating, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
 import { errorMessage, request, type IndexingStatus } from '../browse/api'
 import { FileRecoveryDialog } from '../files/FileRecoveryDialog'
@@ -161,10 +163,17 @@ export function TaskQueue() {
 
 function TaskRow({ task }: { task: Task }) {
   const client = useQueryClient()
+  const uploads = useSyncExternalStore(subscribeUploads, uploadSnapshot)
+  const upload = task.id.startsWith('upload-')
+    ? uploads.find(item => item.id === task.id.slice(7) || item.requestId === task.id.slice(7))
+    : undefined
+  const [uploadError, setUploadError] = useState('')
   const action = useMutation({
     mutationKey: ['task-action', task.id],
     mutationFn: (operation: 'cancel' | 'queue' | 'clear') =>
-      request(`/api/tasks/${task.id}/${operation}`, undefined, 'POST'),
+      operation === 'cancel' && upload
+        ? uploadAction(upload.key, 'cancel')
+        : request(`/api/tasks/${task.id}/${operation}`, undefined, 'POST'),
     onSuccess: () => refresh(client),
   })
   const name = label(task)
@@ -203,6 +212,19 @@ function TaskRow({ task }: { task: Task }) {
           {t('status:taskQueue.reviewRecovery')}
         </QuietButton>
       )}
+      {upload &&
+        ['reselect', 'failed', 'paused'].includes(upload.state) &&
+        !['completed', 'cancelled', 'finalizing', 'needsAttention'].includes(task.state) && (
+          <div className="mt-2 space-y-2">
+            {!upload.file && <p className="text-sm text-muted">{t('uploads:uploadPicker.reselectToResume')}</p>}
+            <ResumeUploadButton item={upload} onError={setUploadError} />
+          </div>
+        )}
+      {uploadError && (
+        <p role="alert" className="text-sm text-danger">
+          {uploadError}
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap gap-2">
         {isActive(task) ? (
           confirming ? (
@@ -232,7 +254,7 @@ function TaskRow({ task }: { task: Task }) {
           )
         ) : (
           <>
-            {canQueueAgain(task) && (
+            {task.kind !== 'upload' && canQueueAgain(task) && (
               <QuietButton
                 aria-label={t('status:taskQueue.queueAgain', { value1: name })}
                 disabled={busy}

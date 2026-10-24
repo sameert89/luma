@@ -52,7 +52,7 @@ function ask(batch: string, target: string, signal?: AbortSignal): Promise<Confl
     publish()
   })
 }
-const temporary = new Set(['path_busy', 'queue_full', 'upload_capacity'])
+const temporary = new Set(['path_busy', 'queue_full', 'upload_capacity', 'database_busy'])
 export async function waitForFileSlot<T>(
   action: () => Promise<T>,
   signal?: AbortSignal,
@@ -64,7 +64,11 @@ export async function waitForFileSlot<T>(
     try {
       return await action()
     } catch (error) {
-      if (!(error instanceof ApiError) || !temporary.has(error.problem?.code ?? '')) throw error
+      if (
+        !(error instanceof ApiError) ||
+        (!temporary.has(error.problem?.code ?? '') && ![429, 503].includes(error.status))
+      )
+        throw error
       waiting?.()
       await new Promise<void>((resolve, reject) => {
         const abort = () => {

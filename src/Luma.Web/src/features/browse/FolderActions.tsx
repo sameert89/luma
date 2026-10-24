@@ -1,3 +1,4 @@
+import { FileToolbar } from '../files/FileToolbar'
 import { t } from '../../lib/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EllipsisVertical, EyeOff, FileInput, ImageMinus, Info, RefreshCw } from 'lucide-react'
@@ -109,6 +110,15 @@ export function FolderActions({
           {panel === 'actions' && (
             <div className="flex flex-wrap gap-2">
               {extraActions?.(() => setPanel(null))}
+              {!root && (
+                <FileToolbar
+                  compact
+                  libraryId={folder.libraryId}
+                  selectedFolders={new Set([folder.id])}
+                  onClipboard={() => setPanel(null)}
+                  onQueued={() => setPanel(null)}
+                />
+              )}
               <QuietButton onClick={() => setPanel('rescan')}>
                 <RefreshCw className="size-4" />
                 {root ? t('browse:folderActions.rescanLibrary') : t('browse:folderActions.rescanFolder')}

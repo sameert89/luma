@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { waitFor } from '@testing-library/react'
 const mocks = vi.hoisted(() => ({ request: vi.fn(), waitForOperation: vi.fn() }))
 vi.mock('../browse/api', () => ({ request: mocks.request }))
@@ -130,4 +130,209 @@ it('carries an explicit Replace choice from upload admission through finalizatio
   expect(
     mocks.request.mock.calls.some(call => call[0] === '/api/files/uploads/session/finalize?replaceExisting=true'),
   ).toBe(true)
+})
+
+describe('resuming batches and waiting for a busy server', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.resetModules()
+    mocks.request.mockReset()
+    mocks.waitForOperation.mockReset().mockResolvedValue(undefined)
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('reattaches a closed browser batch to its existing session IDs without creating duplicates', async () => {
+    const files = Array.from({ length: 12 }, (_, i) => new File([], `photo-${i}.jpg`, { lastModified: 123 }))
+    localStorage.setItem(
+      'luma-upload-sessions-v1',
+      JSON.stringify(
+        files.map((file, i) => ({
+          key: `saved-${i}`,
+          id: `session-${i}`,
+          requestId: `session-${i}`,
+          libraryId: 1,
+          target: `photos/${file.name}`,
+          size: 0,
+          lastModified: 123,
+          offset: 0,
+        })),
+      ),
+    )
+    mocks.request.mockImplementation(async (path: string) => ({
+      id: path.split('/')[4],
+      committedOffset: 0,
+      state: path.endsWith('/finalize') ? 'finalizing' : 'waitingForClient',
+      operationId: 'operation',
+    }))
+    const queue = await import('./uploadQueue')
+    await queue.addUploads(files, 1, '/photos/')
+    await waitFor(() => expect(queue.uploadSnapshot().every(item => item.state === 'completed')).toBe(true))
+    expect(queue.uploadSnapshot()).toHaveLength(12)
+    expect(mocks.request.mock.calls.some(call => call[0] === '/api/files/uploads')).toBe(false)
+  })
+
+  it('resumes a partial paused upload at the server checkpoint through the per-item file picker', async () => {
+    localStorage.setItem(
+      'luma-upload-sessions-v1',
+      JSON.stringify([
+        {
+          key: 'saved',
+          id: 'session',
+          libraryId: 1,
+          target: 'photos/original.jpg',
+          size: 6,
+          lastModified: 123,
+          offset: 0,
+        },
+      ]),
+    )
+    mocks.request.mockImplementation(async (path: string) => ({
+      id: 'session',
+      committedOffset: path.endsWith('/finalize') ? 6 : 3,
+      state: path.endsWith('/finalize') ? 'finalizing' : path.endsWith('/resume') ? 'waitingForClient' : 'paused',
+      operationId: 'operation',
+    }))
+    const patch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ id: 'session', committedOffset: 6, state: 'waitingForClient' })))
+    vi.stubGlobal('fetch', patch)
+    const queue = await import('./uploadQueue')
+    queue.resumeUpload('saved', new File(['abcdef'], 'original.jpg', { lastModified: 123 }))
+    await waitFor(() => expect(queue.uploadSnapshot()[0].state).toBe('completed'))
+    expect(patch).toHaveBeenCalledWith(
+      '/api/files/uploads/session?offset=3',
+      expect.objectContaining({ method: 'PATCH' }),
+    )
+    expect(patch.mock.calls[0][1].body.size).toBe(3)
+    expect(mocks.request.mock.calls.some(call => call[0] === '/api/files/uploads')).toBe(false)
+    expect(queue.uploadSnapshot()).toHaveLength(1)
+  })
+
+  it('rejects a different version rather than appending its bytes or creating a blocked duplicate', async () => {
+    localStorage.setItem(
+      'luma-upload-sessions-v1',
+      JSON.stringify([
+        { key: 'saved', id: 'session', libraryId: 1, target: 'original.jpg', size: 3, lastModified: 123, offset: 2 },
+      ]),
+    )
+    const queue = await import('./uploadQueue')
+    const changed = new File(['abc'], 'original.jpg', { lastModified: 456 })
+    await expect(queue.resumeUpload('saved', changed)).rejects.toThrow('same size and modification date')
+    await expect(queue.addUploads([changed], 1, '')).rejects.toThrow('unfinished upload')
+    expect(queue.uploadSnapshot()).toHaveLength(1)
+    expect(mocks.request).not.toHaveBeenCalled()
+  })
+
+  it('does not start another worker when the same active file is selected twice', async () => {
+    let accept!: (value: unknown) => void
+    mocks.request.mockImplementation((path: string) =>
+      path === '/api/files/uploads'
+        ? new Promise(resolve => {
+            accept = resolve
+          })
+        : Promise.resolve({ id: 'session', committedOffset: 0, state: 'finalizing', operationId: 'operation' }),
+    )
+    const queue = await import('./uploadQueue')
+    const file = new File([], 'same.jpg', { lastModified: 123 })
+    await queue.addUploads([file], 1, '')
+    await queue.addUploads([file], 1, '')
+    expect(mocks.request).toHaveBeenCalledOnce()
+    accept({ id: 'session', committedOffset: 0, state: 'waitingForClient' })
+    await waitFor(() => expect(queue.uploadSnapshot()[0].state).toBe('completed'))
+    expect(queue.uploadSnapshot()).toHaveLength(1)
+  })
+
+  it('automatically completes a 12-file batch when admission starts returning database busy after file seven', async () => {
+    vi.useFakeTimers()
+    const { ApiError } = await import('../../lib/api/client')
+    const attempts = new Map<string, number>()
+    mocks.request.mockImplementation(async (path: string, _signal, _method, body) => {
+      if (path === '/api/files/uploads') {
+        const count = (attempts.get(body.target) ?? 0) + 1
+        attempts.set(body.target, count)
+        if (Number(body.target.match(/\d+/)[0]) >= 7 && count <= 3)
+          throw new ApiError(503, { code: 'database_busy', title: 'Luma is busy. Please try again.', traceId: 'test' })
+        return { id: body.requestId, committedOffset: 0, state: 'waitingForClient' }
+      }
+      return { id: path.split('/')[4], committedOffset: 0, state: 'finalizing', operationId: 'operation' }
+    })
+    const queue = await import('./uploadQueue')
+    await queue.addUploads(
+      Array.from({ length: 12 }, (_, i) => new File([], `file-${i}.jpg`)),
+      1,
+      '',
+    )
+    await vi.advanceTimersByTimeAsync(30000)
+    expect(queue.uploadSnapshot()).toHaveLength(12)
+    expect(queue.uploadSnapshot().every(item => item.state === 'completed')).toBe(true)
+    expect(attempts.get('file-11.jpg')).toBe(4)
+  })
+})
+
+it('recovers the actual server session from an old duplicated queue and retires unadmitted aliases', async () => {
+  localStorage.clear()
+  vi.resetModules()
+  const { ApiError } = await import('../../lib/api/client')
+  localStorage.setItem(
+    'luma-upload-sessions-v1',
+    JSON.stringify([
+      {
+        key: 'duplicate',
+        requestId: 'unadmitted',
+        libraryId: 1,
+        target: 'same.jpg',
+        size: 0,
+        lastModified: 123,
+        offset: 0,
+      },
+      { key: 'original', id: 'actual', libraryId: 1, target: 'same.jpg', size: 0, lastModified: 123, offset: 0 },
+    ]),
+  )
+  mocks.waitForOperation.mockResolvedValue(undefined)
+  mocks.request.mockReset().mockImplementation(async (path: string) => {
+    if (path.endsWith('/unadmitted')) throw new ApiError(404)
+    return {
+      id: 'actual',
+      committedOffset: 0,
+      state: path.endsWith('/finalize') ? 'finalizing' : 'waitingForClient',
+      operationId: 'operation',
+    }
+  })
+  const queue = await import('./uploadQueue')
+  await queue.resumeUpload('duplicate', new File([], 'same.jpg', { lastModified: 123 }))
+  await waitFor(() => expect(queue.uploadSnapshot().find(item => item.key === 'original')?.state).toBe('completed'))
+  expect(queue.uploadSnapshot().find(item => item.key === 'duplicate')?.state).toBe('cancelled')
+  expect(mocks.request.mock.calls.some(call => call[0] === '/api/files/uploads')).toBe(false)
+})
+
+it('re-queries the committed offset after a busy chunk response instead of resending saved bytes', async () => {
+  localStorage.clear()
+  vi.resetModules()
+  vi.useFakeTimers()
+  try {
+    mocks.waitForOperation.mockResolvedValue(undefined)
+    mocks.request.mockReset().mockImplementation(async (path: string, _signal, _method, body) => {
+      if (path === '/api/files/uploads') return { id: body.requestId, committedOffset: 0, state: 'waitingForClient' }
+      return {
+        id: path.split('/')[4],
+        committedOffset: 3,
+        state: path.endsWith('/finalize') ? 'finalizing' : 'waitingForClient',
+        operationId: 'operation',
+      }
+    })
+    const patch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: 'database_busy', title: 'Luma is busy. Please try again.' }), {
+        status: 503,
+      }),
+    )
+    vi.stubGlobal('fetch', patch)
+    const queue = await import('./uploadQueue')
+    await queue.addUploads([new File(['abc'], 'original.jpg')], 1, '')
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(queue.uploadSnapshot()[0].state).toBe('completed')
+    expect(patch).toHaveBeenCalledOnce()
+    expect(mocks.request.mock.calls.some(call => call[0].endsWith('/finalize'))).toBe(true)
+  } finally {
+    vi.useRealTimers()
+  }
 })

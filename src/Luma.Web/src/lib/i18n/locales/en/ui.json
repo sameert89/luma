@@ -3,7 +3,7 @@
     "primaryNavigation": "Primary navigation"
   },
   "cachedImage": {
-    "previewCouldNotBePrepared": "Preview could not be prepared",
+    "previewCouldNotBePrepared": "Couldn’t prepare this preview",
     "preparingPreview": "Preparing preview…",
     "previewUnavailable": "Preview unavailable",
     "retryPreview": "Retry preview"

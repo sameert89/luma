@@ -1,6 +1,21 @@
 {
   "history": [
     {
+      "version": "2.0.0-beta.12",
+      "date": "2026-10-24",
+      "headline": "Reliable uploads and lighter builds",
+      "changes": [
+        "More natural wording throughout Settings, Help, uploads and file management.",
+        "Resume interrupted uploads from Background jobs and let busy servers retry automatically.",
+        "A brief full-screen introduction when you first open each app, with animation preferences respected.",
+        "Docker builds now compile one app at a time to ease memory pressure on small servers.",
+        "Pull down in a folder to check for new or changed files without scanning its subfolders.",
+        "Select folders with a tap, with cut, copy, rename and delete in each item’s menu.",
+        "Restore all or empty the recycle bin, with clearer confirmation and reliable list updates.",
+        "Removed folders disappear after refresh, and finished uploads clean up their staging folders."
+      ]
+    },
+    {
       "version": "2.0.0-beta.11",
       "date": "2026-10-22",
       "headline": "Ready for translations",

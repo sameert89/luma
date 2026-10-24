@@ -30,7 +30,7 @@ public static class FileEndpoints
             if ((folderId.HasValue ? 1 : 0) + (mediaId.HasValue ? 1 : 0) != 1) throw Luma.Server.Http.ApiRequestException.Invalid();
             await using var db = await database.OpenAsync(ct);
             var table = folderId.HasValue ? "Folders" : "Media";
-            var live = folderId.HasValue ? "Recycled=0" : "Availability='present'";
+            var live = folderId.HasValue ? "Recycled=0 AND Missing=0" : "Availability='present'";
             return TypedResults.Ok(await db.QuerySingleOrDefaultAsync<FileLocation>(new CommandDefinition($"SELECT LibraryId,RelativePath FROM {table} WHERE Id=@id AND {live}", new { id = folderId ?? mediaId }, cancellationToken: ct)) ?? throw Luma.Server.Http.ApiRequestException.Missing());
         }).WithName("GetFileLocation");
         files.MapPost("/clipboard", async (FileSelectionRequest request, Database database, IndexingOptions options, CancellationToken ct) =>
@@ -40,7 +40,7 @@ public static class FileEndpoints
             var entries = (await db.QueryAsync<FileClipboardEntry>(new CommandDefinition("""
                 SELECT LibraryId,RelativePath,Id AS MediaId,NULL AS FolderId FROM Media WHERE Id IN @MediaIds AND Availability='present'
                 UNION ALL
-                SELECT LibraryId,RelativePath,NULL AS MediaId,Id AS FolderId FROM Folders WHERE Id IN @FolderIds AND ParentId IS NOT NULL AND Recycled=0
+                SELECT LibraryId,RelativePath,NULL AS MediaId,Id AS FolderId FROM Folders WHERE Id IN @FolderIds AND ParentId IS NOT NULL AND Recycled=0 AND Missing=0
                 """, request, cancellationToken: ct))).ToArray();
             if (entries.Length != request.MediaIds.Distinct().Count() + request.FolderIds.Distinct().Count()) throw Luma.Server.Http.ApiRequestException.Missing();
             // Selecting a folder already includes its descendants. Queue each original once.
@@ -53,7 +53,7 @@ public static class FileEndpoints
             if ((request.FolderId.HasValue ? 1 : 0) + (request.MediaId.HasValue ? 1 : 0) != 1) throw Luma.Server.Http.ApiRequestException.Invalid();
             await using var db = await database.OpenAsync(ct);
             var table = request.FolderId.HasValue ? "Folders" : "Media";
-            var live = request.FolderId.HasValue ? "Recycled=0" : "Availability='present'";
+            var live = request.FolderId.HasValue ? "Recycled=0 AND Missing=0" : "Availability='present'";
             var source = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition($"SELECT RelativePath FROM {table} WHERE LibraryId=@LibraryId AND Id=@id AND {live}", new { request.LibraryId, id = request.FolderId ?? request.MediaId }, cancellationToken: ct)) ?? throw Luma.Server.Http.ApiRequestException.Missing();
             return TypedResults.Accepted(uri: (string?)null, value: await operations.QueueAsync(new(request.LibraryId, request.Kind, source, request.Destination, ReplaceExisting: request.ReplaceExisting), ct, request.MediaId, request.FolderId));
         }).WithName("CreateFileItemOperation");

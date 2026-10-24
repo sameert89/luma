@@ -44,7 +44,7 @@ it('draws automatic covers in the Settings style, switching live, while a manual
   )
   expect(cover(container)).toBe('blurred-foreground')
   expect([...container.querySelectorAll('img')].every(image => image.getAttribute('src') === '/chosen')).toBe(true)
-  expect(screen.getByText(/Your handpicked covers stay as they are/)).toBeInTheDocument()
+  expect(screen.getByText(/To replace a handpicked cover/)).toBeInTheDocument()
 })
 
 it('shows a placeholder when a folder has no prepared cover', () => {
@@ -53,7 +53,11 @@ it('shows a placeholder when a folder has no prepared cover', () => {
 })
 
 it('offers Reset album cover only for a manual cover and clears just that choice', async () => {
-  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+  const fetch = vi.fn(async (url: string, init?: RequestInit) =>
+    url.includes('capabilities') && init?.method === 'GET'
+      ? new Response(JSON.stringify({ accessConfigured: false, libraries: [] }))
+      : new Response(null, { status: 204 }),
+  )
   vi.stubGlobal('fetch', fetch)
   const folder = {
     id: 7,
@@ -69,9 +73,9 @@ it('offers Reset album cover only for a manual cover and clears just that choice
   expect(screen.queryByRole('button', { name: 'Reset album cover' })).not.toBeInTheDocument()
   rerender(<FolderActions folder={{ ...folder, coverOverride: true }} />)
   await userEvent.click(screen.getByRole('button', { name: 'Reset album cover' }))
-  await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
-  const [url, init] = fetch.mock.calls[0]
+  await waitFor(() => expect(fetch.mock.calls.filter(([url]) => url.includes('/cover'))).toHaveLength(1))
+  const [url, init] = fetch.mock.calls.find(([url]) => url.includes('/cover'))!
   expect(String(url)).toContain('/api/folders/7/cover')
-  expect(init.method).toBe('PUT')
-  expect(JSON.parse(String(init.body))).toEqual({ mediaId: null })
+  expect(init?.method).toBe('PUT')
+  expect(JSON.parse(String(init?.body))).toEqual({ mediaId: null })
 })

@@ -50,6 +50,15 @@ public static class MutationPaths
         return ResolveChecked(root, $"{category}/{id}/{name}");
     }
 
+    // Non-recursive deletion removes only an empty, validated operation-owned directory.
+    internal static void RemoveEmptyStaging(LibraryOptions root, string category, string id)
+    {
+        try { Directory.Delete(Path.GetDirectoryName(Internal(root, category, id))!); }
+        catch (IOException) { /* Missing or nonempty: keep all content for recovery. */ }
+        catch (UnauthorizedAccessException) { /* Cleanup can be retried without blocking the operation. */ }
+        catch (ApiRequestException) { /* Never follow replaced staging directories. */ }
+    }
+
     private static string ResolveChecked(LibraryOptions root, string relative)
     {
         var full = Path.GetFullPath(Path.Combine(root.Path, relative.Replace('/', Path.DirectorySeparatorChar)));

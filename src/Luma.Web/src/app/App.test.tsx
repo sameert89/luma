@@ -77,6 +77,45 @@ async function visitGallery() {
 }
 
 describe('browsing shell', () => {
+  it('selects folders across pages and uses the entire folder card to toggle without navigating', async () => {
+    browsingApi()
+    const fallback = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.startsWith('/api/folders?')) {
+        const cursor = new URL(url, window.location.href).searchParams.get('cursor')
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              current: { id: 2, libraryId: 1, parentId: 1, name: 'Trips' },
+              ancestors: [],
+              items: [{ id: cursor ? 4 : 3, libraryId: 1, parentId: 2, name: cursor ? 'Older' : 'Holiday' }],
+              nextCursor: cursor ? null : 'next-folders',
+              previousCursor: null,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return fallback(input, init)
+    })
+    renderApp('/?libraryId=1&folderId=2')
+    await screen.findByRole('button', { name: 'Open Holiday' })
+    await userEvent.click(screen.getByRole('button', { name: 'Select media' }))
+    const card = screen.getByRole('button', { name: 'Select folder Holiday' })
+    await userEvent.click(card)
+    expect(card).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('checkbox', { name: 'Select folder Holiday' })).toBeChecked()
+    expect(window.location.search).toContain('folderId=2')
+    await userEvent.click(card)
+    expect(card).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(screen.getByRole('button', { name: 'Select all' }))
+    await screen.findByText('2 selected')
+    expect(card).toHaveAttribute('aria-pressed', 'true')
+    expect(window.location.search).toContain('folderId=2')
+    expect(screen.queryByRole('button', { name: 'Folder actions for Holiday' })).not.toBeInTheDocument()
+  })
+
   it('restores the last screen and filters when the PWA relaunches at its start URL', async () => {
     browsingApi()
     resetStorage()
@@ -444,7 +483,7 @@ describe('browsing shell', () => {
     renderApp()
     await userEvent.click(await screen.findByRole('button', { name: 'Open Photos' }))
     const dialog = screen.getByRole('dialog', { name: 'Set up library' })
-    expect(dialog).toHaveTextContent('Choose which embedded tags to import for this library.')
+    expect(dialog).toHaveTextContent('Bring in tags from your files’ metadata, with optional XMP sidecars.')
     await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Automatic tag import' }), 'none')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Index folders as I open them' }))
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('folderId')).toBe('5'))
@@ -578,7 +617,7 @@ describe('browsing shell', () => {
   it('explains how to connect an empty library', async () => {
     emptyApi()
     renderApp()
-    expect(await screen.findByRole('heading', { name: 'Connect your first library' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Add your first library' })).toBeVisible()
     expect(screen.getByRole('combobox', { name: 'Search media' })).toBeDefined()
   })
   it('opens filters from the keyboard and restores focus after Escape', async () => {
@@ -1119,14 +1158,14 @@ it('organizes settings under consistent headings without an installation panel',
     'Updates',
     'Theme & appearance',
     'Random media URL',
-    'Metadata exchange',
+    'Import & export tags',
     'Libraries',
     'Hidden folders',
     'About',
   ]) {
     expect(screen.getByRole('heading', { name, level: 2 })).toBeVisible()
   }
-  expect(screen.getAllByRole('heading', { name: 'Metadata exchange' })).toHaveLength(1)
+  expect(screen.getAllByRole('heading', { name: 'Import & export tags' })).toHaveLength(1)
   expect(screen.getByRole('heading', { name: 'About' }).closest('section')).toHaveTextContent(
     `Luma v${packageJson.version}`,
   )
@@ -1344,7 +1383,7 @@ describe('folder actions', () => {
     await waitFor(() => expect(posted()).toHaveLength(1))
     expect(posted()[0][0]).toBe('/api/folders/2/scans')
     expect(JSON.parse(String((posted()[0][1] as RequestInit).body))).toEqual({ metadataMode: 'none' })
-    expect(await within(dialog).findByRole('status')).toHaveTextContent('Rescan queued')
+    expect(await within(dialog).findByRole('status')).toHaveTextContent('Added this scan to Background jobs.')
   })
 
   it('orders folders by their date for date sorts and by name for every other sort', async () => {
@@ -1448,56 +1487,99 @@ it('remembers filter-row visibility separately for Reels', async () => {
   }
 })
 
-// Pull to refresh used to queue a folder scan. People read the job appearing in the queue as
-// the app starting something heavy they had not asked for, so it now does what the gesture
-// means everywhere else: fetch what is on screen again, and nothing more.
-it('pulls to refresh the listing without asking the server to scan anything', async () => {
-  const requests: { url: string; method: string }[] = []
+it.each([
+  { name: 'a nested folder', folderId: 2, metadataMode: 'xmp', url: '/?libraryId=1&folderId=2', fail: false },
+  { name: 'a folder-only link', folderId: 2, metadataMode: 'none', url: '/?folderId=2', fail: false },
+  { name: 'a library root', folderId: 1, metadataMode: 'none', url: '/?libraryId=1&folderId=1', fail: false },
+  { name: 'search results', folderId: undefined, metadataMode: 'embedded', url: '/search?q=trips', fail: false },
+  { name: 'a rejected scan', folderId: 2, metadataMode: 'xmp', url: '/?libraryId=1&folderId=2', fail: true },
+])('pulls to refresh $name with a shallow scan only inside a folder', async ({ folderId, metadataMode, url, fail }) => {
+  const requests: { url: string; method: string; body?: unknown }[] = []
+  let accept!: () => void
+  let queued = false
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      requests.push({ url, method: init?.method ?? 'GET' })
-      if (url.endsWith('/index') && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
+    vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      requests.push({
+        url: path,
+        method: init?.method ?? 'GET',
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      })
+      if (path.endsWith('/scans') && init?.method === 'POST')
+        return new Promise<Response>(resolve => {
+          accept = () => {
+            queued = !fail
+            resolve(
+              new Response(
+                JSON.stringify(
+                  fail
+                    ? { code: 'library_busy', title: 'Resolve the interrupted file operation first.', traceId: 'test' }
+                    : { id: 900 },
+                ),
+                {
+                  status: fail ? 409 : 202,
+                  headers: { 'Content-Type': fail ? 'application/problem+json' : 'application/json' },
+                },
+              ),
+            )
+          }
+        })
+      if (path.endsWith('/index') && init?.method === 'POST')
+        return Promise.resolve(new Response(null, { status: 204 }))
       const data =
-        url === '/api/libraries'
-          ? [{ id: 1, name: 'Photos', rootFolderId: 1, metadataMode: 'xmp' }]
-          : url.startsWith('/api/folders?')
-            ? { current: { id: 2, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
-            : url.startsWith('/api/indexing')
-              ? { libraries: [] }
-              : { items: [], nextCursor: null, previousCursor: null }
-      return Promise.resolve(
-        new Response(JSON.stringify(url === '/api/tasks' || url.includes('/suggestions') ? [] : data), {
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
+        path === '/api/libraries'
+          ? [{ id: 1, name: 'Photos', rootFolderId: 1, metadataMode }]
+          : path.startsWith('/api/folders?')
+            ? { current: { id: folderId, libraryId: 1, name: 'Trips' }, ancestors: [], items: [] }
+            : path.startsWith('/api/indexing')
+              ? { libraries: queued ? [{ id: 1, latestScanId: 900 }] : [] }
+              : path === '/api/scans/900'
+                ? { id: 900, state: 'completed', discovered: 1, ready: 1, pending: 0, processing: 0, failed: 0 }
+                : path === '/api/tasks' || path.includes('/suggestions')
+                  ? []
+                  : { items: [], nextCursor: null, previousCursor: null }
+      return Promise.resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
     }),
   )
-  window.history.replaceState(null, '', '/?libraryId=1&folderId=2')
-  resetStorage()
-  render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
-      <App />
-    </QueryClientProvider>,
-  )
-  await screen.findByRole('heading', { name: 'Trips' })
-  await waitFor(() => expect(requests.some(request => request.url.startsWith('/api/media?'))).toBe(true))
+  renderApp(url)
+  const scroller = await screen.findByTestId('gallery-scroll')
+  await waitFor(() => expect(requests.some(item => item.url.startsWith('/api/media?'))).toBe(true))
   const before = requests.length
-  const listings = () => requests.slice(before).filter(request => request.method === 'GET')
-
-  const scroller = screen.getByTestId('gallery-scroll')
-  fireEvent.touchStart(scroller, { touches: [{ clientY: 0 }] })
-  fireEvent.touchMove(scroller, { touches: [{ clientY: 200 }] })
-  await act(async () => {
+  const pull = () => {
+    fireEvent.touchStart(scroller, { touches: [{ clientY: 0 }] })
+    fireEvent.touchMove(scroller, { touches: [{ clientY: 200 }] })
     fireEvent.touchEnd(scroller)
+  }
+  act(() => {
+    fireEvent.touchStart(scroller, { touches: [{ clientY: 0 }] })
+    fireEvent.touchMove(scroller, { touches: [{ clientY: 200 }] })
+    fireEvent.touchCancel(scroller)
   })
-
-  // The collection and the folder listing are fetched again...
-  await waitFor(() => expect(listings().some(request => request.url.startsWith('/api/media?'))).toBe(true))
-  expect(listings().some(request => request.url.startsWith('/api/folders?'))).toBe(true)
-  // ...and nothing is asked of the server: no scan, no job, no write of any kind.
-  expect(requests.slice(before).filter(request => request.method !== 'GET')).toEqual([])
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(requests.filter(item => item.url.endsWith('/scans'))).toHaveLength(0)
+  act(pull)
+  if (folderId) {
+    await waitFor(() => expect(requests.filter(item => item.url.endsWith('/scans'))).toHaveLength(1))
+    expect(requests.find(item => item.url.endsWith('/scans'))).toEqual({
+      url: `/api/folders/${folderId}/scans`,
+      method: 'POST',
+      body: { metadataMode, prioritize: true, shallow: true },
+    })
+    expect(screen.getByText('Refreshing…')).toBeInTheDocument()
+    // Repeated gestures while admission is pending cannot queue another scan.
+    act(pull)
+    expect(requests.filter(item => item.url.endsWith('/scans'))).toHaveLength(1)
+    await act(async () => accept())
+  }
+  if (fail) {
+    expect(await screen.findByRole('alert')).toHaveTextContent('Resolve the interrupted file operation first.')
+  } else {
+    await waitFor(() => expect(requests.slice(before).some(item => item.url.startsWith('/api/media?'))).toBe(true))
+    if (folderId) expect(requests.slice(before).some(item => item.url === '/api/tasks')).toBe(true)
+    if (folderId) await waitFor(() => expect(requests.some(item => item.url === '/api/scans/900')).toBe(true))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+  await waitFor(() => expect(screen.queryByText('Refreshing…')).not.toBeInTheDocument())
+  if (!folderId) expect(requests.slice(before).filter(item => item.method !== 'GET')).toEqual([])
 })
 
 // A default order for Reels is about Reels: opening the feed shuffled must not leave the

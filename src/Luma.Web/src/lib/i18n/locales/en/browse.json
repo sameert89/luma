@@ -19,14 +19,14 @@
     "clearAllFilters": "Clear all filters"
   },
   "albumCover": {
-    "albumsWithThreeOrMorePhotosShowAMosaic": "A mosaic for albums with three or more photos. Single photos fit the card, with a blurred background where needed.",
-    "onePhotoFillsTheWholeCardCroppedToFit": "One photo, cropped to fill the card.",
+    "albumsWithThreeOrMorePhotosShowAMosaic": "Show a collage when there are at least three photos, or a full photo against a softly blurred background.",
+    "onePhotoFillsTheWholeCardCroppedToFit": "Fill each card with one cropped photo.",
     "albumCovers": "Album covers",
     "chooseHowLumaDrawsAutomaticAlbumAndFolderCovers": "Choose a style for automatic folder covers.",
     "albumCoverStyle": "Album cover style",
     "smartAlbumCovers": "Smart album covers",
     "croppedAlbumCovers": "Cropped album covers",
-    "coverDefaultHelp": "Your handpicked covers stay as they are. To use an automatic cover again, choose <action>Reset album cover</action> in the folder menu."
+    "coverDefaultHelp": "To replace a handpicked cover with this style, choose <action>Reset album cover</action> in the folder menu."
   },
   "collections": {
     "manage": "Manage \"{{value1}}\"",
@@ -134,21 +134,21 @@
     "libraryActions": "Library actions",
     "folderActions": "Folder actions",
     "folderActionsFor": "Folder actions for {{value1}}",
-    "mergeEXIFXMPTagsFromEveryIndexedPhotoAnd": "Import EXIF/XMP tags from indexed files in this folder and its subfolders, including files outside your current filters. Original files stay untouched.",
+    "mergeEXIFXMPTagsFromEveryIndexedPhotoAnd": "Bring in tags from indexed files in this folder and its subfolders, including those outside your filters. This reads their EXIF/XMP metadata without editing the files.",
     "resettingCover": "Resetting cover…",
     "resetAlbumCover": "Reset album cover",
     "name": "Name",
     "library": "Library",
     "location": "Location",
-    "rescanQueuedFollowItsProgressInBackgroundJobsYou": "Rescan queued. Check Background jobs for progress.",
+    "rescanQueuedFollowItsProgressInBackgroundJobsYou": "Added this scan to Background jobs.",
     "done": "Done",
-    "checksEveryFolderInThisLibraryForNewChanged": "Look for new, changed or removed files throughout this library. Large libraries can take a while to scan.",
-    "checksAndEveryFolderInsideItForNewChanged": "Look for new, changed or removed files in “{{value1}}” and its subfolders.",
-    "thisControlsTagImportOnlyAndBecomesTheLibrary": "Save this tag-import choice for future scans of this library.",
+    "checksEveryFolderInThisLibraryForNewChanged": "Ready to check the whole library for new, changed or removed files? A large library may take a while.",
+    "checksAndEveryFolderInsideItForNewChanged": "Check “{{value1}}” and its subfolders for new, changed or removed files.",
+    "thisControlsTagImportOnlyAndBecomesTheLibrary": "Use this tag source for future scans too.",
     "starting": "Starting…",
     "startRescan": "Start rescan",
     "cancel": "Cancel",
-    "andEverythingInsideItWillDisappearFromTheLibrary": "Hide “{{folderName}}” and its subfolders from Luma. Your files stay on disk. You can show the folder again in Settings.",
+    "andEverythingInsideItWillDisappearFromTheLibrary": "Hide “{{folderName}}” and everything inside it? This won’t delete your files, and you can bring the folder back in Settings.",
     "hiding": "Hiding…"
   },
   "gallery": {
@@ -186,7 +186,7 @@
   },
   "hiddenFolders": {
     "hiddenFolders": "Hidden folders",
-    "hiddenFoldersAndEverythingInsideThemAreLeftOut": "These folders and their contents are hidden from Luma and skipped during scans. Use a folder’s menu to hide it.",
+    "hiddenFoldersAndEverythingInsideThemAreLeftOut": "Manage folders you’ve hidden from browsing and scans. To hide another, open its folder menu.",
     "loadingHiddenFolders": "Loading hidden folders…",
     "noFoldersAreHidden": "No folders are hidden.",
     "show": "Show {{value1}}",
@@ -209,26 +209,26 @@
     "noAutomaticScansRefreshOnOpenAndManualFolder": "Scan manually, or check folders when you open them.",
     "refreshFoldersWhenOpened": "Refresh folders when opened",
     "checksOneDirectoryTimestampAndShallowScansItOnly": "Check for changes when you open a folder.",
-    "eventDebounceSeconds": "Event debounce (seconds)",
-    "fileStabilityWaitSeconds": "File stability wait (seconds)",
+    "eventDebounceSeconds": "Wait after a file change (seconds)",
+    "fileStabilityWaitSeconds": "Wait for a file to finish changing (seconds)",
     "scanIntervalMinutes": "Scan interval (minutes)",
     "saving": "Saving…",
     "saveDiscoverySettings": "Save discovery settings",
     "setUpLibrary": "Set up library",
     "automaticTagImport": "Automatic tag import",
-    "thisControlsOnlyEXIFIPTCXMPTagImportIt": "Choose which embedded tags to import for this library.",
+    "thisControlsOnlyEXIFIPTCXMPTagImportIt": "Bring in tags from your files’ metadata, with optional XMP sidecars.",
     "opening": "Opening…",
     "indexFoldersAsIOpenThem": "Index folders as I open them",
-    "indexesEachFolderWhenFirstOpenedAfterSetupFilesystem": "Index folders as you open them. New file changes are picked up automatically; you can adjust this in Settings.",
+    "indexesEachFolderWhenFirstOpenedAfterSetupFilesystem": "Start browsing now and scan each folder on your first visit. By default, Luma also watches for new files.",
     "starting": "Starting…",
     "indexEverythingNow": "Index everything now",
-    "scansTheWholeLibraryInTheBackgroundOnA": "Scan the entire library now. Large libraries can take a while.",
+    "scansTheWholeLibraryInTheBackgroundOnA": "Find everything in one go. You can keep browsing while the scan runs.",
     "libraries": "Libraries",
     "configureAutomaticDiscoveryAndTagImportIndependentlyForEach": "Choose how each library finds new files and imports tags.",
     "loadingLibraries": "Loading libraries…",
     "noLibrariesAreConfigured": "No libraries are configured.",
     "automaticTagImportFor": "Automatic tag import for {{value1}}",
-    "tagImportAffectsTagsOnlyPreviewAndThumbnailGeneration": "Choose a tag source for each library."
+    "tagImportAffectsTagsOnlyPreviewAndThumbnailGeneration": "Your photos and previews don’t need imported tags."
   },
   "mediaActions": {
     "like": "Like",
@@ -249,7 +249,7 @@
     "pictureInPictureIsUnavailableInThisBrowser": "Your browser doesn’t support picture in picture.",
     "pictureInPictureIsUnavailableForThisVideo": "Picture in picture isn’t available for this video.",
     "autoplayWasBlockedPressPlayToStart": "Press Play to start this video.",
-    "thisVideoCouldNotPlayCopyItsStreamURL": "Can’t play this video here. Copy its stream URL to open it in a player such as VLC.",
+    "thisVideoCouldNotPlayCopyItsStreamURL": "This video won’t play in your browser. You can copy its stream URL and watch it in VLC or another player.",
     "pressPlayToResumePlayback": "Press Play to resume playback.",
     "volume": "Volume {{volume}}%",
     "resumeFrom": "Resume from {{position}}",
@@ -260,7 +260,7 @@
     "moreOptions": "More options",
     "exitFullscreen": "Exit fullscreen",
     "viewOptions": "View options",
-    "fitPlaybackAndDownloadActionsForThisItem": "Adjust the view, playback or download this file.",
+    "fitPlaybackAndDownloadActionsForThisItem": "Adjust how you view this file, change playback settings or download a copy.",
     "volume2": "Volume",
     "playbackSpeed": "Playback speed",
     "fit": "Fit",
@@ -275,13 +275,13 @@
     "fullscreen": "Fullscreen",
     "download": "Download",
     "copyStreamURL": "Copy stream URL",
-    "streamURLCopiedInVLCChooseOpenNetworkStream": "Link copied. In VLC, paste it into Open Network Stream.",
-    "copyTheDownloadLinkAndPasteTheStreamURL": "Copy the download link and paste it into your player’s network stream dialog."
+    "streamURLCopiedInVLCChooseOpenNetworkStream": "Link copied — ready to paste into VLC’s Open Network Stream.",
+    "copyTheDownloadLinkAndPasteTheStreamURL": "You can also copy the download link and open it as a network stream in your player."
   },
   "randomUrls": {
     "randomMediaURL": "Random media URL",
     "generateAReusableURLFromTheCurrentVisibleFilters": "Create a link to a random photo matching these filters.",
-    "usesTheCurrentFolderTagsSearchAndAdvancedFilters": "Use your current folder, tags and filters. The link returns a photo or GIF preview.",
+    "usesTheCurrentFolderTagsSearchAndAdvancedFilters": "Each visit picks a photo or GIF preview from your current folder, tags, search and filters.",
     "randomMediaType": "Random media type",
     "photos": "Photos",
     "gIFPreviews": "GIF previews",
@@ -311,13 +311,13 @@
     "menu": "Flick menu"
   },
   "reelsSortSettings": {
-    "reels": "Reels",
-    "chooseTheOrderReelsOpensInOnThisDevice": "Choose a default order for Reels on this device.",
+    "reels": "Default playback order",
+    "chooseTheOrderReelsOpensInOnThisDevice": "How would you like Flick to start on this device?",
     "defaultOrder": "Default order",
     "defaultDirection": "Default direction",
     "descending": "Descending",
     "ascending": "Ascending",
-    "appliesEachTimeYouOpenReelsYouCanStill": "Change the order anytime in Filters. Opening a file from the viewer keeps your current browsing order.",
+    "appliesEachTimeYouOpenReelsYouCanStill": "You can change this in Filters while watching. When you jump over from the viewer, you’ll keep that browsing order.",
     "sameAsTheLibrary": "Same as the library",
     "modifiedDate": "Modified date",
     "capturedDate": "Captured date",
@@ -377,14 +377,14 @@
     "turnCaptionsOff": "Turn captions off",
     "turnCaptionsOnSRTOnly": "Turn captions on (SRT only)",
     "captionSettings": "Caption settings",
-    "plainSRTCaptionsOnlyAuthorFontsColorsPositioningAnd": "Plain SRT text only, without custom fonts, colors or effects.",
+    "plainSRTCaptionsOnlyAuthorFontsColorsPositioningAnd": "Captions appear as plain text, without custom styling.",
     "captionTrack": "Caption track",
-    "supportsEmbeddedSubRipSRTOrASameFolderSame": "Use an embedded SubRip/SRT track or a .srt file with the same name and folder as the video. Other formats and styled subtitles aren’t supported."
+    "supportsEmbeddedSubRipSRTOrASameFolderSame": "For external captions, put a matching .srt file beside your video. Embedded SubRip/SRT tracks work too; other formats aren’t supported."
   },
   "useFolderIndexing": {
     "thisFolderCouldNotBeIndexedCheckThatIts": "Couldn’t scan this folder. Check that its drive or share is connected."
   },
   "useWatchProgress": {
-    "couldNotSavePlaybackProgress": "Could not save playback progress"
+    "couldNotSavePlaybackProgress": "Couldn’t save your playback position."
   }
 }

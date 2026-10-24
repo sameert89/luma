@@ -1,7 +1,7 @@
 {
   "uploadPicker": {
-    "preparingUploadsYouCanCloseThisDialogUploadsContinue": "Preparing uploads… Feel free to close this window.",
-    "couldNotStartUpload": "Could not start upload.",
+    "preparingUploadsYouCanCloseThisDialogUploadsContinue": "Getting your uploads ready…",
+    "couldNotStartUpload": "Couldn’t start this upload.",
     "uploadFiles": "Upload files",
     "dropFilesOrFoldersHere": "Drop files or folders here",
     "uploadInto": "Upload into {{destination}}",
@@ -9,15 +9,18 @@
     "chooseFolder": "Choose folder",
     "chooseUploadFiles": "Choose upload files",
     "chooseUploadFolder": "Choose upload folder",
-    "uploadsContinueWhenThisDialogClosesAfterRefreshingReselect": "You can close this window while uploads run. If you refresh the browser, choose the same files or folder to resume.",
+    "uploadsContinueWhenThisDialogClosesAfterRefreshingReselect": "Feel free to close this window and keep browsing while your files upload. If you refresh the page, choose the same files or folder to pick up where you left off.",
     "pause": "Pause",
     "resumeRetry": "Resume / retry",
     "cancel": "Cancel",
     "miBSSRemaining": " · {{value1}} MiB/s · {{value2}}s remaining",
-    "filesQueued_one": "{{count}} file queued for upload.{{skipped}} Check Background jobs for progress.",
-    "filesQueued_other": "{{count}} files queued for upload.{{skipped}} Check Background jobs for progress.",
+    "filesQueued_one": "Added {{count}} file to your uploads.{{skipped}}",
+    "filesQueued_other": "Added {{count}} files to your uploads.{{skipped}}",
     "uploadsInQueue_one": "{{count}} upload in queue",
-    "uploadsInQueue_other": "{{count}} uploads in queue"
+    "uploadsInQueue_other": "{{count}} uploads in queue",
+    "reselectFile": "Choose file to resume",
+    "reselectUpload": "Choose the original file for {{name}}",
+    "reselectToResume": "Choose the original file to continue from the saved position."
   },
   "droppedFiles": {
     "folderUploadExceedsTheDepthLimit": "There are too many nested folders in this upload.",
@@ -26,9 +29,11 @@
   "uploadQueue": {
     "chooseAtMost10000FilesAtOnce": "Choose at most 10,000 files at once.",
     "folderUploadExceedsTheDepthLimit": "There are too many nested folders in this upload.",
-    "thisServerUploadWasCancelledStartANewUpload": "This upload was cancelled. Choose the file again to start over.",
+    "thisServerUploadWasCancelledStartANewUpload": "Choose the file again to restart this cancelled upload.",
     "uploadFailed": "Upload failed ({{value1}}).",
     "uploadInterrupted": "Upload interrupted.",
-    "couldNotUpdateUpload": "Could not update upload."
+    "couldNotUpdateUpload": "Couldn’t update this upload.",
+    "chooseOriginalFile": "Choose the original “{{name}}” file with the same size and modification date.",
+    "unfinishedUpload": "There’s an unfinished upload for “{{name}}”. Resume it with the original file, or cancel it before uploading a different version."
   }
 }

@@ -57,10 +57,8 @@ for (const configuredWritable of [false, true]) {
         ]),
       )
       await waitFor(() => expect(button).toBeEnabled())
-      expect(screen.getByRole('status')).toHaveTextContent('Check complete. 1 of 2 libraries have write access.')
-      expect(
-        screen.getByText(`Photos: ${configuredWritable ? 'No write access' : 'Configured read-only'}.`),
-      ).toBeVisible()
+      expect(screen.getByRole('status')).toHaveTextContent('You can edit files in 1 of 2 libraries.')
+      expect(screen.getByText(`Photos: ${configuredWritable ? 'No write access' : 'Set to read-only'}.`)).toBeVisible()
       expect(screen.getByText('Uploads: Writable.')).toBeVisible()
     }
   })

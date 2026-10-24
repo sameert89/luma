@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -39,21 +40,43 @@ describe('appearance controls', () => {
   })
 })
 describe('application introductions', () => {
-  it('is dismissible, does not repeat in a session and has independent app identity', async () => {
+  it('fades away automatically, does not repeat in a session and has independent app identity', () => {
+    vi.useFakeTimers()
     const view = render(<AppIntroduction experience="gallery" appearance={defaults} />)
     expect(screen.getByRole('status')).toHaveTextContent('Luma Gallery')
-    await userEvent.click(screen.getByRole('button', { name: 'Dismiss introduction' }))
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(420))
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     view.rerender(<AppIntroduction experience="flick" appearance={defaults} />)
     expect(screen.getByRole('status')).toHaveTextContent('Luma Flick')
     view.rerender(<AppIntroduction experience="gallery" appearance={defaults} />)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
-  it('skips introductions when animations are disabled or the device requests reduced motion', () => {
-    const view = render(<AppIntroduction experience="panels" appearance={{ ...defaults, motion: 'off' }} />)
+  it('keeps the introduction through StrictMode effect replay and cancels its timer on unmount', () => {
+    vi.useFakeTimers()
+    const view = render(
+      <StrictMode>
+        <AppIntroduction experience="panels" appearance={defaults} />
+      </StrictMode>,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('Luma Panels')
+    act(() => vi.advanceTimersByTime(420))
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    view.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('hides an active introduction immediately when animations are turned off', () => {
+    const view = render(<AppIntroduction experience="gallery" appearance={defaults} />)
+    expect(screen.getByRole('status')).toBeVisible()
+    view.rerender(<AppIntroduction experience="gallery" appearance={{ ...defaults, motion: 'off' }} />)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+  it('skips introductions when animations are disabled or the device requests reduced motion', () => {
+    const view = render(<AppIntroduction experience="panels" appearance={{ ...defaults, motion: 'reduced' }} />)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    view.unmount()
     vi.stubGlobal('matchMedia', () => ({ matches: true }))
-    view.rerender(<AppIntroduction experience="panels" appearance={defaults} />)
+    render(<AppIntroduction experience="panels" appearance={defaults} />)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

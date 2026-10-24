@@ -29,16 +29,16 @@ function serverVersion(version: string) {
 it('offers the update once per server release and keeps it in settings after Not now', async () => {
   serverVersion('9.9.9')
   const { unmount } = render(withClient(<UpdateNotice />))
-  expect(await screen.findByText(/Luma 9\.9\.9 is ready/)).toBeVisible()
+  expect(await screen.findByText(/Ready for Luma 9\.9\.9/)).toBeVisible()
 
   await userEvent.click(screen.getByRole('button', { name: 'Not now' }))
-  expect(screen.queryByText(/Luma 9\.9\.9 is ready/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Ready for Luma 9\.9\.9/)).not.toBeInTheDocument()
 
   // A reopened tab is not asked again about the same release.
   unmount()
   render(withClient(<UpdateNotice />))
   await waitFor(() => expect(fetch).toHaveBeenCalled())
-  expect(screen.queryByText(/Luma 9\.9\.9 is ready/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Ready for Luma 9\.9\.9/)).not.toBeInTheDocument()
 
   render(withClient(<UpdateSettings onWhatsNew={vi.fn()} />))
   expect(await screen.findByRole('button', { name: /Refresh to update/ })).toBeVisible()
@@ -53,7 +53,7 @@ it('says the running release is current when the server reports the same one', a
 
   render(withClient(<UpdateNotice />))
   await waitFor(() => expect(fetch).toHaveBeenCalled())
-  expect(screen.queryByText(/is ready\. Refresh to update/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Ready for Luma/)).not.toBeInTheDocument()
 })
 
 it('reports a release as unseen once, and lists its changes with the version', () => {
