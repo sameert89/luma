@@ -50,11 +50,14 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
             if (!StringComparer.Ordinal.Equals(current, source))
                 throw new ApiRequestException(409, "source_changed", "The selected item changed. Select it again before continuing.");
         }
+        // An indexed file has a stable snapshot even while discovery finds siblings.
+        // Journal it now; the worker waits for discovery before touching originals.
+        // Folder snapshots may still be growing, so keep their discovery gate.
         if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"""
             SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@Id AND State='needsAttention')
-              OR EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running'))
+              OR (@mediaId IS NULL AND EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running')))
               OR EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=@Id AND State IN ('queued','running'))
-            """, root, tx, cancellationToken: ct)))
+            """, new { root.Id, mediaId }, tx, cancellationToken: ct)))
             throw new ApiRequestException(409, "library_busy", "Finish indexing or resolve the operation needing attention before changing this library.");
         if (request.Kind is "restore" or "purge")
         {

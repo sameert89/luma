@@ -2,9 +2,9 @@ import { Button } from '../../components/ui/Button'
 import { waitForOperation } from './operations'
 import { t } from '../../lib/i18n'
 import { conflictBatch, withFileConflict } from './fileConflicts'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
-import { ClipboardPaste, Copy, FolderCog, FolderPlus, Scissors, Trash2, Upload, X } from 'lucide-react'
+import { ClipboardPaste, Copy, FolderCog, FolderPlus, Scissors, Trash2, Upload, X, LoaderCircle } from 'lucide-react'
 import { RenameFileAction } from './RenameFileAction'
 import { Modal } from '../../components/ui/Modal'
 import { Checkbox, Field, IconButton, Input, QuietButton, Select } from '../../components/ui/Controls'
@@ -12,7 +12,14 @@ import { request, errorMessage, type Library } from '../browse/api'
 import type { components } from '../../lib/api/generated'
 import type { OperationAccepted, FileOperation } from './operations'
 import { UploadPicker } from '../uploads/UploadPicker'
-import { clipboardSnapshot, setClipboard, subscribeClipboard } from './clipboard'
+import {
+  clipboardSnapshot,
+  setClipboard,
+  subscribeClipboard,
+  pasteSnapshot,
+  beginPaste,
+  finishPaste,
+} from './clipboard'
 
 type Location = components['schemas']['FileLocation']
 type Capabilities = components['schemas']['FileCapabilities']
@@ -75,7 +82,10 @@ export function FileToolbar({
   const permanentId = useId()
   const [permanent, setPermanent] = useState(false)
   const [busy, setBusy] = useState(false)
-  const pasteController = useRef<AbortController | null>(null)
+  const activePaste = useSyncExternalStore(subscribeClipboard, pasteSnapshot)
+  const [waiting, setWaiting] = useState(false)
+  const working = busy || !!activePaste
+  const pasteMutation = useMutation({ mutationKey: ['background-task'], mutationFn: () => execute('paste') })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const client = useQueryClient()
@@ -102,6 +112,7 @@ export function FileToolbar({
     return entries
   }
   async function capture(kind: 'move' | 'copy') {
+    if (working) return
     setBusy(true)
     setError('')
     try {
@@ -120,9 +131,10 @@ export function FileToolbar({
     }
   }
   async function execute(kind: 'mkdir' | 'delete' | 'paste') {
-    if (kind !== 'delete' && !location.data) return
-    const controller = kind === 'paste' ? new AbortController() : null
-    pasteController.current = controller
+    if (working || (kind !== 'delete' && !location.data)) return
+    const controller = kind === 'paste' && clipboard ? beginPaste(clipboard) : null
+    if (kind === 'paste' && !controller) return
+    setWaiting(false)
     const batch = conflictBatch()
     setBusy(true)
     setError('')
@@ -169,10 +181,14 @@ export function FileToolbar({
                   destination,
                   ...(replaceExisting ? { replaceExisting: true } : {}),
                 }),
-              { batch, target: destination, signal: controller?.signal },
+              { batch, target: destination, signal: controller?.signal, waiting: () => setWaiting(true) },
             )
-            if (result) queued++
-            else {
+            setWaiting(false)
+            if (result) {
+              queued++
+              // Accepted work must appear even if a later item is waiting or conflicting.
+              void client.invalidateQueries({ queryKey: ['tasks'] })
+            } else {
               skipped++
               failed.push(item)
             }
@@ -181,7 +197,8 @@ export function FileToolbar({
             if (!controller?.signal.aborted) setError(errorMessage(error))
           }
         }
-        if (clipboard.kind === 'move') setClipboard(failed.length ? { ...clipboard, entries: failed } : null)
+        if (clipboard.kind === 'move' && clipboardSnapshot() === clipboard)
+          setClipboard(failed.length ? { ...clipboard, entries: failed } : null)
       }
       if (queued) {
         setDialog(null)
@@ -198,7 +215,8 @@ export function FileToolbar({
             skipped: skipped ? t('common:counts.skipped', { count: skipped }) : '',
           }),
         )
-      pasteController.current = null
+      if (controller) finishPaste(controller)
+      setWaiting(false)
       void client.invalidateQueries({ queryKey: ['tasks'] })
       setBusy(false)
     }
@@ -207,7 +225,7 @@ export function FileToolbar({
     if (!writable || dialog || compact) return
     function shortcuts(event: KeyboardEvent) {
       if (
-        busy ||
+        working ||
         event.repeat ||
         event.altKey ||
         (event.target instanceof Element &&
@@ -222,7 +240,7 @@ export function FileToolbar({
           void capture(key === 'x' ? 'move' : 'copy')
         } else if (key === 'v' && canPaste) {
           event.preventDefault()
-          void execute('paste')
+          pasteMutation.mutate()
         }
       } else if (event.key === 'Delete' && count) {
         event.preventDefault()
@@ -241,18 +259,22 @@ export function FileToolbar({
         aria-label={t('files:fileToolbar.fileActions')}
         className="flex flex-wrap items-center gap-1 border-t border-line pt-2"
       >
-        <QuietButton disabled={busy || !count} onClick={() => void capture('move')}>
+        <QuietButton disabled={working || !count} onClick={() => void capture('move')}>
           <Scissors className="size-4" />
           {t('files:fileToolbar.cut')}
         </QuietButton>
-        <QuietButton disabled={busy || !count} onClick={() => void capture('copy')}>
+        <QuietButton disabled={working || !count} onClick={() => void capture('copy')}>
           <Copy className="size-4" />
           {t('files:fileToolbar.copy')}
         </QuietButton>
         {!compact && (
-          <QuietButton disabled={busy || !canPaste || !location.data} onClick={() => void execute('paste')}>
-            <ClipboardPaste className="size-4" />
-            {t('files:fileToolbar.paste')}
+          <QuietButton disabled={working || !canPaste || !location.data} onClick={() => pasteMutation.mutate()}>
+            {activePaste ? (
+              <LoaderCircle className="size-4 motion-safe:animate-spin" />
+            ) : (
+              <ClipboardPaste className="size-4" />
+            )}
+            {t(activePaste ? 'files:fileToolbar.pasting' : 'files:fileToolbar.paste')}
             {clipboard ? ` (${clipboard.entries.length})` : ''}
           </QuietButton>
         )}
@@ -260,14 +282,14 @@ export function FileToolbar({
           libraryId={libraryId}
           mediaIds={[...selected]}
           folderIds={[...selectedFolders]}
-          disabled={busy}
+          disabled={working}
           onQueued={() => {
             onQueued?.()
             setMessage(t('files:fileToolbar.renameQueuedFollowProgressInBackgroundJobs'))
           }}
         />
         <QuietButton
-          disabled={busy || !count}
+          disabled={working || !count}
           onClick={() => {
             setPermanent(false)
             setDialog('delete')
@@ -278,23 +300,25 @@ export function FileToolbar({
         </QuietButton>
         {!compact && (
           <>
-            <QuietButton disabled={busy || !location.data} onClick={() => setDialog('mkdir')}>
+            <QuietButton disabled={working || !location.data} onClick={() => setDialog('mkdir')}>
               <FolderPlus className="size-4" />
               {t('files:fileToolbar.newFolder')}
             </QuietButton>
-            <QuietButton disabled={busy || !location.data} onClick={() => setDialog('upload')}>
+            <QuietButton disabled={working || !location.data} onClick={() => setDialog('upload')}>
               <Upload className="size-4" />
               {t('files:fileToolbar.upload')}
             </QuietButton>
           </>
         )}
-        {busy && pasteController.current && (
-          <QuietButton onClick={() => pasteController.current?.abort()}>
-            {t('files:fileToolbar.cancelRemaining')}
-          </QuietButton>
+        {!compact && activePaste && (
+          <QuietButton onClick={() => activePaste?.abort()}>{t('files:fileToolbar.cancelRemaining')}</QuietButton>
         )}
         {!compact && clipboard && (
-          <IconButton label={t('files:fileToolbar.clearFileClipboard')} onClick={() => setClipboard(null)}>
+          <IconButton
+            disabled={working}
+            label={t('files:fileToolbar.clearFileClipboard')}
+            onClick={() => setClipboard(null)}
+          >
             <X className="size-4" />
           </IconButton>
         )}
@@ -305,9 +329,9 @@ export function FileToolbar({
       {!compact && clipboard && !canPaste && (
         <p className="text-sm text-muted">{t('files:fileToolbar.openAFolderInTheSourceLibraryToPaste')}</p>
       )}
-      {message && (
+      {(message || activePaste) && !compact && (
         <p role="status" className="text-sm text-muted">
-          {message}
+          {activePaste ? t(waiting ? 'files:fileToolbar.waitingToPaste' : 'files:fileToolbar.addingToJobs') : message}
         </p>
       )}
       {error && (
@@ -345,7 +369,7 @@ export function FileToolbar({
               <Field label={t('files:fileToolbar.folderName')}>
                 <Input value={name} onChange={event => setName(event.target.value)} />
               </Field>
-              <QuietButton type="submit" disabled={busy || !name.trim()}>
+              <QuietButton type="submit" disabled={working || !name.trim()}>
                 {t('files:fileToolbar.createFolder')}
               </QuietButton>
             </form>
@@ -356,7 +380,7 @@ export function FileToolbar({
                 <Checkbox id={permanentId} checked={permanent} onChange={event => setPermanent(event.target.checked)} />
                 {t('files:fileToolbar.permanentlyDeleteThisCannotBeUndone')}
               </label>
-              <QuietButton disabled={busy} onClick={() => void execute('delete')}>
+              <QuietButton disabled={working} onClick={() => void execute('delete')}>
                 {busy
                   ? t('files:fileToolbar.queuing')
                   : permanent

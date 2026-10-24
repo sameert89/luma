@@ -12,7 +12,8 @@
         "Pull down in a folder to check for new or changed files without scanning its subfolders.",
         "Select folders with a tap, with cut, copy, rename and delete in each item’s menu.",
         "Restore all or empty the recycle bin, with clearer confirmation and reliable list updates.",
-        "Removed folders disappear after refresh, and finished uploads clean up their staging folders."
+        "Removed folders disappear after refresh, and finished uploads clean up their staging folders.",
+        "Paste visible files while discovery runs, with queued progress and protection against repeated clicks."
       ]
     },
     {

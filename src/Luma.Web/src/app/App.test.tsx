@@ -762,6 +762,11 @@ describe('browsing shell', () => {
       )
       const openChild = await screen.findByRole('button', { name: 'Open Beach' })
       await waitFor(() => expect(screen.getByTestId('gallery-grid')).toHaveAttribute('data-retained-items', '80'))
+      // Let the initial restore/virtualizer frame finish before simulating a user scroll.
+      // Loaded rows alone don't mean that layout has settled on a busy CI runner.
+      await act(async () => {
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      })
       const parent = screen.getByTestId('gallery-scroll')
       parent.scrollTop = 420
       fireEvent.scroll(parent)

@@ -26,6 +26,67 @@ public sealed class FileOperationTests
     }
 
     [Theory]
+    [InlineData("move", "running")]
+    [InlineData("copy", "running")]
+    [InlineData("move", "queued")]
+    [InlineData("copy", "queued")]
+    public async Task Visible_files_queue_during_discovery_and_execute_before_the_next_scan(string kind, string scanState)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "destination"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        await using var db = await f.Database.OpenAsync(default);
+        var mediaId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='photo.jpg'");
+        var scan = await f.NewScanAsync();
+        await db.ExecuteAsync("UPDATE Scans SET State=@scanState WHERE Id=@Id", new { scan.Id, scanState });
+        var accepted = await operations.QueueAsync(new(1, kind, "photo.jpg", "destination/photo.jpg"), default, mediaId: mediaId);
+        Assert.Equal("queued", (await operations.GetAsync(accepted.Id, default)).State);
+        Assert.True(File.Exists(Path.Combine(f.Root.Path, "photo.jpg")));
+        if (scanState == "running")
+        {
+            Assert.Null(await worker.ClaimAsync(default));
+            // Discovery can still add records after admission. Nothing moves under its reader.
+            await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "late.jpg"), "late arrival");
+            await f.Scanner.ScanAsync(scan, f.Root, default);
+            Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE RelativePath='late.jpg'"));
+        }
+        var claimed = Assert.IsType<FileOperation>(await worker.ClaimAsync(default));
+        Assert.Equal(accepted.Id, claimed.Id);
+        await worker.ExecuteOperationAsync(claimed, false, default);
+        Assert.Equal("completed", (await operations.GetAsync(accepted.Id, default)).State);
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "destination", "photo.jpg")));
+        Assert.Equal(kind == "copy", File.Exists(Path.Combine(f.Root.Path, "photo.jpg")));
+        if (kind == "move")
+            Assert.Equal(mediaId, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='destination/photo.jpg'"));
+        if (scanState == "queued")
+            Assert.Equal("queued", await db.ExecuteScalarAsync<string>("SELECT State FROM Scans WHERE Id=@Id", scan));
+    }
+
+    [Fact]
+    public async Task A_folder_still_waits_for_discovery_and_visible_files_do_not_bypass_recovery()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, _) = Services(f);
+        await using var db = await f.Database.OpenAsync(default);
+        var folderId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='album'");
+        var mediaId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='photo.jpg'");
+        var scan = await f.NewScanAsync();
+        var folderError = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "album", "renamed"), default, folderId: folderId));
+        Assert.Equal("library_busy", folderError.Code);
+        await db.ExecuteAsync("UPDATE Scans SET State='completed' WHERE Id=@Id", scan);
+        var pending = await operations.QueueAsync(new(1, "move", "album", "renamed"), default, folderId: folderId);
+        await db.ExecuteAsync("UPDATE FileOperations SET State='needsAttention' WHERE Id=@Id", pending);
+        var fileError = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "photo.jpg", "renamed.jpg"), default, mediaId: mediaId));
+        Assert.Equal("library_busy", fileError.Code);
+        Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM FileOperations"));
+    }
+
+    [Theory]
     [InlineData("folder")]
     [InlineData("file")]
     [InlineData("mixed")]

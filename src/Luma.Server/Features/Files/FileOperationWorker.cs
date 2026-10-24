@@ -25,16 +25,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         {
             try
             {
-                await using var db = await operations.OpenJournalAsync(stoppingToken);
-                var row = await db.QuerySingleOrDefaultAsync<FileOperation>(new CommandDefinition("""
-                    UPDATE FileOperations SET State='running' WHERE Id=(
-                      SELECT o.Id FROM FileOperations o WHERE o.State='queued'
-                      AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
-                      AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
-                      AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
-                      AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.ReplacementId=o.Id)
-                      ORDER BY o.CreatedAt LIMIT 1) AND State='queued' RETURNING *
-                    """, cancellationToken: stoppingToken));
+                var row = await ClaimAsync(stoppingToken);
                 if (row is null) { await CleanupOldUploadsAsync(stoppingToken); await Task.Delay(500, stoppingToken); continue; }
                 await ExecuteOperationAsync(row, recovering: false, stoppingToken);
             }
@@ -45,6 +36,22 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 await Task.Delay(1000, stoppingToken);
             }
         }
+    }
+
+    // Admission journals visible-file changes during discovery; execution still waits
+    // for its readers to finish. Queued scans yield to queued file operations.
+    internal async Task<FileOperation?> ClaimAsync(CancellationToken ct)
+    {
+        await using var db = await operations.OpenJournalAsync(ct);
+        return await db.QuerySingleOrDefaultAsync<FileOperation>(new CommandDefinition("""
+            UPDATE FileOperations SET State='running' WHERE Id=(
+              SELECT o.Id FROM FileOperations o WHERE o.State='queued'
+              AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
+              AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
+              AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
+              AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.ReplacementId=o.Id)
+              ORDER BY o.CreatedAt LIMIT 1) AND State='queued' RETURNING *
+            """, cancellationToken: ct));
     }
 
     // Retire historical empty upload directories in small batches while the queue is idle.

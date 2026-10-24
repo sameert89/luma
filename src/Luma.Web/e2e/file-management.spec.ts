@@ -368,3 +368,86 @@ test('folder cards select without navigation and their menu offers cut without s
   await expect(menu).toBeHidden()
   await expect(page.getByRole('button', { name: 'Paste (1)', exact: true })).toBeEnabled()
 })
+
+test('paste shows admission immediately and queues once while indexing remains active', async ({ page }) => {
+  let requests = 0
+  let accepted = false
+  let release: () => void = () => {}
+  const pending = new Promise<void>(resolve => {
+    release = resolve
+  })
+  const indexing = {
+    id: 'scan-1',
+    kind: 'indexing',
+    state: 'running',
+    createdAt: '2026-10-24',
+    processed: 1,
+    failed: 0,
+    pending: 1,
+  }
+  await page.route('**/api/tasks', route =>
+    route.fulfill({
+      json: accepted
+        ? [
+            indexing,
+            {
+              id: 'file-queued',
+              kind: 'move',
+              state: 'queued',
+              createdAt: '2026-10-24',
+              processed: 0,
+              failed: 0,
+              pending: 1,
+            },
+          ]
+        : [indexing],
+    }),
+  )
+  await page.route('**/api/files/capabilities', route =>
+    route.fulfill({ json: { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] } }),
+  )
+  await page.route('**/api/files/location?folderId=*', route =>
+    route.fulfill({ json: { libraryId: 1, relativePath: 'destination' } }),
+  )
+  await page.route('**/api/files/clipboard', route =>
+    route.fulfill({
+      json: [
+        {
+          libraryId: 1,
+          relativePath: 'source/photo.jpg',
+          mediaId: route.request().postDataJSON().mediaIds[0],
+          folderId: null,
+        },
+      ],
+    }),
+  )
+  await page.route('**/api/files/items', async route => {
+    requests++
+    await pending
+    accepted = true
+    await route.fulfill({ status: 202, json: { id: 'queued' } })
+  })
+  await page.goto('/?libraryId=1&folderId=1')
+  await page.getByRole('button', { name: 'File management', exact: true }).click()
+  await page.getByRole('button', { name: 'Select media', exact: true }).click()
+  await page.getByTestId('media-cell').first().getByRole('checkbox').check()
+  await page.getByRole('button', { name: 'Cut', exact: true }).click()
+  await page.getByRole('button', { name: 'Paste (1)', exact: true }).click()
+  try {
+    const pasting = page.getByRole('button', { name: 'Pasting… (1)', exact: true })
+    await expect(pasting).toBeDisabled()
+    await page.keyboard.press('Control+v')
+    await pasting.dispatchEvent('click')
+    await expect.poll(() => requests).toBe(1)
+    await page.getByRole('button', { name: /^Background jobs/ }).click()
+    const jobs = page.getByRole('dialog', { name: 'Background jobs', exact: true })
+    await expect(jobs.getByText('Starting operation…', { exact: true })).toBeVisible()
+    await expect(jobs.getByRole('article', { name: 'Indexing, Running', exact: true })).toBeVisible()
+  } finally {
+    release()
+  }
+  const jobs = page.getByRole('dialog', { name: 'Background jobs', exact: true })
+  await expect(jobs.getByRole('article', { name: 'Move / rename, Queued', exact: true })).toBeVisible()
+  await expect(jobs.getByText('Starting operation…', { exact: true })).toHaveCount(0)
+  expect(requests).toBe(1)
+})

@@ -110,7 +110,10 @@
     "emptyBin": "Empty bin",
     "emptyBinPrompt": "Permanently delete everything in this library’s recycle bin? This can’t be undone.",
     "purgePrompt": "Permanently delete “{{name}}”? This can’t be undone.",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "pasting": "Pasting…",
+    "addingToJobs": "Adding files to Background jobs…",
+    "waitingToPaste": "Waiting to paste…"
   },
   "renameFileAction": {
     "selectOneFileOrFolderToRename": "Select one file or folder to rename.",
