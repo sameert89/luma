@@ -23,7 +23,7 @@ const image = {
 } as Media
 
 describe('media viewing', () => {
-  it('animates Flick videos only once their own frame is ready, without a poster flash', () => {
+  it('shows only decoded Flick frames without entry animation or poster flash', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -36,14 +36,14 @@ describe('media viewing', () => {
       expect(first).toHaveClass('opacity-0')
       expect(screen.queryByRole('button', { name: 'Play video' })).not.toBeInTheDocument()
       fireEvent.loadedData(first)
-      expect(first).toHaveClass('motion-media')
+      expect(first).not.toHaveClass('motion-media')
       expect(first).not.toHaveClass('opacity-0')
       fireEvent.play(first)
       fireEvent.playing(first)
       fireEvent.waiting(first)
       fireEvent.playing(first)
       expect(container.querySelector('video')).toBe(first)
-      expect(first).toHaveClass('motion-media')
+      expect(first).not.toHaveClass('motion-media')
       // Each swipe starts fresh, including a quick return before the next clip decodes.
       rerender(<MediaStage item={{ ...clip, id: 2 }} reels onNavigate={vi.fn()} />)
       expect(container.querySelector('video')).toHaveClass('opacity-0')
@@ -54,7 +54,7 @@ describe('media viewing', () => {
       expect(returned).not.toBe(first)
       expect(returned).toHaveClass('opacity-0')
       fireEvent.playing(returned)
-      expect(returned).toHaveClass('motion-media')
+      expect(returned).not.toHaveClass('motion-media')
       expect(returned).not.toHaveClass('opacity-0')
     } finally {
       vi.restoreAllMocks()
@@ -850,4 +850,35 @@ it('shows an Autoplay toggle in the viewer player bar but not in Reels', async (
   } finally {
     vi.restoreAllMocks()
   }
+})
+
+it('leaves vertical drags and wheel input to native Flick scrolling, including the right edge', () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const navigate = vi.fn()
+  const { container } = render(
+    <MediaStage item={{ ...image, mediaType: 'video' }} reels scrollNavigation onNavigate={navigate} />,
+  )
+  const stage = container.querySelector('.touch-pan-y') as HTMLElement
+  stage.setPointerCapture = () => {}
+  vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 400,
+    height: 800,
+    right: 400,
+    bottom: 800,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  })
+  fireEvent.pointerDown(stage, { pointerId: 1, button: 0, clientX: 350, clientY: 500 })
+  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 350, clientY: 250 })
+  fireEvent.pointerCancel(stage, { pointerId: 1 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 350, clientY: 250 })
+  fireEvent.wheel(stage, { deltaY: 180 })
+  expect(navigate).not.toHaveBeenCalled()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  vi.restoreAllMocks()
 })

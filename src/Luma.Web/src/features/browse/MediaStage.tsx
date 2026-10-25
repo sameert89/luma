@@ -51,6 +51,7 @@ const pictureInPictureAvailable =
 export function MediaStage({
   item,
   reels = false,
+  scrollNavigation = false,
   muted = false,
   suspended = false,
   preparing = false,
@@ -76,6 +77,7 @@ export function MediaStage({
 }: {
   item: Media
   reels?: boolean
+  scrollNavigation?: boolean
   muted?: boolean
   suspended?: boolean
   preparing?: boolean
@@ -178,7 +180,7 @@ export function MediaStage({
   // gestures (double tap likes, swipes move on) instead of picture controls.
   const zoomable = !isVideo && !reels
   // Fullscreen chrome steps aside while media plays; a paused video keeps its controls.
-  const chromeHidden = useIdle(isFullscreen) && !(isVideo && !playing)
+  const chromeHidden = useIdle(isFullscreen && presented && (!isVideo || playing) && !optionsOpen)
   const originalUrl = `/api/media/${item.id}/original`
   useLayoutEffect(() => {
     setZoom(1)
@@ -429,7 +431,13 @@ export function MediaStage({
     const dy = event.clientY - gesture.current.y
     const along = reels ? dy : dx
     const across = reels ? dx : dy
-    if (zoom === 1 && !gesture.current.distance && Math.abs(along) > 60 && Math.abs(along) > Math.abs(across))
+    if (
+      !(reels && scrollNavigation) &&
+      zoom === 1 &&
+      !gesture.current.distance &&
+      Math.abs(along) > 60 &&
+      Math.abs(along) > Math.abs(across)
+    )
       onNavigate(along < 0 ? 'next' : 'previous')
     else if (!gesture.current.distance && zoomable && Math.hypot(dx, dy) < 10) {
       const now = Date.now()
@@ -653,9 +661,9 @@ export function MediaStage({
     <div className="relative flex h-full min-h-0 w-full flex-col">
       <div
         ref={host}
-        className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden ${reels ? 'bg-canvas' : 'bg-black'} ${chromeHidden ? 'cursor-none' : ''}`}
+        className={`relative flex min-h-0 flex-1 ${reels && scrollNavigation ? 'touch-pan-y' : 'touch-none'} select-none items-center justify-center overflow-hidden ${reels ? 'bg-canvas' : 'bg-black'} ${chromeHidden ? 'cursor-none' : ''}`}
         onWheel={event => {
-          if (reels && Math.abs(event.deltaY) > 40 && Date.now() - lastWheel.current > 500) {
+          if (reels && !scrollNavigation && Math.abs(event.deltaY) > 40 && Date.now() - lastWheel.current > 500) {
             lastWheel.current = Date.now()
             onNavigate(event.deltaY > 0 ? 'next' : 'previous')
           } else if (!reels && item.mediaType === 'image') scale(zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1))
@@ -674,6 +682,7 @@ export function MediaStage({
           // previous/next swipes everywhere else, so the gestures remain unambiguous.
           if (
             isVideo &&
+            !(reels && scrollNavigation) &&
             pointers.current.size === 1 &&
             event.clientX > bounds.left + bounds.width * 0.75 &&
             event.clientY < bounds.bottom - seekStripHeight
@@ -822,7 +831,7 @@ export function MediaStage({
               if (!preparing) playbackFailed.current?.()
               setFailure(t('browse:mediaStage.thisVideoCouldNotPlayCopyItsStreamURL'))
             }}
-            className={`pointer-events-none h-full w-full ${!reels || (frameReady && presented) ? 'motion-media' : frameReady ? '' : 'opacity-0'} ${displayFill ? 'object-cover' : 'object-contain'}`}
+            className={`pointer-events-none h-full w-full ${!reels ? 'motion-media' : frameReady ? '' : 'opacity-0'} ${displayFill ? 'object-cover' : 'object-contain'}`}
           >
             {captions.track}
           </video>
@@ -831,7 +840,7 @@ export function MediaStage({
             key={item.id}
             data-axis={reels ? 'vertical' : 'horizontal'}
             data-direction={direction}
-            className="motion-media flex h-full w-full items-center justify-center"
+            className={`${reels && scrollNavigation ? '' : 'motion-media'} flex h-full w-full items-center justify-center`}
           >
             <div
               className="flex h-full w-full items-center justify-center"
