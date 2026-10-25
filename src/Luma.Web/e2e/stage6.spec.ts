@@ -353,3 +353,33 @@ test('fullscreen controls cover the bottom edge and fade after pointer activatio
   await expect(bar).toHaveCSS('opacity', '0', { timeout: 6000 })
   await expect(video).toHaveJSProperty('paused', false)
 })
+
+test('holding 2x replaces the top bar in portrait and landscape and restores it on release', async ({ page }) => {
+  for (const viewport of [
+    { width: 400, height: 800 },
+    { width: 900, height: 500 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.goto('/?q=stage6-video')
+    await page.getByTestId('media-cell').first().click()
+    const viewer = page.getByRole('dialog')
+    const video = viewer.locator('video')
+    await video.evaluate(async player => {
+      player.loop = true
+      await player.play()
+    })
+    const bounds = (await video.boundingBox())!
+    const header = viewer.locator('header')
+    await expect(header).toBeVisible()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height * 0.4)
+    await page.mouse.down()
+    const boost = viewer.getByText('2×', { exact: true })
+    await expect(boost).toBeVisible()
+    await expect(header).toBeHidden()
+    expect((await boost.boundingBox())!.y - bounds.y).toBeLessThan(40)
+    await page.mouse.up()
+    await expect(boost).toHaveCount(0)
+    await expect(header).toBeVisible()
+    await expect(viewer.getByRole('button', { name: 'Close viewer' })).toBeVisible()
+  }
+})

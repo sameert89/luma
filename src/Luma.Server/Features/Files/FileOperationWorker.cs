@@ -32,6 +32,11 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 await ExecuteOperationAsync(row, recovering: false, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (SqliteException error) when (Database.IsBusy(error))
+            {
+                logger.LogDebug("File operation worker is waiting for the database writer");
+                await Task.Delay(1000, stoppingToken);
+            }
             catch (Exception error)
             {
                 logger.LogError(error, "File operation worker could not progress");
@@ -42,17 +47,25 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
 
     // Admission journals visible-file changes during discovery; execution still waits
     // for its readers to finish. Queued scans yield to queued file operations.
+    private const string ClaimCandidate = """
+        SELECT o.Id FROM FileOperations o WHERE o.State='queued'
+          AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
+          AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
+          AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
+          AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.ReplacementId=o.Id)
+        ORDER BY o.CreatedAt LIMIT 1
+        """;
+
     internal async Task<FileOperation?> ClaimAsync(CancellationToken ct)
     {
+        // Empty queues and work blocked by discovery need only a read. Recheck the
+        // same eligibility atomically when actually claiming a runnable operation.
+        await using (var lookup = await database.OpenAsync(ct))
+            if (!await lookup.ExecuteScalarAsync<bool>(new CommandDefinition($"SELECT EXISTS({ClaimCandidate})", cancellationToken: ct))) return null;
+        await database.YieldToForegroundAsync(ct);
         await using var db = await operations.OpenJournalAsync(ct);
-        return await db.QuerySingleOrDefaultAsync<FileOperation>(new CommandDefinition("""
-            UPDATE FileOperations SET State='running' WHERE Id=(
-              SELECT o.Id FROM FileOperations o WHERE o.State='queued'
-              AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
-              AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
-              AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
-              AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.ReplacementId=o.Id)
-              ORDER BY o.CreatedAt LIMIT 1) AND State='queued' RETURNING *
+        return await db.QuerySingleOrDefaultAsync<FileOperation>(new CommandDefinition($"""
+            UPDATE FileOperations SET State='running' WHERE Id=({ClaimCandidate}) AND State='queued' RETURNING *
             """, cancellationToken: ct));
     }
 
@@ -269,6 +282,14 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         // Index only the newly published path, never its siblings. Replaying this is idempotent.
         if (row.Kind is "copy" or "upload")
             await ScanWorker.IndexPublishedPathAsync(database, root, row.Destination!, ct, importMetadata: row.Kind == "upload");
+        var parentTimes = new Dictionary<string, long>();
+        foreach (var path in new[] { row.Source, row.Destination }.OfType<string>())
+        {
+            var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
+            var directory = MutationPaths.Resolve(root, parent, allowRoot: true);
+            if (Directory.Exists(directory)) parentTimes[root.Key(parent)] = Directory.GetLastWriteTimeUtc(directory).Ticks;
+        }
+        var mkdirTicks = row.Kind == "mkdir" ? Directory.GetLastWriteTimeUtc(MutationPaths.Resolve(root, row.Source)).Ticks : 0;
         await using var db = await operations.OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
         if (await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM FileOperations WHERE Id=@Id", row, tx, cancellationToken: ct)) == "completed") return;
@@ -335,7 +356,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         {
             var folderId = await EnsureFolderAsync(db, tx, root, row.Source, ct);
             await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET DirectIndexedAt=@now,SourceModifiedTicks=@ticks WHERE Id=@folderId",
-                new { folderId, now = DateTimeOffset.UtcNow.ToString("O"), ticks = Directory.GetLastWriteTimeUtc(MutationPaths.Resolve(root, row.Source)).Ticks }, tx, cancellationToken: ct));
+                new { folderId, now = DateTimeOffset.UtcNow.ToString("O"), ticks = mkdirTicks }, tx, cancellationToken: ct));
         }
         else if (row.Kind == "upload")
         {
@@ -345,14 +366,28 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         if (row.Kind is "restore" or "purge")
             await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET Restored=1 WHERE Id=@RecycleId", row, tx, cancellationToken: ct));
         await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='completed',FinishedAt=@now,FailureCode=NULL WHERE Id=@Id", new { row.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
-        foreach (var path in new[] { row.Source, row.Destination }.OfType<string>())
+        foreach (var parent in parentTimes)
+            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET SourceModifiedTicks=@ticks WHERE LibraryId=@Id AND PathKey=@key",
+                new { root.Id, key = parent.Key, ticks = parent.Value }, tx, cancellationToken: ct));
+        // Filesystem directory times do not change when the directory itself moves,
+        // and a child's content may change below its immediate parent. Keep the
+        // browse sort key as the latest observed source time or Luma activity.
+        var changedPaths = row.Kind switch
         {
-            var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
-            var directory = MutationPaths.Resolve(root, parent, allowRoot: true);
-            if (Directory.Exists(directory))
-                await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET SourceModifiedTicks=@ticks WHERE LibraryId=@Id AND PathKey=@key",
-                    new { root.Id, key = root.Key(parent), ticks = Directory.GetLastWriteTimeUtc(directory).Ticks }, tx, cancellationToken: ct));
-        }
+            "copy" or "upload" or "restore" => new[] { row.Destination! },
+            "move" => new[] { row.Source, row.Destination! },
+            "mkdir" or "recycle" or "delete" => new[] { row.Source },
+            _ => Array.Empty<string>()
+        };
+        var changedFolders = changedPaths.Select(path => root.Key(path.Contains('/') ? path[..path.LastIndexOf('/')] : "")).ToHashSet();
+        if (row.IsDirectory && row.Kind is "mkdir" or "copy" or "move" or "restore")
+            changedFolders.Add(root.Key(row.Kind == "mkdir" ? row.Source : row.Destination!));
+        if (changedFolders.Count > 0)
+            await db.ExecuteAsync(new CommandDefinition("""
+                UPDATE Folders SET ModifiedTicks=MAX(ModifiedTicks,@ticks) WHERE Id IN (
+                  SELECT a.AncestorId FROM FolderAncestry a WHERE a.DescendantId IN (
+                    SELECT Id FROM Folders WHERE LibraryId=@Id AND PathKey IN @keys));
+                """, new { root.Id, keys = changedFolders.ToArray(), ticks = DateTimeOffset.UtcNow.UtcTicks }, tx, cancellationToken: ct));
         tx.Commit();
         row.State = "completed";
     }

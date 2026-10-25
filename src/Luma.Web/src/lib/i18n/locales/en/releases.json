@@ -8,6 +8,7 @@
         "More natural wording throughout Settings, Help, uploads and file management.",
         "Uploads reconnect when you return to Luma, with one button to retry any failures.",
         "Flick scrolls with your finger in both directions, and fullscreen controls fade reliably.",
+        "Folder dates follow renames, moves and uploads, with lighter folder refreshes.",
         "Docker builds now compile one app at a time to ease memory pressure on small servers.",
         "Pull down in a folder to check for new or changed files without scanning its subfolders.",
         "Select folders with a tap, with cut, copy, rename and delete in each item’s menu.",

@@ -97,3 +97,11 @@ view as discovery finishes. Search and other unscoped views only reload their
 indexed results, as does the separate Refresh collection menu action.
 
 After a successful traversal, missing child folders and their descendants are hidden from browsing while retaining their IDs and metadata. A shallow refresh detects removal of immediate child folders without walking their old contents; folders elsewhere stay untouched. Rediscovered folders keep their identity. Failed or interrupted scans never reconcile missing folders.
+
+### Short folder refresh transactions
+
+Refresh-on-open reads the stored folder row and probes its directory timestamp before taking any write transaction. An unchanged folder with no missing processing or metadata work returns without acquiring SQLite's writer lock. Admission rechecks the folder after the probe so a concurrent rename is retried. Slow USB/network timestamp reads therefore cannot hold the database writer. Scan completion and file-operation parent timestamp observations also happen before their write transactions.
+
+Shallow reconciliation seeks `Media` by `FolderId` using `IX_Media_Folder`. It covers the selected directory plus the known descendants of missing immediate children, rather than rechecking unrelated media/missing folders/processing jobs across the library. Recursive and full-library scans retain their respective scopes. Idle file-operation polls use a read-only existence check, yield to foreground requests before claiming actual work, and treat transient writer contention as waiting.
+
+Folder modified ordering uses the latest observed directory time or committed Luma activity. Renaming/moving a folder updates the folder and affected ancestors; content uploads, moves, renames, copies and deletions update affected parents and ancestors. Copies do not modify the source folder; purging an already recycled item does not modify its old public parent. Source checkpoints remain separate, so a later scan cannot erase a move/rename timestamp. Migration 37 repairs stored checkpoint dates and reconstructs known directory move/restore activity from immutable operation snapshots. All browse ordering remains database-only and uses the existing modified-date index.

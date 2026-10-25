@@ -84,41 +84,58 @@ public static class IndexingEndpoints
             (long id, Database database, IndexingOptions options, ScanWorker worker, HttpContext context, CancellationToken ct) =>
         {
             await using var db = await database.OpenAsync(ct);
-            using var tx = db.BeginTransaction();
             var folder = await db.QuerySingleOrDefaultAsync<FolderIndexRow>(new CommandDefinition("""
                 SELECT f.LibraryId,f.RelativePath,f.DirectIndexedAt,f.SourceModifiedTicks,
                   l.MetadataMode,l.RefreshOnOpen FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId
                 WHERE f.Id=@id AND l.Enabled=1
-                """, new { id }, tx, cancellationToken: ct));
+                """, new { id }, cancellationToken: ct));
             if (folder is null) return Problem(404, context);
+            // Probing a sleeping USB/network directory must never own SQLite's writer lock.
+            long? observedTicks = null;
             if (folder.DirectIndexedAt is not null && folder.RefreshOnOpen)
             {
                 var root = options.Libraries.Find(x => x.Id == folder.LibraryId);
                 try
                 {
                     var path = root is null ? null : folder.RelativePath.Length == 0 ? root.Path : SourcePaths.Resolve(root, folder.RelativePath);
-                    // Directory timestamps can be re-read with slightly different precision on
-                    // Windows and network filesystems. The watcher handles immediate changes;
-                    // refresh-on-open only needs to treat a material timestamp move as a fallback.
-                    var sourceTicks = path is null ? folder.SourceModifiedTicks : Directory.GetLastWriteTimeUtc(path).Ticks;
-                    if (path is not null && (folder.SourceModifiedTicks == 0 || Math.Abs(sourceTicks - folder.SourceModifiedTicks) >= TimeSpan.TicksPerSecond))
-                    {
-                        if (await db.ExecuteScalarAsync<bool>(new CommandDefinition(
-                            "SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))", folder, tx, cancellationToken: ct)))
-                        {
-                            worker.PrioritizeFolder(folder.LibraryId, id);
-                            return Problem(409, context);
-                        }
-                        var refreshScanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
+                    if (path is not null) observedTicks = Directory.GetLastWriteTimeUtc(path).Ticks;
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            }
+            ct.ThrowIfCancellationRequested();
+            var changed = observedTicks is { } ticks && (folder.SourceModifiedTicks == 0 || Math.Abs(ticks - folder.SourceModifiedTicks) >= TimeSpan.TicksPerSecond);
+            var needsProcessing = folder.DirectIndexedAt is null || await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
+                SELECT EXISTS(SELECT 1 FROM Media m WHERE m.FolderId=@id AND m.Availability='present' AND m.ProcessingStatus='pending'
+                  AND NOT EXISTS(SELECT 1 FROM ProcessingJobs j JOIN Scans s ON s.Id=j.ScanId
+                    WHERE j.MediaId=m.Id AND j.SourceRevision=m.SourceRevision AND j.EncoderVersion=@version
+                      AND j.State IN ('pending','running') AND s.State IN ('running','completed')))
+                """, new { id, version = IndexingOptions.EncoderVersion }, cancellationToken: ct));
+            if (!changed && !needsProcessing && !await HasMissingMetadataAsync(db, null, folder.LibraryId, id, folder.MetadataMode, ct))
+                return TypedResults.NoContent();
+            using var tx = db.BeginTransaction();
+            // Admission rechecks the row after filesystem I/O; a concurrent rename is retried.
+            var current = await db.QuerySingleOrDefaultAsync<FolderIndexRow>(new CommandDefinition("""
+                SELECT f.LibraryId,f.RelativePath,f.DirectIndexedAt,f.SourceModifiedTicks,l.MetadataMode,l.RefreshOnOpen
+                FROM Folders f JOIN Libraries l ON l.Id=f.LibraryId WHERE f.Id=@id AND l.Enabled=1
+                """, new { id }, tx, cancellationToken: ct));
+            if (current is null) return Problem(404, context);
+            if (current.RelativePath != folder.RelativePath || current.LibraryId != folder.LibraryId) return Problem(409, context);
+            folder = current;
+            if (folder.RefreshOnOpen && observedTicks is { } observed && (folder.SourceModifiedTicks == 0 || Math.Abs(observed - folder.SourceModifiedTicks) >= TimeSpan.TicksPerSecond))
+            {
+                if (await db.ExecuteScalarAsync<bool>(new CommandDefinition(
+                    "SELECT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@LibraryId AND State IN ('queued','running'))", folder, tx, cancellationToken: ct)))
+                {
+                    worker.PrioritizeFolder(folder.LibraryId, id);
+                    return Problem(409, context);
+                }
+                var refreshScanId = await db.ExecuteScalarAsync<long>(new CommandDefinition("""
                             INSERT INTO Scans(LibraryId,FolderId,Recursive,State,StartedAt,MetadataMode,Priority)
                             VALUES(@LibraryId,@id,0,'queued',@now,@MetadataMode,2) RETURNING Id
                             """, new { folder.LibraryId, id, folder.MetadataMode, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
-                        await QueueMetadataAsync(db, tx, refreshScanId, folder.LibraryId, id, folder.MetadataMode, ct);
-                        tx.Commit();
-                        return TypedResults.Accepted($"/api/scans/{refreshScanId}", new ScanAccepted(refreshScanId));
-                    }
-                }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+                await QueueMetadataAsync(db, tx, refreshScanId, folder.LibraryId, id, folder.MetadataMode, ct);
+                tx.Commit();
+                return TypedResults.Accepted($"/api/scans/{refreshScanId}", new ScanAccepted(refreshScanId));
             }
             if (folder.DirectIndexedAt is not null && !await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
                 SELECT EXISTS(SELECT 1 FROM Media m WHERE m.FolderId=@id AND m.Availability='present' AND m.ProcessingStatus='pending'
@@ -307,11 +324,11 @@ public static class IndexingEndpoints
     // provided the library imports metadata. Media an import already attempted with the same
     // sidecar setting is not retried, so a file that fails to import cannot re-queue on every visit.
     // A full queue skips the catch-up instead of failing the visit; the next visit tries again.
-    private static async Task QueueMissingMetadataAsync(SqliteConnection db, SqliteTransaction tx, long libraryId, long folderId, string mode, CancellationToken ct)
+    private static async Task<bool> HasMissingMetadataAsync(SqliteConnection db, SqliteTransaction? tx, long libraryId, long folderId, string mode, CancellationToken ct)
     {
-        if (mode == "none") return;
+        if (mode == "none") return false;
         var sidecars = mode == "xmp";
-        if (!await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
+        return await db.ExecuteScalarAsync<bool>(new CommandDefinition("""
             SELECT EXISTS(SELECT 1 FROM Media m WHERE m.FolderId=@folderId AND m.Availability='present'
                 AND NOT EXISTS(SELECT 1 FROM MetadataRevisions r WHERE r.MediaId=m.Id AND r.IncludeSidecars>=@sidecars)
                 AND NOT EXISTS(SELECT 1 FROM MetadataJobItems i JOIN MetadataJobs j ON j.Id=i.JobId
@@ -322,7 +339,13 @@ public static class IndexingEndpoints
                   OR json_extract(j.Request,'$.Query.Recursive') AND json_extract(j.Request,'$.Query.FolderId') IN
                     (SELECT AncestorId FROM FolderAncestry WHERE DescendantId=@folderId)))
               AND (SELECT COUNT(*) FROM MetadataJobs WHERE State IN ('queued','running'))<16
-            """, new { libraryId, folderId, sidecars }, tx, cancellationToken: ct))) return;
+            """, new { libraryId, folderId, sidecars }, tx, cancellationToken: ct));
+    }
+
+    private static async Task QueueMissingMetadataAsync(SqliteConnection db, SqliteTransaction tx, long libraryId, long folderId, string mode, CancellationToken ct)
+    {
+        if (!await HasMissingMetadataAsync(db, tx, libraryId, folderId, mode, ct)) return;
+        var sidecars = mode == "xmp";
         var request = new MetadataJobRequest(Query: new MediaQuery { LibraryId = libraryId, FolderId = folderId, Recursive = false }.Normalize(),
             IncludeSidecars: sidecars, Automatic: true);
         await db.ExecuteAsync(new CommandDefinition("INSERT INTO MetadataJobs(Kind,State,Request,CreatedAt) VALUES('import','queued',@request,@now)",

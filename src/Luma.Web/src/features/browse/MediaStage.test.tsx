@@ -383,7 +383,10 @@ describe('media viewing', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
     vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false)
     try {
-      const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={vi.fn()} />)
+      const boosted = vi.fn()
+      const { container } = render(
+        <MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={vi.fn()} onBoostChange={boosted} />,
+      )
       const video = container.querySelector('video')!
       const stage = video.parentElement!
       vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ top: 0, left: 0, width: 900, height: 600 } as DOMRect)
@@ -422,11 +425,13 @@ describe('media viewing', () => {
         await vi.advanceTimersByTimeAsync(500)
       })
       expect(video.playbackRate).toBe(2)
-      expect(screen.getByText('2×')).toBeInTheDocument()
+      expect(screen.getByText('2×')).toHaveClass('top-4', 'sm:top-6')
+      expect(boosted).toHaveBeenLastCalledWith(true)
       act(() => {
         stage.dispatchEvent(new PointerEvent('pointerup', hold))
       })
       expect(video.playbackRate).toBe(1)
+      expect(boosted).toHaveBeenLastCalledWith(false)
       await act(async () => {
         await vi.advanceTimersByTimeAsync(400)
       })

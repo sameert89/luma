@@ -54,6 +54,26 @@ public sealed class FolderMetadataTests
         Assert.Equal(time.AddDays(3).Ticks, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath='newer'"));
     }
 
+    [Fact]
+    public async Task A_shallow_scan_records_its_starting_folder_time_and_updates_ancestors()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "parent/child"));
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var child = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='parent/child'");
+        await db.ExecuteAsync("UPDATE Folders SET ModifiedTicks=100");
+        var changed = new DateTime(2022, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        Directory.SetLastWriteTimeUtc(Path.Combine(f.Root.Path, "parent/child"), changed);
+        var scan = await f.NewScanAsync();
+        scan.FolderId = child;
+        scan.Recursive = false;
+        await db.ExecuteAsync("UPDATE Scans SET FolderId=@child,Recursive=0 WHERE Id=@Id", new { child, scan.Id });
+        await f.Scanner.ScanAsync(scan, f.Root, default);
+        Assert.Equal(changed.Ticks, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE Id=@child", new { child }));
+        Assert.Equal(changed.Ticks, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath='parent'"));
+    }
+
     [Theory]
     [InlineData("asc")]
     [InlineData("desc")]

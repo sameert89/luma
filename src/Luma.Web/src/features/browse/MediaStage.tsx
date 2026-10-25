@@ -60,6 +60,7 @@ export function MediaStage({
   onPlaybackFailed,
   playbackSettings,
   onPlaybackSettingsChange,
+  onBoostChange,
   loop = false,
   autoPlay = false,
   autoplayNext,
@@ -85,6 +86,7 @@ export function MediaStage({
   onPlaybackStarted?: () => void
   onPlaybackFailed?: () => void
   playbackSettings?: { volume: number; rate: number }
+  onBoostChange?: (boosted: boolean) => void
   onPlaybackSettingsChange?: (value: { volume: number; rate: number }) => void
   loop?: boolean
   autoPlay?: boolean
@@ -172,6 +174,10 @@ export function MediaStage({
   const [burst, setBurst] = useState<{ dislike: boolean; key: number } | null>(null)
   const [buffering, setBuffering] = useState(false)
   const [boosted, setBoosted] = useState(false)
+  useLayoutEffect(() => {
+    onBoostChange?.(boosted)
+  }, [boosted, onBoostChange])
+  useEffect(() => () => onBoostChange?.(false), [onBoostChange])
   const [skip, setSkip] = useState<{ forward: boolean; key: number } | null>(null)
   const [flash, setFlash] = useState<{ playing: boolean; key: number } | null>(null)
   const isVideo = item.mediaType === 'video'
@@ -925,7 +931,7 @@ export function MediaStage({
         {boosted && (
           <span
             aria-hidden="true"
-            className={`pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-canvas/80 px-3 py-1 text-sm font-semibold text-ink ${reels ? 'top-4 sm:top-6' : 'top-20 sm:top-24'}`}
+            className="pointer-events-none absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-1 rounded-full bg-canvas/80 px-3 py-1 text-sm font-semibold text-ink sm:top-6"
           >
             <FastForward className="size-4" />
             2×

@@ -26,6 +26,73 @@ public sealed class FileOperationTests
     }
 
     [Theory]
+    [InlineData("move", "source/album", "source/renamed", "source", "source/renamed", true)]
+    [InlineData("move", "source/album", "destination/album", "destination", "destination/album", true)]
+    [InlineData("move", "source/album/photo.jpg", "source/album/renamed.jpg", "source", "source/album", true)]
+    [InlineData("move", "source/album/photo.jpg", "destination/photo.jpg", "destination", "destination", true)]
+    [InlineData("copy", "source/album", "destination/album", "destination", "destination/album", false)]
+    public async Task File_changes_refresh_folder_activity_and_ancestors_without_aging_on_rescan(
+        string kind, string source, string target, string newest, string changed, bool sourceChanged)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "source/album"));
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "destination"));
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "untouched"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "source/album/photo.jpg"), "original");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Folders SET ModifiedTicks=100");
+        var before = DateTimeOffset.UtcNow.UtcTicks;
+        var (operations, worker) = Services(f);
+        Assert.Equal("completed", (await RunAsync(operations, worker, f, new(1, kind, source, target))).State);
+        Assert.True(await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath=@changed", new { changed }) >= before);
+        Assert.Equal(100, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath='untouched'"));
+        if (!sourceChanged) Assert.Equal(100, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath='source'"));
+        var signer = new Luma.Server.Features.Media.CursorSigner(f.Database);
+        await signer.InitializeAsync(default);
+        var browser = new Luma.Server.Features.Libraries.LibraryBrowser(f.Database, signer);
+        var first = (await browser.FoldersAsync(1, null, 1, null, default, "modified", "desc")).Items.Single();
+        // When both move parents changed at once, their stable ID breaks the tie.
+        Assert.Contains(first.Name, sourceChanged ? new[] { "source", newest } : new[] { newest });
+        Directory.SetLastWriteTimeUtc(Path.Combine(f.Root.Path, changed), new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        await f.ScanAsync();
+        Assert.True(await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath=@changed", new { changed }) >= before);
+    }
+
+    [Fact]
+    public async Task Upgrade_repairs_checkpoint_dates_and_reconstructs_a_moved_directorys_activity()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var before = DateTimeOffset.UtcNow.UtcTicks;
+        await RunAsync(operations, worker, f, new(1, "move", "album", "renamed"));
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Folders SET ModifiedTicks=100,SourceModifiedTicks=200; DELETE FROM SchemaMigrations WHERE Version=37");
+        await new Luma.Server.Data.MigrationRunner(f.Database).ApplyAsync(default);
+        Assert.True(await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath='renamed'") >= before);
+        Assert.Equal(200, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE ParentId IS NULL"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_idle_or_scan_blocked_file_worker_does_not_take_the_writer_lock(bool blocked)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, worker) = Services(f);
+        if (blocked)
+        {
+            await operations.QueueAsync(new(1, "mkdir", "new-folder"), default);
+            await f.NewScanAsync();
+        }
+        await using var db = await f.Database.OpenAsync(default);
+        using var held = db.BeginTransaction();
+        Assert.Null(await worker.ClaimAsync(default));
+    }
+
+    [Theory]
     [InlineData("move", "running")]
     [InlineData("copy", "running")]
     [InlineData("move", "queued")]

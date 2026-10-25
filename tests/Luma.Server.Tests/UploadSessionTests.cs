@@ -147,9 +147,11 @@ public sealed class UploadSessionTests
         var finalized = await uploads.FinalizeAsync(upload.Id, default);
         Assert.Equal(finalized.OperationId, (await uploads.FinalizeAsync(upload.Id, default)).OperationId);
         await using var db = await f.Database.OpenAsync(default);
-        await db.ExecuteAsync("UPDATE FileOperations SET State='running'");
+        await db.ExecuteAsync("UPDATE FileOperations SET State='running'; UPDATE Folders SET ModifiedTicks=100");
+        var before = DateTimeOffset.UtcNow.UtcTicks;
         await worker.ExecuteOperationAsync(await operations.GetAsync(finalized.OperationId!, default), false, default);
         Assert.Equal("completed", (await uploads.GetAsync(upload.Id, default)).State);
+        Assert.True(await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE ParentId IS NULL") >= before);
         Assert.False(Directory.Exists(Path.Combine(f.Root.Path, ".luma-uploads", upload.Id)));
         Assert.Equal("abcdef", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg")));
         Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Scans WHERE State='queued'"));
