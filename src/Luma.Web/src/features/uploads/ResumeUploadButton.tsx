@@ -1,17 +1,23 @@
-import { useRef } from 'react'
+import { useRef, useSyncExternalStore } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
 import { t } from '../../lib/i18n'
-import { resumeUpload, uploadAction, type QueuedUpload } from './uploadQueue'
+import { resumeUpload, uploadAction, subscribeUploads, uploadSelectionBlocked, type QueuedUpload } from './uploadQueue'
 
 export function ResumeUploadButton({ item, onError }: { item: QueuedUpload; onError: (message: string) => void }) {
   const input = useRef<HTMLInputElement>(null)
   const needsFile = !item.file
+  const blocked = useSyncExternalStore(subscribeUploads, uploadSelectionBlocked) && needsFile
   return (
     <>
       <QuietButton
+        disabled={blocked}
+        title={blocked ? t('uploads:uploadPicker.finishCurrentBatch') : undefined}
         onClick={() => {
-          if (needsFile) input.current?.click()
-          else void uploadAction(item.key, 'resume').catch(error => onError(String(error)))
+          if (needsFile) {
+            if (uploadSelectionBlocked() || !input.current) return
+            input.current.value = ''
+            input.current.click()
+          } else void uploadAction(item.key, 'resume').catch(error => onError(String(error)))
         }}
       >
         {t(needsFile ? 'uploads:uploadPicker.reselectFile' : 'uploads:uploadPicker.resumeRetry')}
@@ -19,11 +25,11 @@ export function ResumeUploadButton({ item, onError }: { item: QueuedUpload; onEr
       <input
         ref={input}
         type="file"
+        disabled={blocked}
         className="hidden"
         aria-label={t('uploads:uploadPicker.reselectUpload', { name: item.target })}
         onChange={event => {
           const file = event.target.files?.[0]
-          event.target.value = ''
           if (!file) return
           void resumeUpload(item.key, file)
             .then(() => onError(''))

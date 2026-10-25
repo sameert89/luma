@@ -11,6 +11,8 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
 {
     private string? cleanupAfter;
     private bool cleanupFinished;
+    private string? recycleCleanupAfter;
+    private bool recycleCleanupFinished;
 
     // Tests can stop execution at durable boundaries without guessing timing.
     internal Action<string>? Checkpoint { get; set; }
@@ -26,7 +28,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
             try
             {
                 var row = await ClaimAsync(stoppingToken);
-                if (row is null) { await CleanupOldUploadsAsync(stoppingToken); await Task.Delay(500, stoppingToken); continue; }
+                if (row is null) { await CleanupOldUploadsAsync(stoppingToken); await CleanupOldRecycleAsync(stoppingToken); await Task.Delay(500, stoppingToken); continue; }
                 await ExecuteOperationAsync(row, recovering: false, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
@@ -76,6 +78,30 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         }
         if (rows.Length > 0) cleanupAfter = rows[^1].Id;
         cleanupFinished = rows.Length < 16;
+    }
+
+    // A crash after metadata commit can skip immediate cleanup. Revisit only
+    // completed restore/purge journals; unknown and live recycle entries stay intact.
+    internal async Task CleanupOldRecycleAsync(CancellationToken ct)
+    {
+        if (recycleCleanupFinished) return;
+        await using var db = await database.OpenAsync(ct);
+        var rows = (await db.QueryAsync<FileOperation>(new CommandDefinition("""
+            SELECT * FROM FileOperations INDEXED BY IX_FileOperations_RecycleCleanup WHERE Id>@after
+              AND State='completed' AND Kind IN ('restore','purge') ORDER BY Id LIMIT 16
+            """, new { after = recycleCleanupAfter ?? "" }, cancellationToken: ct))).ToArray();
+        foreach (var row in rows)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var root = operations.WritableRoot(row.LibraryId);
+                MutationPaths.RemoveEmptyStaging(root, MutationPaths.TrashDirectory, row.RecycleId!);
+            }
+            catch (ApiRequestException) { /* An unavailable mount must not block other libraries. */ }
+        }
+        if (rows.Length > 0) recycleCleanupAfter = rows[^1].Id;
+        recycleCleanupFinished = rows.Length < 16;
     }
 
     internal async Task RecoverAsync(CancellationToken ct)

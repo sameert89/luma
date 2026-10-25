@@ -157,6 +157,38 @@ public sealed class FileOperationTests
         Assert.False(Directory.Exists(Path.Combine(f.Root.Path, ".luma-trash", recycled.Id)));
     }
 
+    [Theory]
+    [InlineData("restore")]
+    [InlineData("purge")]
+    public async Task Idle_cleanup_removes_only_known_empty_consumed_recycle_directories(string kind)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        var (operations, worker) = Services(f);
+        var recycled = await RunAsync(operations, worker, f, new(1, "recycle", "photo.jpg"));
+        await RunAsync(operations, worker, f, new(1, kind, "photo.jpg", RecycleId: recycled.Id));
+        var directory = Path.Combine(f.Root.Path, ".luma-trash", recycled.Id);
+        Directory.CreateDirectory(directory); // Historical leftover or skipped cleanup after commit.
+        var unknown = Path.Combine(f.Root.Path, ".luma-trash", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(unknown);
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "live.jpg"), "keep me");
+        var live = await RunAsync(operations, worker, f, new(1, "recycle", "live.jpg"));
+        var liveDirectory = Path.Combine(f.Root.Path, ".luma-trash", live.Id);
+        var pending = await operations.QueueAsync(new(1, "purge", "live.jpg", RecycleId: live.Id), default);
+        await worker.CleanupOldRecycleAsync(default);
+        Assert.False(Directory.Exists(directory));
+        Assert.True(Directory.Exists(unknown));
+        Assert.Equal("keep me", await File.ReadAllTextAsync(Path.Combine(liveDirectory, "content")));
+        await operations.CancelAsync(pending.Id, default);
+
+        // Unknown files inside a consumed directory must never be deleted by housekeeping.
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "unknown"), "keep me too");
+        var (_, restarted) = Services(f);
+        await restarted.CleanupOldRecycleAsync(default);
+        Assert.Equal("keep me too", await File.ReadAllTextAsync(Path.Combine(directory, "unknown")));
+    }
+
     [Fact]
     public async Task Recycle_and_restore_keep_identity_tags_preferences_and_hidden_state()
     {

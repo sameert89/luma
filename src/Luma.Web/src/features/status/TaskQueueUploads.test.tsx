@@ -21,6 +21,8 @@ const uploads = vi.hoisted(() => ({
 }))
 vi.mock('../uploads/uploadQueue', () => ({
   ...uploads,
+  uploadSelectionBlocked: () => false,
+  retryFailedUploads: vi.fn(),
   subscribeUploads: () => () => {},
   uploadSnapshot: () => uploads.items,
 }))

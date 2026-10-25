@@ -1,3 +1,4 @@
+import { startUploadRecovery } from '../features/uploads/uploadQueue'
 import { clipboardSnapshot, subscribeClipboard } from '../features/files/clipboard'
 import { t } from '../lib/i18n'
 import { FileConflictDialog } from '../features/files/FileConflictDialog'
@@ -166,6 +167,7 @@ function readPersistedView(): PersistedView | null {
 }
 
 export function App() {
+  useEffect(startUploadRecovery, [])
   const appearance = useAppearance()
   // An installed PWA can be relaunched at its start URL after Android closes it. History state and
   // the previous query string are then gone, so keep the last real destination independently.

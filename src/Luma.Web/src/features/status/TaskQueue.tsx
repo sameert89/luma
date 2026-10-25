@@ -1,3 +1,4 @@
+import { RetryFailedUploads } from '../uploads/RetryFailedUploads'
 import { ResumeUploadButton } from '../uploads/ResumeUploadButton'
 import { subscribeUploads, uploadSnapshot, uploadAction } from '../uploads/uploadQueue'
 import { t } from '../../lib/i18n'
@@ -126,6 +127,7 @@ export function TaskQueue() {
           {clear.isPending ? t('status:taskQueue.clearing') : t('status:taskQueue.clearFinished')}
         </QuietButton>
       </div>
+      <RetryFailedUploads />
       {indexing.data?.cachePressure && (
         <p role="status" className="text-sm text-danger">
           {t('status:taskQueue.previewStorageIsFullSoPreviewPreparationIsPaused')}
@@ -216,7 +218,9 @@ function TaskRow({ task }: { task: Task }) {
         ['reselect', 'failed', 'paused'].includes(upload.state) &&
         !['completed', 'cancelled', 'finalizing', 'needsAttention'].includes(task.state) && (
           <div className="mt-2 space-y-2">
-            {!upload.file && <p className="text-sm text-muted">{t('uploads:uploadPicker.reselectToResume')}</p>}
+            {(upload.error || !upload.file) && (
+              <p className="text-sm text-muted">{upload.error || t('uploads:uploadPicker.reselectToResume')}</p>
+            )}
             <ResumeUploadButton item={upload} onError={setUploadError} />
           </div>
         )}
