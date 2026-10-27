@@ -25,6 +25,237 @@ public sealed class FileOperationTests
         return await operations.GetAsync(row.Id, default);
     }
 
+    [Theory]
+    [InlineData("move", "source/album", "source/renamed", "source", "source/renamed", true)]
+    [InlineData("move", "source/album", "destination/album", "destination", "destination/album", true)]
+    [InlineData("move", "source/album/photo.jpg", "source/album/renamed.jpg", "source", "source/album", true)]
+    [InlineData("move", "source/album/photo.jpg", "destination/photo.jpg", "destination", "destination", true)]
+    [InlineData("copy", "source/album", "destination/album", "destination", "destination/album", false)]
+    public async Task File_changes_refresh_folder_activity_and_ancestors_without_aging_on_rescan(
+        string kind, string source, string target, string newest, string changed, bool sourceChanged)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "source/album"));
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "destination"));
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "untouched"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "source/album/photo.jpg"), "original");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Folders SET ModifiedTicks=100");
+        var before = DateTimeOffset.UtcNow.UtcTicks;
+        var (operations, worker) = Services(f);
+        Assert.Equal("completed", (await RunAsync(operations, worker, f, new(1, kind, source, target))).State);
+        Assert.True(await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath=@changed", new { changed }) >= before);
+        Assert.Equal(100, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath='untouched'"));
+        if (!sourceChanged) Assert.Equal(100, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath='source'"));
+        var signer = new Luma.Server.Features.Media.CursorSigner(f.Database);
+        await signer.InitializeAsync(default);
+        var browser = new Luma.Server.Features.Libraries.LibraryBrowser(f.Database, signer);
+        var first = (await browser.FoldersAsync(1, null, 1, null, default, "modified", "desc")).Items.Single();
+        // When both move parents changed at once, their stable ID breaks the tie.
+        Assert.Contains(first.Name, sourceChanged ? new[] { "source", newest } : new[] { newest });
+        Directory.SetLastWriteTimeUtc(Path.Combine(f.Root.Path, changed), new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        await f.ScanAsync();
+        Assert.True(await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath=@changed", new { changed }) >= before);
+    }
+
+    [Fact]
+    public async Task Upgrade_repairs_checkpoint_dates_and_reconstructs_a_moved_directorys_activity()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var before = DateTimeOffset.UtcNow.UtcTicks;
+        await RunAsync(operations, worker, f, new(1, "move", "album", "renamed"));
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE Folders SET ModifiedTicks=100,SourceModifiedTicks=200; DELETE FROM SchemaMigrations WHERE Version=37");
+        await new Luma.Server.Data.MigrationRunner(f.Database).ApplyAsync(default);
+        Assert.True(await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE RelativePath='renamed'") >= before);
+        Assert.Equal(200, await db.ExecuteScalarAsync<long>("SELECT ModifiedTicks FROM Folders WHERE ParentId IS NULL"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_idle_or_scan_blocked_file_worker_does_not_take_the_writer_lock(bool blocked)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, worker) = Services(f);
+        if (blocked)
+        {
+            await operations.QueueAsync(new(1, "mkdir", "new-folder"), default);
+            await f.NewScanAsync();
+        }
+        await using var db = await f.Database.OpenAsync(default);
+        using var held = db.BeginTransaction();
+        Assert.Null(await worker.ClaimAsync(default));
+    }
+
+    [Theory]
+    [InlineData("move", "running")]
+    [InlineData("copy", "running")]
+    [InlineData("move", "queued")]
+    [InlineData("copy", "queued")]
+    public async Task Visible_files_queue_during_discovery_and_execute_before_the_next_scan(string kind, string scanState)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "destination"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        await using var db = await f.Database.OpenAsync(default);
+        var mediaId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='photo.jpg'");
+        var scan = await f.NewScanAsync();
+        await db.ExecuteAsync("UPDATE Scans SET State=@scanState WHERE Id=@Id", new { scan.Id, scanState });
+        var accepted = await operations.QueueAsync(new(1, kind, "photo.jpg", "destination/photo.jpg"), default, mediaId: mediaId);
+        Assert.Equal("queued", (await operations.GetAsync(accepted.Id, default)).State);
+        Assert.True(File.Exists(Path.Combine(f.Root.Path, "photo.jpg")));
+        if (scanState == "running")
+        {
+            Assert.Null(await worker.ClaimAsync(default));
+            // Discovery can still add records after admission. Nothing moves under its reader.
+            await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "late.jpg"), "late arrival");
+            await f.Scanner.ScanAsync(scan, f.Root, default);
+            Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Media WHERE RelativePath='late.jpg'"));
+        }
+        var claimed = Assert.IsType<FileOperation>(await worker.ClaimAsync(default));
+        Assert.Equal(accepted.Id, claimed.Id);
+        await worker.ExecuteOperationAsync(claimed, false, default);
+        Assert.Equal("completed", (await operations.GetAsync(accepted.Id, default)).State);
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(f.Root.Path, "destination", "photo.jpg")));
+        Assert.Equal(kind == "copy", File.Exists(Path.Combine(f.Root.Path, "photo.jpg")));
+        if (kind == "move")
+            Assert.Equal(mediaId, await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='destination/photo.jpg'"));
+        if (scanState == "queued")
+            Assert.Equal("queued", await db.ExecuteScalarAsync<string>("SELECT State FROM Scans WHERE Id=@Id", scan));
+    }
+
+    [Fact]
+    public async Task A_folder_still_waits_for_discovery_and_visible_files_do_not_bypass_recovery()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, _) = Services(f);
+        await using var db = await f.Database.OpenAsync(default);
+        var folderId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Folders WHERE RelativePath='album'");
+        var mediaId = await db.ExecuteScalarAsync<long>("SELECT Id FROM Media WHERE RelativePath='photo.jpg'");
+        var scan = await f.NewScanAsync();
+        var folderError = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "album", "renamed"), default, folderId: folderId));
+        Assert.Equal("library_busy", folderError.Code);
+        await db.ExecuteAsync("UPDATE Scans SET State='completed' WHERE Id=@Id", scan);
+        var pending = await operations.QueueAsync(new(1, "move", "album", "renamed"), default, folderId: folderId);
+        await db.ExecuteAsync("UPDATE FileOperations SET State='needsAttention' WHERE Id=@Id", pending);
+        var fileError = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "photo.jpg", "renamed.jpg"), default, mediaId: mediaId));
+        Assert.Equal("library_busy", fileError.Code);
+        Assert.Equal(1, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM FileOperations"));
+    }
+
+    [Theory]
+    [InlineData("folder")]
+    [InlineData("file")]
+    [InlineData("mixed")]
+    public async Task Clipboard_materializes_nullable_union_columns_for_every_selection(string selection)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "album"));
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        await using var db = await f.Database.OpenAsync(default);
+        var entries = (await db.QueryAsync<FileClipboardEntry>("""
+            SELECT LibraryId,RelativePath,Id AS MediaId,NULL AS FolderId FROM Media WHERE @selection IN ('file','mixed')
+            UNION ALL
+            SELECT LibraryId,RelativePath,NULL AS MediaId,Id AS FolderId FROM Folders WHERE ParentId IS NOT NULL AND @selection IN ('folder','mixed')
+            """, new { selection })).ToArray();
+        Assert.Equal(selection == "mixed" ? 2 : 1, entries.Length);
+        Assert.All(entries, entry => Assert.Equal(1, entry.LibraryId));
+        Assert.All(entries, entry => Assert.True(entry.MediaId.HasValue ^ entry.FolderId.HasValue));
+        if (selection != "file") Assert.Contains(entries, entry => entry.RelativePath == "album" && entry.FolderId.HasValue);
+    }
+
+    [Fact]
+    public async Task Recycle_paging_keeps_items_with_identical_deletion_timestamps()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, _) = Services(f);
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("""
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<101)
+            INSERT INTO FileOperations(Id,LibraryId,Kind,Source,IsDirectory,SourceSize,SourceModifiedTicks,State,CreatedAt)
+            SELECT printf('%032x',x),1,'recycle','photo-'||x,0,0,0,'completed','2026-10-24T00:00:00Z' FROM n;
+            """);
+        var first = await operations.TrashAsync(1, null, default);
+        Assert.Equal(100, first.Count);
+        var last = first[^1];
+        var second = await operations.TrashAsync(1, last.CreatedAt + "|" + last.Id, default);
+        Assert.Single(second);
+        Assert.DoesNotContain(second[0].Id, first.Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task A_missing_original_returns_a_useful_not_found_error_without_queuing_work()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var (operations, _) = Services(f);
+        var error = await Assert.ThrowsAsync<ApiRequestException>(() => operations.QueueAsync(new(1, "move", "gone", "renamed"), default));
+        Assert.Equal("source_missing", error.Code);
+        await using var db = await f.Database.OpenAsync(default);
+        Assert.Equal(0, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM FileOperations"));
+    }
+
+    [Theory]
+    [InlineData("restore")]
+    [InlineData("purge")]
+    public async Task Admitted_recycle_actions_disappear_immediately_and_cancelled_ones_return(string kind)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        await f.ScanAsync();
+        var (operations, worker) = Services(f);
+        var recycled = await RunAsync(operations, worker, f, new(1, "recycle", "photo.jpg"));
+        Assert.Single(await operations.TrashAsync(1, null, default));
+        var accepted = await operations.QueueAsync(new(1, kind, "photo.jpg", RecycleId: recycled.Id), default);
+        Assert.Empty(await operations.TrashAsync(1, null, default));
+        await operations.CancelAsync(accepted.Id, default);
+        Assert.Single(await operations.TrashAsync(1, null, default));
+        Assert.Equal("completed", (await RunAsync(operations, worker, f, new(1, kind, "photo.jpg", RecycleId: recycled.Id))).State);
+        Assert.False(Directory.Exists(Path.Combine(f.Root.Path, ".luma-trash", recycled.Id)));
+    }
+
+    [Theory]
+    [InlineData("restore")]
+    [InlineData("purge")]
+    public async Task Idle_cleanup_removes_only_known_empty_consumed_recycle_directories(string kind)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "photo.jpg"), "original");
+        var (operations, worker) = Services(f);
+        var recycled = await RunAsync(operations, worker, f, new(1, "recycle", "photo.jpg"));
+        await RunAsync(operations, worker, f, new(1, kind, "photo.jpg", RecycleId: recycled.Id));
+        var directory = Path.Combine(f.Root.Path, ".luma-trash", recycled.Id);
+        Directory.CreateDirectory(directory); // Historical leftover or skipped cleanup after commit.
+        var unknown = Path.Combine(f.Root.Path, ".luma-trash", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(unknown);
+        await File.WriteAllTextAsync(Path.Combine(f.Root.Path, "live.jpg"), "keep me");
+        var live = await RunAsync(operations, worker, f, new(1, "recycle", "live.jpg"));
+        var liveDirectory = Path.Combine(f.Root.Path, ".luma-trash", live.Id);
+        var pending = await operations.QueueAsync(new(1, "purge", "live.jpg", RecycleId: live.Id), default);
+        await worker.CleanupOldRecycleAsync(default);
+        Assert.False(Directory.Exists(directory));
+        Assert.True(Directory.Exists(unknown));
+        Assert.Equal("keep me", await File.ReadAllTextAsync(Path.Combine(liveDirectory, "content")));
+        await operations.CancelAsync(pending.Id, default);
+
+        // Unknown files inside a consumed directory must never be deleted by housekeeping.
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "unknown"), "keep me too");
+        var (_, restarted) = Services(f);
+        await restarted.CleanupOldRecycleAsync(default);
+        Assert.Equal("keep me too", await File.ReadAllTextAsync(Path.Combine(directory, "unknown")));
+    }
+
     [Fact]
     public async Task Recycle_and_restore_keep_identity_tags_preferences_and_hidden_state()
     {

@@ -83,7 +83,7 @@ test('reels honour photos and mixed-media selections and navigate the active que
   await page.getByRole('combobox', { name: 'Sort by' }).selectOption('shuffle')
   await page.getByRole('button', { name: 'Apply filters' }).click()
   await expect(reels.getByRole('img')).toHaveCount(1)
-  await expect(reels.locator('video')).toHaveCount(0)
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveCount(0)
   await expect(page).toHaveURL(/mediaType=image/)
   const original = await reels.getByRole('img').getAttribute('alt')
   // Applying filters remounts Reels (a fresh query), so the menu collapses again.
@@ -94,7 +94,7 @@ test('reels honour photos and mixed-media selections and navigate the active que
   await page.getByRole('combobox', { name: 'Media type', exact: true }).selectOption('')
   await page.getByRole('button', { name: 'Apply filters' }).click()
   await expect(page).not.toHaveURL(/mediaType=/)
-  await expect(reels.locator('img,video')).toHaveCount(1)
+  await expect(reels.locator('[data-reel-state="current"] img, [data-reel-state="current"] video')).toHaveCount(1)
 })
 
 test('collections provide tags and favourites, with tag rename and delete', async ({ page }, testInfo) => {

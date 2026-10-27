@@ -225,7 +225,7 @@ export function ViewerVideoControls({
   return (
     <div
       data-chrome
-      className={`absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-2 bg-canvas/80 p-3 transition-opacity duration-200 phone-portrait:gap-x-1 phone-portrait:gap-y-0 phone-portrait:px-2 phone-portrait:pb-2 phone-portrait:pt-0 ${hidden ? 'pointer-events-none opacity-0' : ''}`}
+      className={`absolute inset-x-0 -bottom-px flex flex-wrap items-center gap-2 bg-canvas/80 p-3 transition-opacity duration-200 phone-portrait:gap-x-1 phone-portrait:gap-y-0 phone-portrait:px-2 phone-portrait:pb-2 phone-portrait:pt-0 ${hidden ? 'pointer-events-none opacity-0' : ''}`}
     >
       <IconButton
         label={playing ? t('browse:videoControls.pause') : t('browse:videoControls.play')}

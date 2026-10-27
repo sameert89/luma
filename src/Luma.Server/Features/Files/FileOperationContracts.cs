@@ -30,4 +30,12 @@ public sealed record FileLocation(long LibraryId, string RelativePath);
 public sealed record FileItemRequest(long LibraryId, string Kind, long? MediaId = null, long? FolderId = null, string? Destination = null, bool ReplaceExisting = false);
 
 public sealed record FileSelectionRequest(long[] MediaIds, long[] FolderIds);
-public sealed record FileClipboardEntry(long LibraryId, string RelativePath, long? MediaId, long? FolderId);
+// SQLite reports NULL UNION columns as blobs. Property mapping lets Dapper handle
+// either files or folders as the first row without inferring a constructor signature.
+public sealed class FileClipboardEntry
+{
+    public required long LibraryId { get; set; }
+    public required string RelativePath { get; set; } = "";
+    public required long? MediaId { get; set; }
+    public required long? FolderId { get; set; }
+}

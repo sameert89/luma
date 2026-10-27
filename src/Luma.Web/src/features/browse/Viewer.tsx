@@ -82,6 +82,7 @@ export function Viewer({
   onDeleteQueued?: (fallback: Media | null) => void
   onExitComplete?: () => void
 }) {
+  const [boosted, setBoosted] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [slideshow, setSlideshow] = useState(startSlideshow)
@@ -260,6 +261,7 @@ export function Viewer({
             <MediaStage
               item={item}
               direction={direction}
+              onBoostChange={setBoosted}
               autoPlay={slideshow || continued}
               autoplayNext={autoplayNext}
               onAutoplayNextChange={setAutoplayNext}
@@ -273,7 +275,8 @@ export function Viewer({
             />
           </div>
           <header
-            className={`absolute inset-x-0 top-0 flex items-center justify-between p-3 sm:p-5 ${chrome}`}
+            hidden={boosted}
+            className={`absolute inset-x-0 top-0 ${boosted ? 'hidden' : 'flex'} items-center justify-between p-3 sm:p-5 ${chrome}`}
             data-chrome
           >
             <div className="min-w-0 flex-1 space-y-2 pr-3">

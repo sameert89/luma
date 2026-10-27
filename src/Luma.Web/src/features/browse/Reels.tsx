@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { IconButton, QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
+import { useReelScroll } from './useReelScroll'
 import { MediaStage } from './MediaStage'
 import { MediaActions, actionButton } from './MediaActions'
 import { MediaInformation } from './MediaInformation'
@@ -59,11 +60,6 @@ function savedReelsState(query: string) {
   }
 }
 
-// Once the current reel has had a moment to start, the next one fetches only enough to
-// begin (metadata and the first bytes); browsers share that data with the element that
-// later plays it. Whole videos are never downloaded ahead.
-const warmNextMs = 1000
-
 export function Reels({
   filters,
   startId,
@@ -91,7 +87,11 @@ export function Reels({
   const positionKey = positionQuery.toString()
   const [saved] = useState(() => savedReelsState(positionKey))
   const [restoredId, setRestoredId] = useState<number | null>(startId ?? saved.mediaId)
+  const [nearby, setNearby] = useState<{ id: number; previous: Media | null; next: Media | null } | null>(null)
   const [active, setActive] = useState<Media | null>(null)
+  const [playbackSettings, setPlaybackSettings] = useState({ volume: 1, rate: 1 })
+  const [scrolling, setScrolling] = useState(false)
+  const neighborFrame = useRef<{ id: number | undefined; value: Neighbors | null } | null>(null)
   const [direction, setDirection] = useState<'next' | 'previous'>('next')
   const [muted, setMuted] = useState(saved.muted)
   const [autoScroll, setAutoScroll] = useState(saved.autoScroll)
@@ -157,56 +157,49 @@ export function Reels({
     }
     return candidate ?? null
   }
-  const previous = remaining(neighbors.data?.previous, 'previous')
-  const next = remaining(neighbors.data?.next, 'next')
+  const resolvedNeighbors = neighbors.data ?? (nearby?.id === item?.id ? nearby : null)
+  // A late neighbour response must not insert a card above a held gesture.
+  if (!scrolling || neighborFrame.current?.id !== item?.id)
+    neighborFrame.current = { id: item?.id, value: resolvedNeighbors }
+  const knownNeighbors = neighborFrame.current?.value
+  const previous = remaining(knownNeighbors?.previous, 'previous')
+  const next = remaining(knownNeighbors?.next, 'next')
   const preference = usePreference()
   usePreviewPriority([item, next, previous], true)
-  useEffect(() => {
-    if (!next || next.mediaType !== 'video' || suspended) return
-    let warm: HTMLVideoElement | null = null
-    const timer = window.setTimeout(() => {
-      warm = document.createElement('video')
-      warm.muted = true
-      warm.preload = 'metadata'
-      warm.src = `/api/media/${next.id}/original`
-    }, warmNextMs)
-    return () => {
-      window.clearTimeout(timer)
-      if (warm) {
-        warm.removeAttribute('src')
-        warm.load()
-      }
-    }
-  }, [next?.id, next?.mediaType, suspended])
-  const nextStill = !next
-    ? null
-    : next.mediaType === 'video'
-      ? next.preview.status === 'ready'
-        ? next.preview.url
-        : null
-      : imageUrl(next)
+  // Video entry uses its own first frame, never a generated still from another timestamp.
+  const nextStill = next && next.mediaType !== 'video' ? imageUrl(next) : null
   useEffect(() => {
     if (!nextStill) return
     const preload = new Image()
     preload.src = nextStill
     return () => preload.removeAttribute('src')
   }, [nextStill])
-  function navigate(direction: 'next' | 'previous') {
-    if (suspended) return
-    const target = direction === 'next' ? next : previous
-    if (target) {
-      setDirection(direction)
+  const scroll = useReelScroll({
+    currentId: item?.id,
+    previousId: previous?.id,
+    nextId: next?.id,
+    disabled: suspended,
+    onInteractingChange: setScrolling,
+    onSelect: id => {
+      const target = id === next?.id ? next : id === previous?.id ? previous : null
+      if (!target) return
+      setDirection(id === next?.id ? 'next' : 'previous')
+      setNearby({
+        id,
+        previous: id === next?.id ? (item ?? null) : null,
+        next: id === previous?.id ? (item ?? null) : null,
+      })
       setActive(target)
-    }
-  }
+    },
+  })
+  const navigate = scroll.navigate
   // Videos advance through MediaStage's onEnded; a photo has no such event, so it gets its
   // own timer here. Depending on the item's id/type rather than the query objects keeps an
   // unrelated refetch (a new object with the same id) from silently restarting the count.
   useEffect(() => {
     if (suspended || !autoScroll || !item || item.mediaType === 'video' || !next) return
     const timer = window.setTimeout(() => {
-      setDirection('next')
-      setActive(next)
+      navigate('next')
     }, autoScrollSeconds * 1000)
     return () => window.clearTimeout(timer)
   }, [suspended, autoScroll, item?.id, item?.mediaType, next])
@@ -223,8 +216,7 @@ export function Reels({
         const move = event.key === 'ArrowDown' ? 'next' : 'previous'
         const target = move === 'next' ? next : previous
         if (target) {
-          setDirection(move)
-          setActive(target)
+          navigate(move)
         }
       }
     }
@@ -276,6 +268,9 @@ export function Reels({
       </section>
     )
   }
+  // Three actual neighbours, never an unbounded feed. Reordering keyed stages
+  // preserves the native player and its decoded frame in both directions.
+  const stages = [previous, item, next].filter((clip): clip is Media => !!clip)
   const liked = item.preference === 'liked'
   return (
     <section
@@ -284,33 +279,55 @@ export function Reels({
       className="relative flex min-h-0 flex-1 flex-col bg-canvas"
     >
       {/* Reels loop until the person moves on; auto-scroll advances at the end instead. */}
-      <div className="flex min-h-0 flex-1">
-        <MediaStage
-          item={item}
-          direction={direction}
-          optionsOpen={optionsOpen}
-          onOptionsOpenChange={setOptionsOpen}
-          reels
-          muted={muted}
-          onMutedChange={setMuted}
-          suspended={suspended}
-          loop={!(autoScroll && next)}
-          fullscreenRoot={root}
-          onOpenViewer={onOpenViewer}
-          onNavigate={navigate}
-          onLike={() => {
-            if (!liked) preference.mutate({ id: item.id, value: 'liked' })
-          }}
-          onDislike={() => {
-            if (item.preference !== 'disliked') preference.mutate({ id: item.id, value: 'disliked' })
-          }}
-          onEnded={() => {
-            if (!suspended && autoScroll && next) {
-              setDirection('next')
-              setActive(next)
-            }
-          }}
-        />
+      <div
+        ref={scroll.viewport}
+        data-testid="reels-scroll"
+        {...scroll.events}
+        style={{ overflowAnchor: 'none' }}
+        className={`no-scrollbar relative min-h-0 flex-1 touch-pan-y snap-y snap-mandatory overscroll-y-contain ${suspended ? 'overflow-hidden' : 'overflow-y-auto'}`}
+      >
+        {stages.map(clip => {
+          const current = clip.id === item.id
+          return (
+            <div
+              key={clip.id}
+              data-reel-id={clip.id}
+              data-reel-state={current ? 'current' : 'prepared'}
+              aria-hidden={!current}
+              inert={!current}
+              className="relative flex h-full w-full snap-start snap-always"
+            >
+              <MediaStage
+                item={clip}
+                direction={direction}
+                reels
+                scrollNavigation
+                preparing={!current}
+                presented={current}
+                playbackSettings={playbackSettings}
+                onPlaybackSettingsChange={setPlaybackSettings}
+                optionsOpen={current && optionsOpen}
+                onOptionsOpenChange={setOptionsOpen}
+                muted={!current || muted}
+                onMutedChange={current ? setMuted : undefined}
+                suspended={suspended || !current}
+                loop={!(autoScroll && next)}
+                fullscreenRoot={root}
+                onOpenViewer={onOpenViewer}
+                onNavigate={navigate}
+                onLike={() => {
+                  if (current && !liked) preference.mutate({ id: item.id, value: 'liked' })
+                }}
+                onDislike={() => {
+                  if (current && item.preference !== 'disliked') preference.mutate({ id: item.id, value: 'disliked' })
+                }}
+                onEnded={() => {
+                  if (current && !suspended && autoScroll && next) navigate('next')
+                }}
+              />
+            </div>
+          )
+        })}
       </div>
       {/* The shared action row sits just above the seek strip; see MediaActions. */}
       <div hidden={isFullscreen}>

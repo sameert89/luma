@@ -9,6 +9,11 @@ namespace Luma.Server.Features.Files;
 public sealed class FileOperationWorker(FileOperations operations, Database database,
     ILogger<FileOperationWorker> logger) : BackgroundService
 {
+    private string? cleanupAfter;
+    private bool cleanupFinished;
+    private string? recycleCleanupAfter;
+    private bool recycleCleanupFinished;
+
     // Tests can stop execution at durable boundaries without guessing timing.
     internal Action<string>? Checkpoint { get; set; }
 
@@ -22,26 +27,94 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         {
             try
             {
-                await using var db = await operations.OpenJournalAsync(stoppingToken);
-                var row = await db.QuerySingleOrDefaultAsync<FileOperation>(new CommandDefinition("""
-                    UPDATE FileOperations SET State='running' WHERE Id=(
-                      SELECT o.Id FROM FileOperations o WHERE o.State='queued'
-                      AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
-                      AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
-                      AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
-                      AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.ReplacementId=o.Id)
-                      ORDER BY o.CreatedAt LIMIT 1) AND State='queued' RETURNING *
-                    """, cancellationToken: stoppingToken));
-                if (row is null) { await Task.Delay(500, stoppingToken); continue; }
+                var row = await ClaimAsync(stoppingToken);
+                if (row is null) { await CleanupOldUploadsAsync(stoppingToken); await CleanupOldRecycleAsync(stoppingToken); await Task.Delay(500, stoppingToken); continue; }
                 await ExecuteOperationAsync(row, recovering: false, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (SqliteException error) when (Database.IsBusy(error))
+            {
+                logger.LogDebug("File operation worker is waiting for the database writer");
+                await Task.Delay(1000, stoppingToken);
+            }
             catch (Exception error)
             {
                 logger.LogError(error, "File operation worker could not progress");
                 await Task.Delay(1000, stoppingToken);
             }
         }
+    }
+
+    // Admission journals visible-file changes during discovery; execution still waits
+    // for its readers to finish. Queued scans yield to queued file operations.
+    private const string ClaimCandidate = """
+        SELECT o.Id FROM FileOperations o WHERE o.State='queued'
+          AND NOT EXISTS(SELECT 1 FROM Scans WHERE LibraryId=o.LibraryId AND State='running')
+          AND NOT EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=o.LibraryId AND State='running')
+          AND NOT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=o.LibraryId AND State='needsAttention')
+          AND NOT EXISTS(SELECT 1 FROM FileOperations parent WHERE parent.ReplacementId=o.Id)
+        ORDER BY o.CreatedAt LIMIT 1
+        """;
+
+    internal async Task<FileOperation?> ClaimAsync(CancellationToken ct)
+    {
+        // Empty queues and work blocked by discovery need only a read. Recheck the
+        // same eligibility atomically when actually claiming a runnable operation.
+        await using (var lookup = await database.OpenAsync(ct))
+            if (!await lookup.ExecuteScalarAsync<bool>(new CommandDefinition($"SELECT EXISTS({ClaimCandidate})", cancellationToken: ct))) return null;
+        await database.YieldToForegroundAsync(ct);
+        await using var db = await operations.OpenJournalAsync(ct);
+        return await db.QuerySingleOrDefaultAsync<FileOperation>(new CommandDefinition($"""
+            UPDATE FileOperations SET State='running' WHERE Id=({ClaimCandidate}) AND State='queued' RETURNING *
+            """, cancellationToken: ct));
+    }
+
+    // Retire historical empty upload directories in small batches while the queue is idle.
+    // Never enumerate staging or remove paused/unfinished content.
+    internal async Task CleanupOldUploadsAsync(CancellationToken ct)
+    {
+        if (cleanupFinished) return;
+        await using var db = await database.OpenAsync(ct);
+        var rows = (await db.QueryAsync<Luma.Server.Features.Uploads.UploadSession>(new CommandDefinition("""
+            SELECT * FROM UploadSessions INDEXED BY IX_UploadSessions_Cleanup WHERE Id>@after
+              AND State IN ('completed','cancelled') ORDER BY Id LIMIT 16
+            """, new { after = cleanupAfter ?? "" }, cancellationToken: ct))).ToArray();
+        foreach (var row in rows)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var root = operations.WritableRoot(row.LibraryId);
+                MutationPaths.RemoveEmptyStaging(root, MutationPaths.UploadDirectory, row.Id);
+            }
+            catch (ApiRequestException) { /* An unavailable mount must not block other libraries. */ }
+        }
+        if (rows.Length > 0) cleanupAfter = rows[^1].Id;
+        cleanupFinished = rows.Length < 16;
+    }
+
+    // A crash after metadata commit can skip immediate cleanup. Revisit only
+    // completed restore/purge journals; unknown and live recycle entries stay intact.
+    internal async Task CleanupOldRecycleAsync(CancellationToken ct)
+    {
+        if (recycleCleanupFinished) return;
+        await using var db = await database.OpenAsync(ct);
+        var rows = (await db.QueryAsync<FileOperation>(new CommandDefinition("""
+            SELECT * FROM FileOperations INDEXED BY IX_FileOperations_RecycleCleanup WHERE Id>@after
+              AND State='completed' AND Kind IN ('restore','purge') ORDER BY Id LIMIT 16
+            """, new { after = recycleCleanupAfter ?? "" }, cancellationToken: ct))).ToArray();
+        foreach (var row in rows)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var root = operations.WritableRoot(row.LibraryId);
+                MutationPaths.RemoveEmptyStaging(root, MutationPaths.TrashDirectory, row.RecycleId!);
+            }
+            catch (ApiRequestException) { /* An unavailable mount must not block other libraries. */ }
+        }
+        if (rows.Length > 0) recycleCleanupAfter = rows[^1].Id;
+        recycleCleanupFinished = rows.Length < 16;
     }
 
     internal async Task RecoverAsync(CancellationToken ct)
@@ -182,6 +255,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
                 await StateAsync(row, "finalizing", ct);
                 Checkpoint?.Invoke("before-metadata");
                 await ReconcileAsync(row, root, ct);
+                CleanupStaging(root, row);
                 Checkpoint?.Invoke("completed");
             }
         }
@@ -208,6 +282,14 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         // Index only the newly published path, never its siblings. Replaying this is idempotent.
         if (row.Kind is "copy" or "upload")
             await ScanWorker.IndexPublishedPathAsync(database, root, row.Destination!, ct, importMetadata: row.Kind == "upload");
+        var parentTimes = new Dictionary<string, long>();
+        foreach (var path in new[] { row.Source, row.Destination }.OfType<string>())
+        {
+            var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
+            var directory = MutationPaths.Resolve(root, parent, allowRoot: true);
+            if (Directory.Exists(directory)) parentTimes[root.Key(parent)] = Directory.GetLastWriteTimeUtc(directory).Ticks;
+        }
+        var mkdirTicks = row.Kind == "mkdir" ? Directory.GetLastWriteTimeUtc(MutationPaths.Resolve(root, row.Source)).Ticks : 0;
         await using var db = await operations.OpenJournalAsync(ct);
         using var tx = db.BeginTransaction();
         if (await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM FileOperations WHERE Id=@Id", row, tx, cancellationToken: ct)) == "completed") return;
@@ -274,7 +356,7 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         {
             var folderId = await EnsureFolderAsync(db, tx, root, row.Source, ct);
             await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET DirectIndexedAt=@now,SourceModifiedTicks=@ticks WHERE Id=@folderId",
-                new { folderId, now = DateTimeOffset.UtcNow.ToString("O"), ticks = Directory.GetLastWriteTimeUtc(MutationPaths.Resolve(root, row.Source)).Ticks }, tx, cancellationToken: ct));
+                new { folderId, now = DateTimeOffset.UtcNow.ToString("O"), ticks = mkdirTicks }, tx, cancellationToken: ct));
         }
         else if (row.Kind == "upload")
         {
@@ -284,16 +366,38 @@ public sealed class FileOperationWorker(FileOperations operations, Database data
         if (row.Kind is "restore" or "purge")
             await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET Restored=1 WHERE Id=@RecycleId", row, tx, cancellationToken: ct));
         await db.ExecuteAsync(new CommandDefinition("UPDATE FileOperations SET State='completed',FinishedAt=@now,FailureCode=NULL WHERE Id=@Id", new { row.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
-        foreach (var path in new[] { row.Source, row.Destination }.OfType<string>())
+        foreach (var parent in parentTimes)
+            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET SourceModifiedTicks=@ticks WHERE LibraryId=@Id AND PathKey=@key",
+                new { root.Id, key = parent.Key, ticks = parent.Value }, tx, cancellationToken: ct));
+        // Filesystem directory times do not change when the directory itself moves,
+        // and a child's content may change below its immediate parent. Keep the
+        // browse sort key as the latest observed source time or Luma activity.
+        var changedPaths = row.Kind switch
         {
-            var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
-            var directory = MutationPaths.Resolve(root, parent, allowRoot: true);
-            if (Directory.Exists(directory))
-                await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET SourceModifiedTicks=@ticks WHERE LibraryId=@Id AND PathKey=@key",
-                    new { root.Id, key = root.Key(parent), ticks = Directory.GetLastWriteTimeUtc(directory).Ticks }, tx, cancellationToken: ct));
-        }
+            "copy" or "upload" or "restore" => new[] { row.Destination! },
+            "move" => new[] { row.Source, row.Destination! },
+            "mkdir" or "recycle" or "delete" => new[] { row.Source },
+            _ => Array.Empty<string>()
+        };
+        var changedFolders = changedPaths.Select(path => root.Key(path.Contains('/') ? path[..path.LastIndexOf('/')] : "")).ToHashSet();
+        if (row.IsDirectory && row.Kind is "mkdir" or "copy" or "move" or "restore")
+            changedFolders.Add(root.Key(row.Kind == "mkdir" ? row.Source : row.Destination!));
+        if (changedFolders.Count > 0)
+            await db.ExecuteAsync(new CommandDefinition("""
+                UPDATE Folders SET ModifiedTicks=MAX(ModifiedTicks,@ticks) WHERE Id IN (
+                  SELECT a.AncestorId FROM FolderAncestry a WHERE a.DescendantId IN (
+                    SELECT Id FROM Folders WHERE LibraryId=@Id AND PathKey IN @keys));
+                """, new { root.Id, keys = changedFolders.ToArray(), ticks = DateTimeOffset.UtcNow.UtcTicks }, tx, cancellationToken: ct));
         tx.Commit();
         row.State = "completed";
+    }
+
+    private static void CleanupStaging(LibraryOptions root, FileOperation row)
+    {
+        if (row.Kind == "recycle") return; // The recycle bin owns this content until restored or purged.
+        var category = row.Kind == "upload" ? MutationPaths.UploadDirectory
+            : row.Kind is "restore" or "purge" ? MutationPaths.TrashDirectory : MutationPaths.OperationsDirectory;
+        MutationPaths.RemoveEmptyStaging(root, category, row.UploadId ?? row.RecycleId ?? row.Id);
     }
 
     internal static async Task<long> EnsureFolderAsync(SqliteConnection db, SqliteTransaction tx, LibraryOptions root, string path, CancellationToken ct)

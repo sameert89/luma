@@ -46,7 +46,7 @@ test('file toolbar stays hidden until requested, keeps a cut clipboard across fo
   await page.getByRole('navigation', { name: 'Folder breadcrumb' }).getByRole('button').first().click()
   await expect(page.getByRole('button', { name: 'Open Trips', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Paste (1)' }).click()
-  await expect(page.getByRole('status').filter({ hasText: '1 operation queued' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Added 1 task' })).toBeVisible()
   expect(posts).toEqual([
     { libraryId: 1, kind: 'move', mediaId: expect.any(Number), destination: 'destination/photo.jpg' },
   ])
@@ -251,7 +251,7 @@ for (const choice of ['Replace', 'Skip'] as const) {
     await upload.getByRole('button', { name: 'Close', exact: true }).click()
     await expect(upload).toBeHidden()
     release()
-    const conflict = page.getByRole('dialog', { name: 'An item already exists', exact: true })
+    const conflict = page.getByRole('dialog', { name: 'This name is already taken', exact: true })
     await expect(conflict).toBeVisible()
     await conflict.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts' }).check()
     await conflict.getByRole('button', { name: choice, exact: true }).click()
@@ -310,13 +310,144 @@ for (const [kind, choice] of [
     await cells.nth(1).getByRole('checkbox').check()
     await page.getByRole('button', { name: kind, exact: true }).click()
     await page.getByRole('button', { name: 'Paste (2)', exact: true }).click()
-    const conflict = page.getByRole('dialog', { name: 'An item already exists', exact: true })
+    const conflict = page.getByRole('dialog', { name: 'This name is already taken', exact: true })
     await conflict.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts' }).check()
     await conflict.getByRole('button', { name: choice, exact: true }).click()
     await expect(conflict).toBeHidden()
     await expect(
-      page.getByRole('status').filter({ hasText: choice === 'Replace' ? '2 operations queued' : '2 skipped' }),
+      page.getByRole('status').filter({ hasText: choice === 'Replace' ? 'Added 2 tasks' : '2 skipped' }),
     ).toBeVisible()
     expect(requests.filter(request => request.replaceExisting).length).toBe(choice === 'Replace' ? 2 : 0)
   })
 }
+
+test('folder cards select without navigation and their menu offers cut without selection mode', async ({ page }) => {
+  await page.route('**/api/folders?**', route =>
+    route.fulfill({
+      json: {
+        current: { id: 1, libraryId: 1, parentId: null, name: 'Sample library' },
+        ancestors: [],
+        items: [2, 3].map(id => ({ id, libraryId: 1, parentId: 1, name: `Album ${id}` })),
+        nextCursor: null,
+        previousCursor: null,
+      },
+    }),
+  )
+  await page.route('**/api/media?**', route =>
+    route.fulfill({ json: { items: [], nextCursor: null, previousCursor: null } }),
+  )
+  await page.route('**/api/files/capabilities', route =>
+    route.fulfill({ json: { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] } }),
+  )
+  await page.route('**/api/files/location?folderId=*', route =>
+    route.fulfill({ json: { libraryId: 1, relativePath: '' } }),
+  )
+  await page.route('**/api/files/clipboard', route => {
+    expect(route.request().postDataJSON()).toEqual({ mediaIds: [], folderIds: [2] })
+    return route.fulfill({ json: [{ libraryId: 1, relativePath: 'Album 2', mediaId: null, folderId: 2 }] })
+  })
+  await page.goto('/?libraryId=1&folderId=1')
+  await expect(page.getByRole('button', { name: 'Open Album 2', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Select media', exact: true }).click()
+  const card = page.getByRole('button', { name: 'Select folder Album 2', exact: true })
+  await card.click()
+  await expect(card).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('checkbox', { name: 'Select folder Album 2', exact: true })).toBeChecked()
+  await expect(page).toHaveURL(/folderId=1/)
+  await card.click()
+  await expect(card).toHaveAttribute('aria-pressed', 'false')
+  await page.getByRole('button', { name: 'Select all', exact: true }).click()
+  await expect(page.getByText('2 selected', { exact: true })).toBeVisible()
+  await expect(card).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: 'Done selecting', exact: true }).click()
+  await page.getByRole('button', { name: 'Folder actions for Album 2', exact: true }).click()
+  const menu = page.getByRole('dialog', { name: 'Folder actions', exact: true })
+  for (const name of ['Cut', 'Copy', 'Rename', 'Delete'])
+    await expect(menu.getByRole('button', { name, exact: true })).toBeEnabled()
+  await menu.getByRole('button', { name: 'Cut', exact: true }).click()
+  await expect(menu).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Paste (1)', exact: true })).toBeEnabled()
+})
+
+test('paste shows admission immediately and queues once while indexing remains active', async ({ page }) => {
+  let requests = 0
+  let accepted = false
+  let release: () => void = () => {}
+  const pending = new Promise<void>(resolve => {
+    release = resolve
+  })
+  const indexing = {
+    id: 'scan-1',
+    kind: 'indexing',
+    state: 'running',
+    createdAt: '2026-10-24',
+    processed: 1,
+    failed: 0,
+    pending: 1,
+  }
+  await page.route('**/api/tasks', route =>
+    route.fulfill({
+      json: accepted
+        ? [
+            indexing,
+            {
+              id: 'file-queued',
+              kind: 'move',
+              state: 'queued',
+              createdAt: '2026-10-24',
+              processed: 0,
+              failed: 0,
+              pending: 1,
+            },
+          ]
+        : [indexing],
+    }),
+  )
+  await page.route('**/api/files/capabilities', route =>
+    route.fulfill({ json: { accessConfigured: true, libraries: [{ libraryId: 1, writable: true }] } }),
+  )
+  await page.route('**/api/files/location?folderId=*', route =>
+    route.fulfill({ json: { libraryId: 1, relativePath: 'destination' } }),
+  )
+  await page.route('**/api/files/clipboard', route =>
+    route.fulfill({
+      json: [
+        {
+          libraryId: 1,
+          relativePath: 'source/photo.jpg',
+          mediaId: route.request().postDataJSON().mediaIds[0],
+          folderId: null,
+        },
+      ],
+    }),
+  )
+  await page.route('**/api/files/items', async route => {
+    requests++
+    await pending
+    accepted = true
+    await route.fulfill({ status: 202, json: { id: 'queued' } })
+  })
+  await page.goto('/?libraryId=1&folderId=1')
+  await page.getByRole('button', { name: 'File management', exact: true }).click()
+  await page.getByRole('button', { name: 'Select media', exact: true }).click()
+  await page.getByTestId('media-cell').first().getByRole('checkbox').check()
+  await page.getByRole('button', { name: 'Cut', exact: true }).click()
+  await page.getByRole('button', { name: 'Paste (1)', exact: true }).click()
+  try {
+    const pasting = page.getByRole('button', { name: 'Pasting… (1)', exact: true })
+    await expect(pasting).toBeDisabled()
+    await page.keyboard.press('Control+v')
+    await pasting.dispatchEvent('click')
+    await expect.poll(() => requests).toBe(1)
+    await page.getByRole('button', { name: /^Background jobs/ }).click()
+    const jobs = page.getByRole('dialog', { name: 'Background jobs', exact: true })
+    await expect(jobs.getByText('Starting operation…', { exact: true })).toBeVisible()
+    await expect(jobs.getByRole('article', { name: 'Indexing, Running', exact: true })).toBeVisible()
+  } finally {
+    release()
+  }
+  const jobs = page.getByRole('dialog', { name: 'Background jobs', exact: true })
+  await expect(jobs.getByRole('article', { name: 'Move / rename, Queued', exact: true })).toBeVisible()
+  await expect(jobs.getByText('Starting operation…', { exact: true })).toHaveCount(0)
+  expect(requests).toBe(1)
+})

@@ -253,3 +253,21 @@ The upload admission/finalization library-wide operation guards caused unrelated
 A shared global dialog offers Replace or Skip and apply-to-all for the current batch, including after the upload dialog closes. Explicit replacement journals both the incoming intent and its recycle dependency in one SQLite transaction. The single worker owns both phases, excludes dependent steps from independent claiming, preserves the old content and IDs/tags, releases their public path keys, then publishes without filesystem overwrite. Cancellation before execution leaves both originals untouched. Retained recycled metadata can be released through its completed journal evidence. Missing original-media IDs cannot resolve to the incoming file.
 
 Migration 34 adds a separate ReplacementId relationship and reverse snapshot indexes. Restore understands the reserved recycled path keys and remains idempotent; older binaries reject this schema. Rollback requires a matching pre-upgrade database/media backup. Tests cover distinct upload publication, overlap/case policies, file/folder replacement and restore, cancellation, Skip/Replace batch choices, and global dialog lifecycle.
+
+
+### beta.12 upload recovery and app introductions
+
+App introductions use a 420 ms full-screen opacity transition, without controls or
+focus changes. Per-app session markers are preserved across navigation and effect
+replay; disabling introductions, reduced/off motion and the system reduced-motion
+preference suppress them. Background app mounting continues during the overlay.
+
+Interrupted uploads now offer per-item file reselection in the picker and
+Background jobs. Reselection retains session/request IDs and queries the server's
+committed offset, with filename, size and modification-date validation. Duplicate
+legacy entries are resolved against server sessions, and active workers cannot
+be duplicated by reselection. Temporary busy responses wait automatically during
+admission, reads, resume, chunks, finalization and operation polling. Chunk retries
+query the durable offset before sending more bytes. JSON metadata writes use
+foreground priority; byte transfers only request priority for their short durable
+checkpoint write, after streaming/flushing, without replaying consumed bodies.

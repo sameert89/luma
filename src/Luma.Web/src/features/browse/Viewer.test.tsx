@@ -521,3 +521,38 @@ it.each(['image', 'video'])(
     expect(posts).toHaveLength(3)
   },
 )
+
+it('hides the entire top bar during a temporary speed boost and restores its controls afterwards', () => {
+  const media = {
+    id: 1,
+    libraryId: 1,
+    fileName: 'video.mp4',
+    mediaType: 'video',
+    preference: 'neutral',
+    tags: [],
+    preview: { status: 'ready', url: '/preview' },
+    thumbnail: { status: 'ready', url: '/thumb' },
+  } as unknown as Media
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ previous: null, next: null }))),
+  )
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  const view = render(
+    <QueryClientProvider client={client}>
+      <Viewer active={media} filters={{}} onChange={vi.fn()} onClose={vi.fn()} restoreFocus={vi.fn()} startSlideshow />
+    </QueryClientProvider>,
+  )
+  const header = screen.getByRole('button', { name: 'Close viewer' }).closest('header')!
+  expect(header).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Slideshow' })).toBeVisible()
+  act(() => (stage.props.onBoostChange as (value: boolean) => void)(true))
+  expect(header).not.toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Close viewer' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Slideshow' })).not.toBeInTheDocument()
+  act(() => (stage.props.onBoostChange as (value: boolean) => void)(false))
+  expect(header).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Close viewer' })).toBeVisible()
+  view.unmount()
+  client.clear()
+})

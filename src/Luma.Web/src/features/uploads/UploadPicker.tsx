@@ -1,9 +1,11 @@
+import { RetryFailedUploads } from './RetryFailedUploads'
 import { t, stateLabel } from '../../lib/i18n'
 import { useRef, useState, useSyncExternalStore } from 'react'
 import { QuietButton } from '../../components/ui/Controls'
 import { FileUp, FolderUp, UploadCloud } from 'lucide-react'
+import { ResumeUploadButton } from './ResumeUploadButton'
 import { droppedFiles } from './droppedFiles'
-import { addUploads, subscribeUploads, uploadSnapshot, uploadAction } from './uploadQueue'
+import { addUploads, subscribeUploads, uploadSnapshot, uploadAction, uploadSelectionBlocked } from './uploadQueue'
 export function UploadPicker({ libraryId, destination }: { libraryId: number; destination: string }) {
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
@@ -12,7 +14,17 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
   const queue = useSyncExternalStore(subscribeUploads, uploadSnapshot)
+  const selectionBlocked = useSyncExternalStore(subscribeUploads, uploadSelectionBlocked)
+  function openPicker(input: HTMLInputElement | null) {
+    if (uploadSelectionBlocked() || !input) return
+    input.value = ''
+    input.click()
+  }
   async function choose(files: File[]) {
+    if (uploadSelectionBlocked()) {
+      setError(t('uploads:uploadPicker.finishCurrentBatch'))
+      return
+    }
     setError('')
     setPreparing(true)
     setMessage(t('uploads:uploadPicker.preparingUploadsYouCanCloseThisDialogUploadsContinue'))
@@ -45,6 +57,10 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
       onDrop={event => {
         event.preventDefault()
         setDragging(false)
+        if (uploadSelectionBlocked()) {
+          setError(t('uploads:uploadPicker.finishCurrentBatch'))
+          return
+        }
         void droppedFiles(event.dataTransfer)
           .then(choose)
           .catch(error => setError(String(error)))
@@ -59,11 +75,11 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
           {t('uploads:uploadPicker.uploadInto', { destination: destination || '/' })}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
-          <QuietButton disabled={preparing} onClick={() => fileInput.current?.click()}>
+          <QuietButton disabled={preparing || selectionBlocked} onClick={() => openPicker(fileInput.current)}>
             <FileUp className="size-4" />
             {t('uploads:uploadPicker.chooseFiles')}
           </QuietButton>
-          <QuietButton disabled={preparing} onClick={() => folderInput.current?.click()}>
+          <QuietButton disabled={preparing || selectionBlocked} onClick={() => openPicker(folderInput.current)}>
             <FolderUp className="size-4" />
             {t('uploads:uploadPicker.chooseFolder')}
           </QuietButton>
@@ -75,9 +91,9 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
         className="hidden"
         type="file"
         multiple
+        disabled={preparing || selectionBlocked}
         onChange={event => {
           if (event.target.files) void choose([...event.target.files])
-          event.target.value = ''
         }}
       />
       <input
@@ -86,15 +102,20 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
         className="hidden"
         type="file"
         multiple
+        disabled={preparing || selectionBlocked}
         {...{ webkitdirectory: '' }}
         onChange={event => {
           if (event.target.files) void choose([...event.target.files])
-          event.target.value = ''
         }}
       />
       <p className="text-sm text-muted">
         {t('uploads:uploadPicker.uploadsContinueWhenThisDialogClosesAfterRefreshingReselect')}
       </p>
+      {selectionBlocked && (
+        <p role="status" className="text-sm text-muted">
+          {t('uploads:uploadPicker.finishCurrentBatch')}
+        </p>
+      )}
       {message && (
         <p role="status" className="text-sm text-muted">
           {message}
@@ -110,6 +131,7 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
           count: queue.filter(item => !['completed', 'cancelled', 'skipped'].includes(item.state)).length,
         })}
       </p>
+      <RetryFailedUploads />
       {queue.slice(-100).map(item => (
         <article key={item.key} className="space-y-2 rounded-lg border border-line p-3">
           <p className="truncate text-sm font-medium" title={item.target}>
@@ -131,12 +153,8 @@ export function UploadPicker({ libraryId, destination }: { libraryId: number; de
                 {t('uploads:uploadPicker.pause')}
               </QuietButton>
             )}
-            {['paused', 'failed'].includes(item.state) && (
-              <QuietButton
-                onClick={() => void uploadAction(item.key, 'resume').catch(error => setError(String(error)))}
-              >
-                {t('uploads:uploadPicker.resumeRetry')}
-              </QuietButton>
+            {['paused', 'failed', 'reselect'].includes(item.state) && (
+              <ResumeUploadButton item={item} onError={setError} />
             )}
             {!['completed', 'cancelled', 'skipped', 'finalizing'].includes(item.state) && (
               <QuietButton

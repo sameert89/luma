@@ -45,16 +45,19 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         if (mediaId.HasValue || folderId.HasValue)
         {
             var table = folderId.HasValue ? "Folders" : "Media";
-            var live = folderId.HasValue ? "Recycled=0" : "Availability='present'";
+            var live = folderId.HasValue ? "Recycled=0 AND Missing=0" : "Availability='present'";
             var current = await db.QuerySingleOrDefaultAsync<string>(new CommandDefinition($"SELECT RelativePath FROM {table} WHERE LibraryId=@LibraryId AND Id=@id AND {live}", new { request.LibraryId, id = folderId ?? mediaId }, tx, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
             if (!StringComparer.Ordinal.Equals(current, source))
                 throw new ApiRequestException(409, "source_changed", "The selected item changed. Select it again before continuing.");
         }
+        // An indexed file has a stable snapshot even while discovery finds siblings.
+        // Journal it now; the worker waits for discovery before touching originals.
+        // Folder snapshots may still be growing, so keep their discovery gate.
         if (await db.ExecuteScalarAsync<bool>(new CommandDefinition($"""
             SELECT EXISTS(SELECT 1 FROM FileOperations WHERE LibraryId=@Id AND State='needsAttention')
-              OR EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running'))
+              OR (@mediaId IS NULL AND EXISTS(SELECT 1 FROM Scans WHERE LibraryId=@Id AND State IN ('queued','running')))
               OR EXISTS(SELECT 1 FROM ComicJobs WHERE LibraryId=@Id AND State IN ('queued','running'))
-            """, root, tx, cancellationToken: ct)))
+            """, new { root.Id, mediaId }, tx, cancellationToken: ct)))
             throw new ApiRequestException(409, "library_busy", "Finish indexing or resolve the operation needing attention before changing this library.");
         if (request.Kind is "restore" or "purge")
         {
@@ -71,7 +74,12 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
         else if (request.Kind != "mkdir")
         {
             var path = MutationPaths.Resolve(root, source);
-            var attributes = File.GetAttributes(path);
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(path); }
+            catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException)
+            {
+                throw new ApiRequestException(404, "source_missing", "This item is no longer on disk. Refresh its parent folder to update the list.");
+            }
             operation.IsDirectory = attributes.HasFlag(FileAttributes.Directory);
             operation.SourceSize = operation.IsDirectory ? 0 : new FileInfo(path).Length;
             operation.SourceModifiedTicks = File.GetLastWriteTimeUtc(path).Ticks;
@@ -238,11 +246,16 @@ public sealed class FileOperations(Database database, IndexingOptions options, F
     public async Task<IReadOnlyList<FileOperation>> TrashAsync(long libraryId, string? before, CancellationToken ct)
     {
         WritableRoot(libraryId, requireAvailable: false);
+        var cursor = before?.Split('|', 2);
+        var timestamp = cursor?[0];
+        var afterId = cursor is { Length: 2 } ? cursor[1] : null;
+        var seek = timestamp is null ? "" : afterId is null ? "AND CreatedAt<@timestamp" : "AND (CreatedAt,Id)<(@timestamp,@afterId)";
         await using var db = await database.OpenAsync(ct);
-        return (await db.QueryAsync<FileOperation>(new CommandDefinition("""
+        return (await db.QueryAsync<FileOperation>(new CommandDefinition($"""
             SELECT * FROM FileOperations WHERE LibraryId=@libraryId AND Kind='recycle' AND Restored=0 AND State='completed'
-              AND (@before IS NULL OR CreatedAt<@before) ORDER BY CreatedAt DESC LIMIT 100
-            """, new { libraryId, before }, cancellationToken: ct))).ToArray();
+              AND NOT EXISTS(SELECT 1 FROM FileOperations pending WHERE pending.RecycleId=FileOperations.Id AND pending.State IN ('queued','running','reserved','deleting','published','finalizing','needsAttention'))
+              {seek} ORDER BY CreatedAt DESC,Id DESC LIMIT 100
+            """, new { libraryId, timestamp, afterId }, cancellationToken: ct))).ToArray();
     }
 
     public async Task CancelAsync(string id, CancellationToken ct)

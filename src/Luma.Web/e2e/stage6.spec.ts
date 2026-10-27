@@ -117,7 +117,7 @@ test('native video plays, seeks, changes speed and offers external access on fai
   await page.goto('/?q=stage6-broken')
   await page.getByRole('button', { name: 'Open stage6-broken.mkv', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'stage6-broken.mkv', exact: true })).toBeVisible()
-  await expect(page.getByRole('status')).toContainText('Copy its stream URL')
+  await expect(page.getByRole('status')).toContainText('copy its stream URL')
   await (await viewerAction(page, 'View options')).click()
   await expect(page.getByRole('button', { name: 'Copy stream URL' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Download' })).toHaveAttribute('href', /download=true/)
@@ -129,14 +129,14 @@ test('scoped reels bound media, auto-scroll, stop inactive playback and restore 
   await expect(page.getByTestId('media-cell')).toHaveCount(3)
   await page.goto('/flick?q=stage6&order=desc&mediaType=motion')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
-  await expect(reels.locator('video')).toHaveCount(1)
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveCount(1)
   await expect(page).toHaveURL(/mediaType=motion/)
   await expect(page).toHaveURL(/q=stage6/)
   await expect(page.getByRole('button', { name: 'Switch application, Flick', exact: true })).toBeVisible()
   await reels.getByRole('button', { name: 'Flick menu' }).click()
   await reels.getByRole('button', { name: 'Auto-scroll' }).click()
   await expect(reels.getByRole('button', { name: 'Auto-scroll' })).toHaveAttribute('aria-pressed', 'true')
-  const old = await reels.locator('video').elementHandle()
+  const old = await reels.locator('[data-reel-state="current"] video').elementHandle()
   await expect.poll(() => old!.evaluate(v => v.paused)).toBe(false)
   const seek = reels.getByRole('slider', { name: 'Seek video', exact: true })
   await seek.focus()
@@ -145,13 +145,16 @@ test('scoped reels bound media, auto-scroll, stop inactive playback and restore 
   await expect(seek).toHaveAttribute('aria-valuetext', /of 0:04/)
   await reels.getByRole('button', { name: 'Auto-scroll' }).click()
   await reels.getByRole('button', { name: 'Next', exact: true }).click()
-  await expect.poll(() => old!.evaluate(v => v.paused && !v.getAttribute('src'))).toBe(true)
-  await expect(reels.locator('video')).toHaveCount(1)
-  await expect(reels.getByRole('status')).toContainText('Copy its stream URL')
-  expect(await reels.locator('img,video').count()).toBeLessThanOrEqual(1)
+  await expect.poll(() => old!.evaluate(v => v.paused)).toBe(true)
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveCount(1)
+  await expect(reels.getByRole('status')).toContainText('copy its stream URL')
+  expect(
+    await reels.locator('[data-reel-state="current"] img, [data-reel-state="current"] video').count(),
+  ).toBeLessThanOrEqual(1)
   expect(await reels.locator('link[rel=preload]').count()).toBeLessThanOrEqual(1)
   await page.screenshot({ path: `test-results/stage6-reels-${test.info().project.name}.png` })
   await switchExperience(page, 'Gallery')
+  await expect.poll(() => old!.evaluate(v => !v.getAttribute('src'))).toBe(true)
   await expect(page.getByTestId('media-cell')).toHaveCount(3)
   await expect(page).toHaveURL(/q=stage6/)
   await expect(page).not.toHaveURL(/mediaType=motion/)
@@ -231,8 +234,8 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   await expect(page).not.toHaveURL(/media=/)
   await page.goto('/flick?q=stage6&mediaType=motion&order=desc')
   const reels = page.getByRole('region', { name: 'Flick', exact: true })
-  await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1495/original')
-  const reelBounds = await reels.locator('video').boundingBox()
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveAttribute('src', '/api/media/1495/original')
+  const reelBounds = await reels.locator('[data-reel-state="current"] video').boundingBox()
   const reelX = reelBounds!.x + reelBounds!.width / 2
   const reelY = reelBounds!.y + reelBounds!.height / 2
   await session.send('Input.dispatchTouchEvent', {
@@ -244,5 +247,139 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
     touchPoints: [{ x: reelX, y: reelY - 80, id: 0 }],
   })
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await expect(reels.locator('video')).toHaveAttribute('src', '/api/media/1490/original')
+  await expect(reels.locator('[data-reel-state="current"] video')).toHaveAttribute('src', '/api/media/1490/original')
+})
+
+test('Flick promotes the same buffered video element without posters or loading overlays', async ({ page }) => {
+  // Reuse the valid fixture bytes for the second clip, preserving normal Range requests.
+  await page.route('**/api/media/1490/original', async route => {
+    const response = await route.fetch({ url: 'http://127.0.0.1:4173/api/media/1495/original' })
+    await route.fulfill({ response })
+  })
+  await page.goto('/flick?q=stage6&order=desc&mediaType=video')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
+  const current = reels.locator('[data-reel-state="current"] video')
+  await expect(current).toHaveAttribute('src', '/api/media/1495/original')
+  await expect.poll(() => current.evaluate(video => !video.paused)).toBe(true)
+  const prepared = reels.locator('[data-reel-id="1490"] video')
+  await expect(prepared).toHaveAttribute('src', '/api/media/1490/original')
+  await expect.poll(() => prepared.evaluate(video => video.readyState)).toBeGreaterThanOrEqual(3)
+  await expect(prepared).toHaveJSProperty('paused', true)
+  const samePlayer = await prepared.elementHandle()
+  await reels.getByRole('button', { name: 'Flick menu', exact: true }).click()
+  await reels.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect.poll(() => current.evaluate((video, expected) => video === expected, samePlayer)).toBe(true)
+  await expect.poll(() => current.evaluate(video => !video.paused && video.currentTime > 0)).toBe(true)
+  await expect(reels.locator('video[poster]')).toHaveCount(0)
+  await expect(reels.getByTestId('buffering')).toHaveCount(0)
+  expect(await reels.locator('video').count()).toBeLessThanOrEqual(3)
+})
+
+test('Flick follows a held touch between clips and reverses before release', async ({ page }) => {
+  await page.route('**/api/media/1490/original', async route => {
+    const response = await route.fetch({ url: 'http://127.0.0.1:4173/api/media/1495/original' })
+    await route.fulfill({ response })
+  })
+  await page.goto('/flick?q=stage6&order=desc&mediaType=video')
+  const reels = page.getByRole('region', { name: 'Flick', exact: true })
+  const viewport = reels.getByTestId('reels-scroll')
+  const first = reels.locator('[data-reel-id="1495"]')
+  const second = reels.locator('[data-reel-id="1490"]')
+  await expect(first).toHaveAttribute('data-reel-state', 'current')
+  await expect.poll(() => second.locator('video').evaluate(video => video.readyState)).toBeGreaterThanOrEqual(3)
+  const original = await first.locator('video').elementHandle()
+  const bounds = (await viewport.boundingBox())!
+  const session = await page.context().newCDPSession(page)
+  await session.send('Emulation.setTouchEmulationEnabled', { enabled: true })
+  const x = bounds.x + bounds.width * 0.85 // no volume lane may intercept Flick scrolling
+  const y = bounds.y + bounds.height * 0.7
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 0 }] })
+  for (let step = 1; step <= 5; step++) {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x, y: y - bounds.height * 0.08 * step, id: 0 }],
+    })
+    await page.evaluate(() => new Promise(requestAnimationFrame))
+  }
+  await page.waitForTimeout(260) // hold still long enough to exercise the scroll-end fallback
+  await expect.poll(() => viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(bounds.height * 0.15)
+  await expect(first).toHaveAttribute('data-reel-state', 'current')
+  // Both actual video panels are on screen while the finger is held between them.
+  const a = (await first.boundingBox())!
+  const b = (await second.boundingBox())!
+  expect(a.y).toBeLessThan(bounds.y)
+  expect(a.y + a.height).toBeGreaterThan(bounds.y)
+  expect(b.y).toBeLessThan(bounds.y + bounds.height)
+  for (let step = 4; step >= 0; step--) {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x, y: y - bounds.height * 0.08 * step, id: 0 }],
+    })
+    await page.evaluate(() => new Promise(requestAnimationFrame))
+  }
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await expect(first).toHaveAttribute('data-reel-state', 'current')
+  await expect.poll(() => viewport.evaluate(element => element.scrollTop)).toBeLessThan(2)
+  await expect.poll(() => first.locator('video').evaluate((video, expected) => video === expected, original)).toBe(true)
+  await expect(reels.locator('video[poster]')).toHaveCount(0)
+  expect(await reels.locator('video').count()).toBeLessThanOrEqual(3)
+})
+
+test('fullscreen controls cover the bottom edge and fade after pointer activation without pausing', async ({
+  page,
+}) => {
+  await page.goto('/?q=stage6-video')
+  await page.getByTestId('media-cell').first().click()
+  const viewer = page.getByRole('dialog')
+  const video = viewer.locator('video')
+  await video.evaluate(async player => {
+    player.loop = true
+    await player.play()
+  })
+  await viewer.getByRole('button', { name: 'Fullscreen', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true)
+  const bar = viewer.getByRole('button', { name: 'Exit fullscreen', exact: true }).locator('..')
+  const coverage = await bar.evaluate(element => ({
+    bottom: element.getBoundingClientRect().bottom,
+    stageBottom: element.parentElement!.getBoundingClientRect().bottom,
+  }))
+  expect(coverage.bottom).toBeGreaterThanOrEqual(coverage.stageBottom)
+  // Leaving the pointer/focus on the fullscreen button must not pin the bar open.
+  await expect(bar).toHaveCSS('opacity', '0', { timeout: 6000 })
+  await expect(video).toHaveJSProperty('paused', false)
+  const bounds = (await video.boundingBox())!
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+  await expect(bar).toHaveCSS('opacity', '1')
+  await expect(bar).toHaveCSS('opacity', '0', { timeout: 6000 })
+  await expect(video).toHaveJSProperty('paused', false)
+})
+
+test('holding 2x replaces the top bar in portrait and landscape and restores it on release', async ({ page }) => {
+  for (const viewport of [
+    { width: 400, height: 800 },
+    { width: 900, height: 500 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.goto('/?q=stage6-video')
+    await page.getByTestId('media-cell').first().click()
+    const viewer = page.getByRole('dialog')
+    const video = viewer.locator('video')
+    await video.evaluate(async player => {
+      player.loop = true
+      await player.play()
+    })
+    const bounds = (await video.boundingBox())!
+    const header = viewer.locator('header')
+    await expect(header).toBeVisible()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height * 0.4)
+    await page.mouse.down()
+    const boost = viewer.getByText('2×', { exact: true })
+    await expect(boost).toBeVisible()
+    await expect(header).toBeHidden()
+    expect((await boost.boundingBox())!.y - bounds.y).toBeLessThan(40)
+    await page.mouse.up()
+    await expect(boost).toHaveCount(0)
+    await expect(header).toBeVisible()
+    await expect(viewer.getByRole('button', { name: 'Close viewer' })).toBeVisible()
+  }
 })

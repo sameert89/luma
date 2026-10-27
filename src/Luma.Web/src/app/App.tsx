@@ -1,3 +1,5 @@
+import { startUploadRecovery } from '../features/uploads/uploadQueue'
+import { clipboardSnapshot, subscribeClipboard } from '../features/files/clipboard'
 import { t } from '../lib/i18n'
 import { FileConflictDialog } from '../features/files/FileConflictDialog'
 import type { components } from '../lib/api/generated'
@@ -26,7 +28,7 @@ import {
   Tag,
   X,
 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { BottomNavigation, type NavigationItem } from '../components/ui/BottomNavigation'
 import { Button } from '../components/ui/Button'
 import { Checkbox, IconButton, QuietButton, QuietLink } from '../components/ui/Controls'
@@ -165,6 +167,7 @@ function readPersistedView(): PersistedView | null {
 }
 
 export function App() {
+  useEffect(startUploadRecovery, [])
   const appearance = useAppearance()
   // An installed PWA can be relaunched at its start URL after Android closes it. History state and
   // the previous query string are then gone, so keep the last real destination independently.
@@ -248,6 +251,7 @@ export function App() {
     if (unseenRelease()) setWhatsNewOpen(true)
   }, [])
   const [fileManaging, setFileManaging] = useState(false)
+  const clipboard = useSyncExternalStore(subscribeClipboard, clipboardSnapshot)
   const [selectedFolders, setSelectedFolders] = useState(new Set<number>())
   const [selecting, setSelecting] = useState(false)
   const [selectingAll, setSelectingAll] = useState(false)
@@ -617,20 +621,34 @@ export function App() {
       apply({ ...libraryMemory.current, q: undefined }, 'library')
     else apply({}, 'search')
   }
-  // Pulling down the gallery refreshes what is on screen and asks the server to do nothing else.
-  // It used to queue a folder scan, and people read the job appearing in the queue as the app
-  // starting something heavy they had not asked for; finding files added on disk is Rescan
-  // folder's job, which says so. Resetting rather than invalidating starts the listing over from
-  // its first page: invalidating would refetch every page still held, one after another.
-  // The gallery is not remounted here: it is the gallery that holds the pull spinner, and a pull
-  // only ever starts at the top, so the reset alone is a refresh. The header button, which can be
-  // pressed deep in a listing, remounts it as well to land back at the top.
+  // Reset listings to their first page without remounting the pull indicator.
   async function refreshView() {
     await Promise.all([
       client.resetQueries({ queryKey: ['media'] }),
       client.resetQueries({ queryKey: ['folders'] }),
       client.invalidateQueries({ queryKey: ['libraries'] }),
     ])
+  }
+  async function pullRefresh() {
+    try {
+      const folderId =
+        section === 'library' ? (folders.data?.current.id ?? filters.folderId ?? library?.rootFolderId) : undefined
+      if (folderId) {
+        const settings = libraries.data?.find(
+          item => item.id === (folders.data?.current.libraryId ?? filters.libraryId),
+        )
+        await request<components['schemas']['ScanAccepted']>(`/api/folders/${folderId}/scans`, undefined, 'POST', {
+          metadataMode: settings?.metadataMode ?? 'embedded',
+          prioritize: true,
+          shallow: true,
+        })
+        // Background scan checkpoints refresh results as discovery finishes.
+        await Promise.all(['tasks', 'indexing', 'scan'].map(key => client.invalidateQueries({ queryKey: [key] })))
+      }
+      await refreshView()
+    } catch (error) {
+      showToast(errorMessage(error), 'danger')
+    }
   }
   function select(id: number) {
     setSelected(old => {
@@ -644,26 +662,55 @@ export function App() {
       return next
     })
   }
+  function selectFolder(id: number) {
+    setSelectedFolders(previous => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else if (next.size + selected.size < 500) next.add(id)
+      else showToast(t('app:app.selectAtMost500ItemsAtATime'), 'danger')
+      return next
+    })
+  }
   async function selectAll() {
     setSelectingAll(true)
     try {
       const ids = new Set<number>()
+      const folderIds = new Set<number>()
       let cursor: string | undefined
       let more = false
-      do {
-        const page = await request<MediaPage>(
-          `/api/media?${queryString({ ...galleryFilters, limit: Math.min(200, 500 - ids.size), cursor })}`,
+      if (section === 'library' && folders.data) {
+        do {
+          const page = await request<FolderPage>(
+            `/api/folders?${new URLSearchParams({
+              parentId: String(folders.data.current.id),
+              limit: String(Math.min(100, 500 - folderIds.size)),
+              sort: folderSort,
+              order: folderOrder,
+              ...(cursor ? { cursor } : {}),
+            })}`,
+          )
+          for (const folder of page.items) folderIds.add(folder.id)
+          cursor = page.nextCursor ?? undefined
+          more = !!cursor
+        } while (cursor && folderIds.size < 500)
+      }
+      cursor = undefined
+      while (ids.size + folderIds.size < 500) {
+        const page: MediaPage = await request<MediaPage>(
+          `/api/media?${queryString({ ...galleryFilters, limit: Math.min(200, 500 - folderIds.size - ids.size), cursor })}`,
         )
         for (const item of page.items) {
           ids.add(item.id)
-          if (ids.size === 500) break
+          if (ids.size + folderIds.size === 500) break
         }
         cursor = page.nextCursor ?? undefined
-        more = !!cursor
-      } while (cursor && ids.size < 500)
+        more ||= !!cursor
+        if (!cursor) break
+      }
       setSelected(ids)
-      setSelectedFolders(new Set())
-      if (ids.size === 500 && more) showToast(t('app:app.selectedTheFirst500MatchingItemsBulkOperationsSupport'))
+      setSelectedFolders(folderIds)
+      if (ids.size + folderIds.size === 500 && more)
+        showToast(t('app:app.selectedTheFirst500MatchingItemsBulkOperationsSupport'))
     } catch (error) {
       showToast(errorMessage(error), 'danger')
     } finally {
@@ -802,10 +849,15 @@ export function App() {
             {/* One control opens the folder; its caption sits on the cover over a scrim that keeps white text legible on any photo or theme. */}
             <button
               type="button"
-              aria-label={t('app:app.open', { value1: folder.name })}
+              aria-label={t(selecting ? 'app:app.selectFolder' : 'app:app.open', { value1: folder.name })}
+              aria-pressed={selecting ? selectedFolders.has(folder.id) : undefined}
               title={folder.name}
               className="relative block w-full text-left focus-visible:ring-inset"
-              onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}
+              onClick={() =>
+                selecting
+                  ? selectFolder(folder.id)
+                  : apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })
+              }
             >
               <AlbumCover
                 images={folder.coverImages}
@@ -833,25 +885,20 @@ export function App() {
                   id={`folder-selection-${folder.id}`}
                   aria-label={t('app:app.selectFolder', { value1: folder.name })}
                   checked={selectedFolders.has(folder.id)}
-                  onChange={() =>
-                    setSelectedFolders(previous => {
-                      const next = new Set(previous)
-                      if (next.has(folder.id)) next.delete(folder.id)
-                      else if (next.size + selected.size < 500) next.add(folder.id)
-                      return next
-                    })
-                  }
+                  onChange={() => selectFolder(folder.id)}
                 />
               </label>
             )}
-            <div className="absolute top-1.5 right-1.5">
-              <FolderActions
-                folder={folder}
-                libraryName={library?.name}
-                ancestors={[...folders.data!.ancestors, folders.data!.current]}
-                tone="overlay"
-              />
-            </div>
+            {!selecting && (
+              <div className="absolute top-1.5 right-1.5">
+                <FolderActions
+                  folder={folder}
+                  libraryName={library?.name}
+                  ancestors={[...folders.data!.ancestors, folders.data!.current]}
+                  tone="overlay"
+                />
+              </div>
+            )}
           </article>
         ))}
         {(folders.data.previousCursor || folders.data.nextCursor) && (
@@ -934,7 +981,10 @@ export function App() {
                 })}
               </QuietButton>
             ) : showBackgroundJobs && section !== 'reels' && section !== 'help' ? (
-              <BackgroundJobsButton compact libraryId={home ? undefined : filters.libraryId} />
+              <BackgroundJobsButton
+                compact
+                libraryId={home ? undefined : (filters.libraryId ?? folders.data?.current.libraryId)}
+              />
             ) : undefined
           }
         />
@@ -1163,10 +1213,10 @@ export function App() {
                       )}
                     </div>
                   </div>
-                  {showGallery && fileManaging && (
+                  {showGallery && (fileManaging || clipboard) && (
                     <FileToolbar
                       libraryId={filters.libraryId}
-                      folderId={filters.folderId}
+                      folderId={filters.folderId ?? folders.data?.current.id ?? library?.rootFolderId ?? undefined}
                       selected={selected}
                       selectedFolders={selectedFolders}
                       onClipboard={() => {
@@ -1193,6 +1243,7 @@ export function App() {
                               <button
                                 type="button"
                                 className="rounded-full px-2 py-1 hover:bg-surface hover:text-ink"
+                                disabled={selecting}
                                 onClick={() => apply({ ...filters, libraryId: folder.libraryId, folderId: folder.id })}
                               >
                                 {folder.name}
@@ -1352,7 +1403,7 @@ export function App() {
                       revealMediaId={revealMediaId}
                       onRevealComplete={finishReveal}
                       onScrollPosition={recordScroll}
-                      onPullRefresh={refreshView}
+                      onPullRefresh={pullRefresh}
                     />
                   )}
                 </>

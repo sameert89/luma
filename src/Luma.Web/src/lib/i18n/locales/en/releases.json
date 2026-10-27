@@ -1,6 +1,23 @@
 {
   "history": [
     {
+      "version": "2.0.0-beta.12",
+      "date": "2026-10-24",
+      "headline": "Reliable uploads and lighter builds",
+      "changes": [
+        "More natural wording throughout Settings, Help, uploads and file management.",
+        "Uploads reconnect when you return to Luma, with one button to retry any failures.",
+        "Flick scrolls with your finger in both directions, and fullscreen controls fade reliably.",
+        "Folder dates follow renames, moves and uploads, with lighter folder refreshes.",
+        "Docker builds now compile one app at a time to ease memory pressure on small servers.",
+        "Pull down in a folder to check for new or changed files without scanning its subfolders.",
+        "Select folders with a tap, with cut, copy, rename and delete in each item’s menu.",
+        "Restore all or empty the recycle bin, with clearer confirmation and reliable list updates.",
+        "Removed folders disappear after refresh, and completed uploads and recycle actions clean up their empty staging folders.",
+        "Paste visible files while discovery runs, with queued progress and protection against repeated clicks."
+      ]
+    },
+    {
       "version": "2.0.0-beta.11",
       "date": "2026-10-22",
       "headline": "Ready for translations",

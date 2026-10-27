@@ -151,7 +151,15 @@ The example allows 100 GiB files and 200 GiB of active upload reservations. The
 default for each limit is 1 TiB. Reservations do not reserve physical disk space;
 monitor actual media-volume space. Uploads allow at most 128 active sessions and
 1–4 concurrent chunk transfers. Native folder picking preserves relative paths.
-After refresh, reselect the matching files to resume durable upload offsets.
+After closing or refreshing Luma, use **Choose file to resume** beside an upload in
+Background jobs or the upload window. Choose the unchanged original file; Luma
+checks its name, size and modification date and resumes the server’s saved byte
+position. Reselecting a batch in its original destination also resumes matching
+entries. Older duplicate queue entries are checked against the server before
+choosing a session; missing aliases are retired without creating more uploads.
+Temporary database, capacity and path contention waits automatically with bounded
+backoff. Pause and Cancel interrupt these waits; write-access and recovery errors
+still require attention.
 
 Preserve same-origin browser headers behind a proxy. Cross-site requests remain
 rejected. Allow PATCH bodies of at least 8 MiB (for nginx, `client_max_body_size
@@ -436,3 +444,74 @@ matching original-media backup when rolling back file operations as well.
 Beta.10 adds schema 34 for durable replacement dependencies. Stop Luma and back up SQLite together with the matching originals, trash and staging before upgrading. An older binary refuses schema 34; rollback requires restoring its matching pre-upgrade database and media-volume backup.
 
 Upload, Move and Copy present Replace/Skip decisions for real destination conflicts. Replace preserves the previous item in the recycle bin; it does not merge an existing destination folder's contents. A batch choice applies only to that batch. Independent uploads no longer reserve the entire library, while overlapping paths and unresolved operation evidence remain protected.
+
+## Building on a Raspberry Pi or a small VPS
+
+The Docker build now finishes .NET publishing before compiling the frontend.
+Previously BuildKit could run both compilers at once. NuGet restore is cached
+separately from backend source, so editing a C# file no longer restores every
+package. npm dependencies also keep their own layer. .NET publishing uses one
+MSBuild node, two reported processors and no persistent compiler server. The
+frontend uses a 768 MiB V8 old-space limit and two native worker threads.
+
+These are build-only settings; they do not limit the running Luma server.
+`NODE_BUILD_HEAP_MB` can be overridden with a Docker build argument if a larger
+frontend needs more heap. It limits one part of each Node process, **not total
+build memory**. Native allocations, NuGet, npm, Docker and filesystem cache also
+need room. Package installation and runtime image preparation may still overlap;
+the two application compilation steps cannot. Changes to server publish output
+also invalidate the frontend build step because of that ordering dependency.
+
+For a host-wide safeguard, use a dedicated BuildKit container with a memory limit.
+For example, on a host with enough free memory to reserve 2 GiB for builds:
+
+```sh
+# Run from the repository root; create this builder once.
+docker buildx create --name luma-small --driver docker-container \
+  --driver-opt memory=2g,memory-swap=2g \
+  --buildkitd-config docker/buildkitd.toml
+
+docker buildx build --builder luma-small --load -t luma:local .
+```
+
+The equal memory and memory-swap limits disable swap for this builder. A build
+that exceeds the budget can fail without exhausting all host RAM. Choose a budget
+that leaves room for the OS and running services. The supplied BuildKit config
+runs one build step at a time. This builder only applies when explicitly selected;
+creating it does not change Coolify's builder. Coolify must use this builder or
+have equivalent limits configured for its build service. Runtime container limits
+alone do not constrain image builds.
+
+### Investigating a freeze
+
+Concurrent compilers and uncapped builds are credible sources of memory pressure,
+but the Dockerfile cannot prove an OOM caused a particular freeze. No Pi crash log
+or memory trace was available for this change. A clean build consumes much more
+CPU, RAM and disk I/O than a cached retry, which can explain why retries behave
+differently without establishing the cause.
+
+Before another build, capture evidence from a second terminal:
+
+```sh
+free -h
+swapon --show
+vmstat 2
+# In another terminal, watch current-boot kernel messages (no persistent journal needed).
+sudo dmesg -wT
+# While using the dedicated builder:
+docker stats
+# On Raspberry Pi OS, if vcgencmd is installed:
+vcgencmd get_throttled
+vcgencmd measure_temp
+```
+
+Look for OOM-killer messages, sustained swap activity, high I/O wait, undervoltage
+or thermal throttling. Save the terminal output remotely if the host may need a
+hard reset. Compare a first uncached build and a warm rebuild using
+`--progress=plain`; keep the same memory budget for both. Do not prune all caches
+on the live server just to reproduce a cold build. If the host cannot spare the
+build budget, build the ARM64 image on another machine and deploy that image.
+
+References: [BuildKit parallelism](https://docs.docker.com/build/buildkit/configure/),
+[builder container limits](https://docs.docker.com/build/builders/drivers/docker-container/),
+[.NET publish options](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-publish).

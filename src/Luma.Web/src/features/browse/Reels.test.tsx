@@ -1,11 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { Reels } from './Reels'
 import type { Media } from './api'
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
+  vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.hasAttribute('data-reel-id') ? Array.from(this.parentElement!.children).indexOf(this) * 600 : 0
+  })
+  HTMLElement.prototype.scrollTo = function (options?: ScrollToOptions | number) {
+    this.scrollTop = typeof options === 'number' ? options : (options?.top ?? 0)
+    fireEvent.scroll(this)
+    fireEvent(this, new Event('scrollend'))
+  }
+})
 
 function clip(id: number): Media {
   return {
@@ -82,7 +93,9 @@ it('restores the current reel, mute and auto-scroll after leaving and returning,
     await userEvent.click(screen.getByRole('button', { name: 'Auto-scroll' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled())
     await userEvent.click(screen.getByRole('button', { name: 'Next' }))
-    await screen.findByLabelText('2.mp4')
+    await waitFor(() =>
+      expect(screen.getByLabelText('2.mp4').closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'current'),
+    )
     first.unmount()
     const feedsBefore = fetch.mock.calls.filter(([url]) => url.startsWith('/api/media?')).length
     const returned = mount()
@@ -100,7 +113,7 @@ it('restores the current reel, mute and auto-scroll after leaving and returning,
   }
 })
 
-it('retains only current query data and one nearby preview during sequential browsing', async () => {
+it('retains only current query data and three keyed stages during sequential browsing', async () => {
   const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -160,16 +173,23 @@ it('retains only current query data and one nearby preview during sequential bro
     for (let index = 0; index < 10; index++) {
       await waitFor(() => expect(next).toBeEnabled())
       await userEvent.click(next)
-      await waitFor(() => expect(screen.getByLabelText(items[index + 1].fileName)).toBeVisible())
-      expect(document.querySelectorAll('video')).toHaveLength(1)
+      await waitFor(() =>
+        expect(screen.getByLabelText(items[index + 1].fileName).closest('[data-reel-state]')).toHaveAttribute(
+          'data-reel-state',
+          'current',
+        ),
+      )
+      fireEvent.loadedData(screen.getByLabelText(items[index + 1].fileName))
+      expect(screen.getByLabelText(items[index + 1].fileName)).toBeVisible()
+      expect(document.querySelectorAll('video').length).toBeLessThanOrEqual(3)
     }
     const queries = client.getQueryCache()
     await waitFor(() => {
       const retained = queries.findAll({ predicate: query => query.queryKey[0] !== 'file-capabilities' })
-      expect(retained.length).toBeLessThanOrEqual(4)
+      expect(retained.length).toBeLessThanOrEqual(6)
     })
     expect(queries.findAll({ queryKey: ['file-capabilities'] })).toHaveLength(1)
-    expect(preloads.filter(image => image.hasAttribute('src'))).toHaveLength(1)
+    expect(preloads.filter(image => image.hasAttribute('src'))).toHaveLength(0)
     unmount()
     expect(preloads.filter(image => image.hasAttribute('src'))).toHaveLength(0)
     expect(play).toHaveBeenCalled()
@@ -308,8 +328,11 @@ it('keeps like and dislike on the stage beside a bottom menu, loops by default a
       expect(warmed.find(element => element.getAttribute('src') === '/api/media/2/original')).toBeDefined(),
     )
     const warm = warmed.find(element => element.getAttribute('src') === '/api/media/2/original')!
-    expect(warm.preload).toBe('metadata')
-    expect(document.querySelectorAll('video')).toHaveLength(1)
+    expect(warm.preload).toBe('auto')
+    fireEvent.loadedData(warm)
+    fireEvent.canPlay(warm)
+    expect(warm.preload).toBe('none')
+    expect(document.querySelectorAll('video').length).toBeLessThanOrEqual(3)
 
     // Auto-scroll turns looping off so the reel can end and advance.
     await userEvent.click(menu)
@@ -422,6 +445,201 @@ it('disables Delete in the Flick menu for a read-only library', async () => {
     expect(await screen.findByRole('button', { name: 'Delete file' })).toBeDisabled()
   } finally {
     vi.restoreAllMocks()
+    client.clear()
+  }
+})
+
+it('reuses prepared and previous players without entry animations, posters or loading overlays', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  let beginNext: () => void = () => {}
+  const pendingPlay = new Promise<void>(resolve => {
+    beginNext = resolve
+  })
+  const played: HTMLMediaElement[] = []
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+    played.push(this)
+    return this.getAttribute('src') === '/api/media/2/original' ? pendingPlay : Promise.resolve()
+  })
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const items = [1, 2].map(clip)
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
+      const data = url.includes('/neighbors?')
+        ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+        : /media\/\d+$/.test(url)
+          ? items[id - 1]
+          : { items: [items[0]] }
+      return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } })
+    }),
+  )
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  const view = render(
+    <QueryClientProvider client={client}>
+      <Reels filters={{}} onFilters={vi.fn()} onOpenViewer={vi.fn()} />
+    </QueryClientProvider>,
+  )
+  try {
+    const first = await screen.findByLabelText('1.mp4')
+    const prepared = await screen.findByLabelText('2.mp4')
+    expect(played).toEqual([first])
+    expect(prepared.closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'prepared')
+    fireEvent.loadedData(prepared)
+    fireEvent.canPlay(prepared)
+    expect(prepared).toHaveProperty('preload', 'none')
+    await userEvent.click(screen.getByRole('button', { name: 'Flick menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(played).toContain(prepared))
+    expect(first).toBeVisible()
+    expect(prepared.closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'current')
+    expect(prepared.closest('[data-reel-state]')).not.toHaveClass('invisible')
+    fireEvent.waiting(prepared)
+    act(() => vi.advanceTimersByTime(500))
+    expect(screen.queryByTestId('buffering')).not.toBeInTheDocument()
+    expect(document.querySelector('video[poster]')).toBeNull()
+    expect(document.querySelectorAll('video')).toHaveLength(2)
+    await act(async () => {
+      beginNext()
+      await pendingPlay
+    })
+    expect(screen.getByLabelText('2.mp4')).toBe(prepared)
+    expect(prepared).toBeVisible()
+    expect(prepared).not.toHaveClass('motion-media')
+    expect(prepared.closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'current')
+    act(() => vi.advanceTimersByTime(200))
+    expect(first).toHaveAttribute('src')
+    expect(document.querySelectorAll('video')).toHaveLength(2)
+    await userEvent.click(screen.getByRole('button', { name: 'Previous' }))
+    await waitFor(() => expect(first.closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'current'))
+    expect(screen.getByLabelText('1.mp4')).toBe(first)
+  } finally {
+    beginNext()
+    view.unmount()
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+    client.clear()
+  }
+})
+
+it('shows a recoverable playback failure instead of freezing on an outgoing reel', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+    return this.getAttribute('src') === '/api/media/2/original'
+      ? Promise.reject(new DOMException('Blocked', 'NotAllowedError'))
+      : Promise.resolve()
+  })
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const items = [1, 2].map(clip)
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 1)
+      const data = url.includes('/neighbors?')
+        ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+        : /media\/\d+$/.test(url)
+          ? items[id - 1]
+          : { items: [items[0]] }
+      return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } })
+    }),
+  )
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  const view = render(
+    <QueryClientProvider client={client}>
+      <Reels filters={{}} onFilters={vi.fn()} onOpenViewer={vi.fn()} />
+    </QueryClientProvider>,
+  )
+  try {
+    await screen.findByLabelText('2.mp4')
+    await userEvent.click(screen.getByRole('button', { name: 'Flick menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Press Play to start this video.')).toBeVisible()
+    expect(screen.getByLabelText('2.mp4').closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'current')
+    expect(screen.getByRole('button', { name: 'Play video' })).toBeVisible()
+    expect(screen.queryByTestId('buffering')).not.toBeInTheDocument()
+  } finally {
+    view.unmount()
+    vi.restoreAllMocks()
+    client.clear()
+  }
+})
+
+it('holds between neighbouring clips and reverses without committing or remounting the current video', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+  const items = [1, 2, 3].map(clip)
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      const id = Number(url.match(/media\/(\d+)/)?.[1] ?? 2)
+      return new Response(
+        JSON.stringify(
+          url.includes('/neighbors?')
+            ? { previous: items[id - 2] ?? null, next: items[id] ?? null }
+            : /media\/\d+$/.test(url)
+              ? items[id - 1]
+              : { items: [items[1]] },
+        ),
+      )
+    }),
+  )
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  const changed = vi.fn()
+  const view = render(
+    <QueryClientProvider client={client}>
+      <Reels filters={{}} startId={2} onFilters={vi.fn()} onOpenViewer={vi.fn()} onItemChange={changed} />
+    </QueryClientProvider>,
+  )
+  try {
+    const current = await screen.findByLabelText('2.mp4')
+    const next = await screen.findByLabelText('3.mp4')
+    const previous = await screen.findByLabelText('1.mp4')
+    const viewport = screen.getByTestId('reels-scroll')
+    act(() => vi.advanceTimersByTime(30))
+    expect(viewport.scrollTop).toBe(600)
+    expect(document.querySelectorAll('video')).toHaveLength(3)
+    fireEvent.touchStart(viewport)
+    viewport.scrollTop = 900
+    fireEvent.scroll(viewport)
+    act(() => vi.advanceTimersByTime(500))
+    fireEvent(viewport, new Event('scrollend'))
+    expect(changed).toHaveBeenLastCalledWith(2)
+    expect(viewport.scrollTop).toBe(900)
+    act(() => {
+      client.setQueryData(['reels-neighbors', {}, 2], { previous: clip(4), next: items[2] })
+      vi.advanceTimersByTime(30)
+    })
+    expect(screen.getByLabelText('1.mp4')).toBe(previous)
+    expect(screen.queryByLabelText('4.mp4')).not.toBeInTheDocument()
+    // The finger can reverse all the way back before release.
+    viewport.scrollTop = 600
+    fireEvent.scroll(viewport)
+    fireEvent.touchEnd(viewport)
+    fireEvent(viewport, new Event('scrollend'))
+    expect(current.closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'current')
+    await screen.findByLabelText('4.mp4')
+    expect(viewport.scrollTop).toBe(600)
+    fireEvent.touchStart(viewport)
+    viewport.scrollTop = 1200
+    fireEvent.scroll(viewport)
+    fireEvent.touchEnd(viewport)
+    fireEvent(viewport, new Event('scrollend'))
+    await waitFor(() => expect(next.closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'current'))
+    expect(screen.getByLabelText('2.mp4')).toBe(current)
+    expect(document.querySelector('video[poster]')).toBeNull()
+    expect(screen.queryByTestId('buffering')).not.toBeInTheDocument()
+    document.documentElement.dataset.animation = 'off'
+    await userEvent.click(screen.getByRole('button', { name: 'Flick menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Previous' }))
+    await waitFor(() => expect(current.closest('[data-reel-state]')).toHaveAttribute('data-reel-state', 'current'))
+  } finally {
+    delete document.documentElement.dataset.animation
+    view.unmount()
+    vi.restoreAllMocks()
+    vi.useRealTimers()
     client.clear()
   }
 })

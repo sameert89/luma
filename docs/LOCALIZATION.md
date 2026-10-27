@@ -97,3 +97,22 @@ selection, English fallback and preserving unknown server messages.
 
 Keep older release notes to their major user-facing features. Detailed behavior,
 migrations and implementation history belong in the subsystem documentation.
+
+### Editorial review
+
+Read the text in the screen where it appears, including the heading and buttons.
+A shorter technical report is still a technical report. Prefer “Feel free to close
+this window and keep browsing while your files upload” to “Uploads continue when
+this dialog closes.” A routine notification can simply say “Renaming in the
+background…” instead of repeating instructions for the task queue.
+
+Write to the person using Luma. Connect related thoughts instead of stacking
+fragments about what stays visible, hidden or unchanged. Leave clear labels alone;
+buttons do not need personality. Explain consequences when they affect a decision,
+especially permanent deletion, replacement, write access and recovery. Keep setup
+mechanics in Help unless someone needs them to resolve the current problem.
+
+Review every catalog, including Help, API errors, accessible descriptions and empty
+states. Check the assembled message too: interpolated suffixes and adjacent strings
+must read naturally. Do not change original API titles in `api-titles.json` to make
+them match revised display text.

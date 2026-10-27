@@ -24,7 +24,7 @@ function warning(onSettings = vi.fn()) {
 test('shows a brief floating notice and dismisses only for the current server boot', async () => {
   const onSettings = vi.fn()
   const first = render(warning(onSettings))
-  expect(await screen.findByRole('status')).toHaveTextContent('Read-only media')
+  expect(await screen.findByRole('status')).toHaveTextContent('Your media is read-only')
   await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
   expect(screen.queryByRole('status')).toBeNull()
   expect(sessionStorage.getItem('luma-storage-warning')).toBe('boot-1')
@@ -34,7 +34,7 @@ test('shows a brief floating notice and dismisses only for the current server bo
     libraries: [{ libraryId: 1, name: 'Photos', warning: 'Read-only mount after reboot' }],
   })
   render(warning())
-  expect(await screen.findByRole('status')).toHaveTextContent('Read-only media')
+  expect(await screen.findByRole('status')).toHaveTextContent('Your media is read-only')
   await userEvent.click(screen.getByRole('button', { name: 'Details' }))
   expect(screen.queryByRole('status')).toBeNull()
 })

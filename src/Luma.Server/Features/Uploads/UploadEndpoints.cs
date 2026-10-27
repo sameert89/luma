@@ -12,7 +12,7 @@ public static class UploadEndpoints
         // would corrupt the protocol, and waiting for a client must not pause indexing workers.
         var uploads = app.MapGroup("/api/files/uploads").AddEndpointFilter<MutationAccessFilter>();
         uploads.MapPost("", async (UploadRequest request, UploadSessions sessions, CancellationToken ct) =>
-            TypedResults.Ok(await sessions.CreateAsync(request, ct))).WithName("CreateUploadSession");
+            TypedResults.Ok(await sessions.CreateAsync(request, ct))).AddEndpointFilter<ForegroundWriteFilter>().WithName("CreateUploadSession");
         uploads.MapGet("/{id}", async (string id, UploadSessions sessions, CancellationToken ct) =>
             TypedResults.Ok(await sessions.GetAsync(id, ct))).WithName("GetUploadSession");
         uploads.MapPatch("/{id}", async (string id, long offset, HttpContext context, UploadSessions sessions, CancellationToken ct) =>
@@ -23,8 +23,8 @@ public static class UploadEndpoints
             return TypedResults.Ok(await sessions.AppendAsync(id, offset, context.Request.Body, length, ct));
         }).WithName("AppendUploadChunk");
         uploads.MapPost("/{id}/finalize", async (string id, bool? replaceExisting, UploadSessions sessions, CancellationToken ct) =>
-            TypedResults.Ok(await sessions.FinalizeAsync(id, ct, replaceExisting ?? false))).WithName("FinalizeUploadSession");
+            TypedResults.Ok(await sessions.FinalizeAsync(id, ct, replaceExisting ?? false))).AddEndpointFilter<ForegroundWriteFilter>().WithName("FinalizeUploadSession");
         uploads.MapPost("/{id}/{action}", async (string id, string action, UploadSessions sessions, CancellationToken ct) =>
-            TypedResults.Ok(await sessions.ChangeStateAsync(id, action, ct))).WithName("ChangeUploadSessionState");
+            TypedResults.Ok(await sessions.ChangeStateAsync(id, action, ct))).AddEndpointFilter<ForegroundWriteFilter>().WithName("ChangeUploadSessionState");
     }
 }

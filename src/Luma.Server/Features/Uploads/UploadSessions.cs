@@ -122,6 +122,7 @@ public sealed class UploadSessions(Database database, FileOperations operations,
                 }
                 await output.FlushAsync(ct);
                 output.Flush(flushToDisk: true);
+                using var foreground = database.BeginForegroundWrite();
                 await using var db = await operations.OpenJournalAsync(ct);
                 await db.ExecuteAsync(new CommandDefinition("UPDATE UploadSessions SET CommittedOffset=@next,UpdatedAt=@now WHERE Id=@id AND CommittedOffset=@offset", new { id, offset, next = offset + received, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
                 session.CommittedOffset += received;
@@ -148,6 +149,7 @@ public sealed class UploadSessions(Database database, FileOperations operations,
                 var path = MutationPaths.Internal(root, MutationPaths.UploadDirectory, id);
                 try { File.Delete(path); }
                 catch (DirectoryNotFoundException) { /* No staging was created, or it was already removed. */ }
+                MutationPaths.RemoveEmptyStaging(root, MutationPaths.UploadDirectory, id);
             }
             // Release the durable reservation only after staging deletion succeeds. A crash
             // before this checkpoint leaves a cancellable session, never untracked staged bytes.

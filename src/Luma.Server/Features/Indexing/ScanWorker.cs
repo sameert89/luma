@@ -91,6 +91,45 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
         }
     }
 
+    internal static string ReconciliationSql(ScanRow scan)
+    {
+        var full = scan.FolderId is null;
+        var folderScope = full ? "LibraryId=@LibraryId" : scan.Recursive
+            ? "Id IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId)" : "ParentId=@FolderId";
+        var mediaScope = full ? "LibraryId=@LibraryId" : scan.Recursive
+            ? "FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId)" : "FolderId=@FolderId";
+        var missingFolders = full ? "SELECT Id FROM Folders INDEXED BY IX_Folders_Missing WHERE Missing=1 AND LibraryId=@LibraryId"
+            : scan.Recursive ? "SELECT f.Id FROM Folders f JOIN FolderAncestry a ON a.DescendantId=f.Id WHERE a.AncestorId=@FolderId AND f.Missing=1"
+            : "SELECT a.DescendantId FROM Folders f INDEXED BY IX_Folders_Parent JOIN FolderAncestry a ON a.AncestorId=f.Id WHERE f.ParentId=@FolderId AND f.Missing=1";
+        var affectedMedia = full ? "LibraryId=@LibraryId" : scan.Recursive ? mediaScope
+            : $"FolderId IN (SELECT @FolderId UNION {missingFolders})";
+        var visitedFolders = full ? "LibraryId=@LibraryId AND LastSeenScanId=@Id" : scan.Recursive
+            ? "Id IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId) AND (LastSeenScanId=@Id OR Id=@FolderId)" : "Id=@FolderId";
+        var mediaIndex = full ? "" : "INDEXED BY IX_Media_Folder";
+        return $"""
+            UPDATE Folders SET Missing=1 WHERE {folderScope} AND Recycled=0
+              AND ParentId IS NOT NULL AND COALESCE(LastSeenScanId,0)<>@Id
+              AND Id NOT IN ({Luma.Server.Features.Libraries.HiddenFolders.Descendants});
+            UPDATE Folders SET Missing=1 WHERE Id IN (
+              SELECT a.DescendantId FROM Folders f INDEXED BY IX_Folders_Parent JOIN FolderAncestry a ON a.AncestorId=f.Id
+              WHERE f.LibraryId=@LibraryId AND f.ParentId=@FolderId AND f.Missing=1 AND NOT @Recursive);
+            UPDATE Media {mediaIndex} SET Availability='missing' WHERE {mediaScope} AND LastSeenScanId<>@Id
+              AND FolderId NOT IN ({Luma.Server.Features.Libraries.HiddenFolders.Descendants});
+            UPDATE Media {mediaIndex} SET Availability='missing' WHERE Availability='present' AND FolderId IN ({missingFolders});
+            UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
+              (SELECT Id FROM Media {mediaIndex} WHERE {affectedMedia} AND Availability='missing');
+            UPDATE Libraries SET Availability='available' WHERE Id=@LibraryId;
+            UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+              ModifiedTicks=CASE WHEN Id=@FolderId OR (@FolderId IS NULL AND ParentId IS NULL)
+                THEN MAX(ModifiedTicks,@sourceModifiedTicks) ELSE ModifiedTicks END,
+              SourceModifiedTicks=CASE WHEN Id=@FolderId OR (@FolderId IS NULL AND ParentId IS NULL)
+                THEN @sourceModifiedTicks ELSE SourceModifiedTicks END
+              WHERE {visitedFolders};
+            UPDATE Folders SET ModifiedTicks=MAX(ModifiedTicks,(SELECT ModifiedTicks FROM Folders WHERE Id=@FolderId))
+              WHERE Id IN (SELECT AncestorId FROM FolderAncestry WHERE DescendantId=@FolderId);
+            """;
+    }
+
     private async Task FinishFailedAsync(long id, string state, string code, CancellationToken ct)
     {
         await using var db = await database.OpenAsync(ct);
@@ -168,30 +207,20 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             }
             await producer;
             SourcePaths.Check(root, root.Path);
+            var sourceModifiedTicks = Directory.GetLastWriteTimeUtc(directoryPath).Ticks;
             await database.YieldToForegroundAsync(ct);
             using var tx = db.BeginTransaction();
             var owned = await db.ExecuteAsync(new CommandDefinition("""
                 UPDATE Scans SET State='completed',FinishedAt=@now WHERE Id=@Id AND State='running'
                 """, new { scan.Id, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
             if (owned == 1)
-                await db.ExecuteAsync(new CommandDefinition($"""
-                    UPDATE Media SET Availability='missing' WHERE LibraryId=@LibraryId AND LastSeenScanId<>@Id
-                      AND (@FolderId IS NULL OR FolderId=@FolderId OR @Recursive AND FolderId IN (SELECT DescendantId FROM FolderAncestry WHERE AncestorId=@FolderId))
-                      AND FolderId NOT IN ({Luma.Server.Features.Libraries.HiddenFolders.Descendants});
-                    UPDATE ProcessingJobs SET State='waiting' WHERE State='pending' AND MediaId IN
-                      (SELECT Id FROM Media WHERE LibraryId=@LibraryId AND Availability='missing');
-                    UPDATE Libraries SET Availability='available' WHERE Id=@LibraryId;
-                    UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-                      SourceModifiedTicks=CASE WHEN Id=@FolderId OR (@FolderId IS NULL AND ParentId IS NULL)
-                        THEN @sourceModifiedTicks ELSE SourceModifiedTicks END
-                      WHERE LibraryId=@LibraryId AND (((@FolderId IS NULL OR @Recursive) AND LastSeenScanId=@Id) OR Id=@FolderId);
-                    """, new
+                await db.ExecuteAsync(new CommandDefinition(ReconciliationSql(scan), new
                 {
                     scan.Id,
                     scan.LibraryId,
                     scan.FolderId,
                     scan.Recursive,
-                    sourceModifiedTicks = Directory.GetLastWriteTimeUtc(directoryPath).Ticks
+                    sourceModifiedTicks
                 }, tx, cancellationToken: ct));
             tx.Commit();
             await RefreshStatisticsAsync(db, ct);
@@ -304,7 +333,9 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             }
             SourcePaths.Check(root, path);
             await db.ExecuteAsync(new CommandDefinition("""
-                UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now'),SourceModifiedTicks=@ticks WHERE Id=@folderId
+                UPDATE Folders SET DirectIndexedAt=strftime('%Y-%m-%dT%H:%M:%fZ','now'),ModifiedTicks=MAX(ModifiedTicks,@ticks),SourceModifiedTicks=@ticks WHERE Id=@folderId;
+                UPDATE Folders SET ModifiedTicks=MAX(ModifiedTicks,@ticks)
+                  WHERE Id IN (SELECT AncestorId FROM FolderAncestry WHERE DescendantId=@folderId) AND ModifiedTicks<@ticks;
                 """, new { folderId, ticks = Directory.GetLastWriteTimeUtc(path).Ticks }, cancellationToken: ct));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -373,8 +404,12 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             // The traversal already listed the directory's time, so folders can sort by date
             // without browsing ever touching disk. The scan's starting folder carries none.
             if (entry.ModifiedAt.Length > 0)
-                await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET ModifiedTicks=@ticks,SourceModifiedTicks=@ticks WHERE Id=@folderId AND (ModifiedTicks<>@ticks OR SourceModifiedTicks<>@ticks)",
-                    new { folderId, ticks = Media.SearchText.Ticks(entry.ModifiedAt) }, tx, cancellationToken: ct));
+                await db.ExecuteAsync(new CommandDefinition("""
+                    UPDATE Folders SET ModifiedTicks=MAX(ModifiedTicks,@ticks),
+                      SourceModifiedTicks=CASE WHEN Id=@folderId THEN @ticks ELSE SourceModifiedTicks END
+                    WHERE Id IN (SELECT AncestorId FROM FolderAncestry WHERE DescendantId=@folderId)
+                      AND (ModifiedTicks<@ticks OR (Id=@folderId AND (SourceModifiedTicks IS NULL OR SourceModifiedTicks<>@ticks)));
+                    """, new { folderId, ticks = Media.SearchText.Ticks(entry.ModifiedAt) }, tx, cancellationToken: ct));
         }
         else if (!MediaFormats.TryGet(entry.RelativePath, out var format))
             await db.ExecuteAsync(new CommandDefinition("UPDATE Scans SET Skipped=Skipped+1 WHERE Id=@Id", scan, tx, cancellationToken: ct));
@@ -450,7 +485,7 @@ public sealed class ScanWorker(Database database, IndexingOptions options, ILogg
             "SELECT Id FROM Folders WHERE LibraryId=@Id AND PathKey=@key", new { root.Id, key }, tx, cancellationToken: ct));
         if (existing is { } id)
         {
-            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET LastSeenScanId=@scanId,RelativePath=@path WHERE Id=@id", new { scanId, path, id }, tx, cancellationToken: ct));
+            await db.ExecuteAsync(new CommandDefinition("UPDATE Folders SET LastSeenScanId=@scanId,RelativePath=@path,Missing=0 WHERE Id=@id", new { scanId, path, id }, tx, cancellationToken: ct));
             folders[key] = id;
             return id;
         }
