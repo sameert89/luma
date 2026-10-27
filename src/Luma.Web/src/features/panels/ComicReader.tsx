@@ -7,6 +7,8 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minus, Plus, SlidersHor
 import { IconButton, QuietButton, Select, Input, Range } from '../../components/ui/Controls'
 import { useReadingSession } from './useReadingSession'
 import type { Comic } from './api'
+import type { PDFDocumentProxy, PDFDocumentLoadingTask } from 'pdfjs-dist'
+import { PdfPage } from './PdfPage'
 
 function readerPreferences(settings: string) {
   try {
@@ -22,6 +24,7 @@ function readerPreferences(settings: string) {
 }
 
 export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => void }) {
+  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [page, setPage] = useState(comic.pageIndex)
   const [preferences] = useState(() => readerPreferences(comic.settings))
   const [direction, setDirection] = useState(comic.settings === '{}' ? preferences.direction : comic.direction)
@@ -47,6 +50,28 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     await flush()
     onExit()
   }
+  useEffect(() => {
+    if (comic.format !== 'pdf') return
+    let disposed = false
+    let task: PDFDocumentLoadingTask | undefined
+    void import('./pdf')
+      .then(async ({ openPdf }) => {
+        if (disposed) return
+        if (!comic.documentUrl) throw new Error('Missing PDF document URL')
+        task = openPdf(comic.documentUrl)
+        const document = await task.promise
+        if (document.numPages !== comic.pageCount) throw new Error('PDF page count changed')
+        if (!disposed) setPdf(document)
+      })
+      .catch(() => {
+        if (!disposed) setImageError(true)
+      })
+    return () => {
+      disposed = true
+      setPdf(null)
+      void task?.destroy().catch(() => {})
+    }
+  }, [comic.id, comic.format, comic.documentUrl, comic.pageCount])
   const move = (delta: number) => {
     setPage(value => {
       const next = Math.max(0, Math.min(comic.pageCount - 1, value + delta))
@@ -98,6 +123,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     return () => window.removeEventListener('keydown', keys)
   }, [direction, onExit, mode, controls, jump])
   useEffect(() => {
+    if (comic.format === 'pdf') return
     const images = [page - 1, page + 1]
       .filter(index => index >= 0 && index < comic.pageCount)
       .map(index => {
@@ -108,7 +134,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     return () => {
       for (const image of images) image.src = ''
     }
-  }, [comic.id, comic.pageCount, page])
+  }, [comic.id, comic.format, comic.pageCount, page])
   function down(event: React.PointerEvent) {
     restoring.current = false
     if (pointers.current.size === 0) pinched.current = false
@@ -257,16 +283,31 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
             if (event.ctrlKey) setZoom(value => Math.max(1, Math.min(8, value - event.deltaY / 200)))
           }}
         >
-          <img
-            key={page}
-            src={pageUrl(page)}
-            alt={`${comic.title}, page ${page + 1}`}
-            draggable={false}
-            onError={() => setImageError(true)}
-            onLoad={() => setImageError(false)}
-            className={`${fit === 'width' ? 'w-full h-auto' : fit === 'height' ? 'h-full w-auto' : fit === 'original' ? 'max-w-none' : 'h-full w-full object-contain'} select-none`}
-            style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }}
-          />
+          {comic.format === 'pdf' ? (
+            pdf && (
+              <PdfPage
+                key={page}
+                document={pdf}
+                index={page}
+                label={`${comic.title}, page ${page + 1}`}
+                className={`${fit === 'width' ? 'w-full h-auto' : fit === 'height' ? 'h-full w-auto' : fit === 'original' ? 'max-w-none' : 'h-full w-full object-contain'} select-none`}
+                style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }}
+                onError={() => setImageError(true)}
+                onLoad={() => setImageError(false)}
+              />
+            )
+          ) : (
+            <img
+              key={page}
+              src={pageUrl(page)}
+              alt={`${comic.title}, page ${page + 1}`}
+              draggable={false}
+              onError={() => setImageError(true)}
+              onLoad={() => setImageError(false)}
+              className={`${fit === 'width' ? 'w-full h-auto' : fit === 'height' ? 'h-full w-auto' : fit === 'original' ? 'max-w-none' : 'h-full w-full object-contain'} select-none`}
+              style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }}
+            />
+          )}
         </div>
       ) : (
         <div
@@ -300,22 +341,43 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
                 className="absolute left-0 top-0 w-full"
                 style={{ transform: `translateY(${item.start}px)` }}
               >
-                <img
-                  src={pageUrl(item.index)}
-                  alt={`${comic.title}, page ${item.index + 1}`}
-                  className="block h-auto w-full"
-                  style={{ aspectRatio: 'auto 2 / 3' }}
-                  loading="lazy"
-                  onLoad={event => {
-                    virtual.measureElement(event.currentTarget.parentElement!)
-                    if (restoring.current && item.index === resumeTarget.current) {
-                      virtual.scrollToIndex(resumeTarget.current, { align: 'start' })
-                      requestAnimationFrame(() => {
-                        restoring.current = false
-                      })
-                    }
-                  }}
-                />
+                {comic.format === 'pdf' ? (
+                  pdf && (
+                    <PdfPage
+                      document={pdf}
+                      index={item.index}
+                      label={`${comic.title}, page ${item.index + 1}`}
+                      className="block h-auto w-full"
+                      onError={() => setImageError(true)}
+                      onLoad={canvas => {
+                        virtual.measureElement(canvas.parentElement!)
+                        if (restoring.current && item.index === resumeTarget.current) {
+                          virtual.scrollToIndex(resumeTarget.current, { align: 'start' })
+                          requestAnimationFrame(() => {
+                            restoring.current = false
+                          })
+                        }
+                      }}
+                    />
+                  )
+                ) : (
+                  <img
+                    src={pageUrl(item.index)}
+                    alt={`${comic.title}, page ${item.index + 1}`}
+                    className="block h-auto w-full"
+                    style={{ aspectRatio: 'auto 2 / 3' }}
+                    loading="lazy"
+                    onLoad={event => {
+                      virtual.measureElement(event.currentTarget.parentElement!)
+                      if (restoring.current && item.index === resumeTarget.current) {
+                        virtual.scrollToIndex(resumeTarget.current, { align: 'start' })
+                        requestAnimationFrame(() => {
+                          restoring.current = false
+                        })
+                      }
+                    }}
+                  />
+                )}
               </div>
             ))}
           </div>

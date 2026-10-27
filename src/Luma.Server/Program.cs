@@ -123,6 +123,10 @@ if (Directory.Exists(app.Environment.WebRootPath))
 {
     var contentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
     contentTypes.Mappings[".webmanifest"] = "application/manifest+json";
+    contentTypes.Mappings[".mjs"] = "text/javascript";
+    contentTypes.Mappings[".wasm"] = "application/wasm";
+    contentTypes.Mappings[".bcmap"] = "application/octet-stream";
+    contentTypes.Mappings[".pfb"] = "application/octet-stream";
     app.UseDefaultFiles();
     app.UseStaticFiles(new StaticFileOptions
     {

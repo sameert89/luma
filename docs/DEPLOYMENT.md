@@ -515,3 +515,21 @@ build budget, build the ARM64 image on another machine and deploy that image.
 References: [BuildKit parallelism](https://docs.docker.com/build/buildkit/configure/),
 [builder container limits](https://docs.docker.com/build/builders/drivers/docker-container/),
 [.NET publish options](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-publish).
+
+### PDF comics in Panels
+
+PDFs can be discovered from the same Panels locations as CBZ/CBR comics. Run
+comic discovery after adding them. The existing reader handles navigation, zoom,
+reading direction and progress. Password-protected PDFs are not supported.
+
+Docker includes Poppler (`pdfinfo` and `pdftoppm`) for page counts and cached
+covers. Native installations must install `poppler-utils` on Debian/Ubuntu or
+Poppler on Windows and put its binaries on PATH. Custom binary locations can be
+set with `Luma:Indexing:PdfinfoPath` and `Luma:Indexing:PdftoppmPath`.
+Inspection and cover rendering have 30-second deadlines; covers use the shared
+processing slots and a 1,024-pixel longest edge. Pages are not extracted on the
+server. The reader loads PDF.js only when opening a PDF and fetches the document
+from Luma with range requests; fonts, CMaps and decoders are hosted locally.
+Rendered canvases are limited to four million pixels and a 2,400-pixel longest
+edge, with only mounted reader pages retained. Very complex documents can still
+consume additional browser memory and take longer to render.

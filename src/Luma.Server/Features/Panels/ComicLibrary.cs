@@ -31,7 +31,10 @@ public sealed class ComicRow
     public string? LastReadAt { get; set; }
 }
 public sealed record ComicSummary(long Id, long LibraryId, string Title, string Series, string Author, string Description,
-    string Format, int PageCount, int PageIndex, string State, double ReadingSeconds, string Direction, string Settings, string? LastReadAt, bool Favourite, string? CoverUrl, int CoverPage);
+    string Format, int PageCount, int PageIndex, string State, double ReadingSeconds, string Direction, string Settings, string? LastReadAt, bool Favourite, string? CoverUrl, int CoverPage)
+{
+    public string? DocumentUrl { get; init; }
+}
 public sealed record ComicList(IReadOnlyList<ComicSummary> Items, long? NextCursor);
 public sealed record ComicFolder(string Name, string RelativePath, IReadOnlyList<string>? CoverUrls = null);
 public sealed record ComicFolderPage(IReadOnlyList<ComicFolder> Items, string? NextCursor);
@@ -142,7 +145,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         await using var db = await database.OpenAsync(ct);
         return await db.QuerySingleOrDefaultAsync<ComicRow>(new CommandDefinition(ReadSql + " AND c.Id=@id", new { id }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
     }
-    internal static ComicSummary Summary(ComicRow row, bool? cover = null) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, (cover ?? row.HasCover) ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null, row.CoverPage);
+    internal static ComicSummary Summary(ComicRow row, bool? cover = null) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, (cover ?? row.HasCover) ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null, row.CoverPage) { DocumentUrl = row.Format == "pdf" ? $"/api/panels/comics/{row.Id}/document?revision={row.Revision}" : null };
     public async Task<ComicJobAccepted> QueueAsync(ComicRegistration request, CancellationToken ct)
     {
         var root = options.Libraries.Find(x => x.Id == request.LibraryId) ?? throw ApiRequestException.Missing();

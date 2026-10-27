@@ -18,9 +18,24 @@ public sealed class ComicPageContent(Database database, IndexingOptions options,
     {
         var comic = await library.GetAsync(id, ct);
         if (page < 0 || page >= comic.PageCount) throw ApiRequestException.Invalid();
+        if (comic.Format == "pdf") throw ApiRequestException.Invalid("Open PDF pages in the comic reader.");
         var path = await PrepareAsync(comic, page, original ? "original" : "page", ct);
         Mime.TryGetContentType(path, out var mime);
         return Results.File(path, mime ?? "image/jpeg", lastModified: new DateTimeOffset(comic.SourceModifiedTicks, TimeSpan.Zero), enableRangeProcessing: true);
+    }
+    public async Task<IResult> DocumentAsync(long id, int? revision, CancellationToken ct)
+    {
+        var comic = await library.GetAsync(id, ct);
+        if (comic.Format != "pdf") throw ApiRequestException.Missing();
+        if (revision is not null && revision != comic.Revision) throw new ApiRequestException(409, "comic_source_changed", "Reopen this comic after the source changed.");
+        var root = options.Libraries.Find(x => x.Id == comic.LibraryId) ?? throw ApiRequestException.Missing();
+        var path = SourcePaths.Resolve(root, comic.RelativePath);
+        var file = new FileInfo(path);
+        if (!file.Exists) throw ApiRequestException.Missing();
+        if (file.Length != comic.SourceSize || file.LastWriteTimeUtc.Ticks != comic.SourceModifiedTicks)
+            throw new ApiRequestException(409, "comic_source_changed", "Rediscover this comic after the source changed.");
+        return Results.File(path, "application/pdf", lastModified: new DateTimeOffset(comic.SourceModifiedTicks, TimeSpan.Zero),
+            entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"pdf-{comic.Id}-{comic.Revision}\""), enableRangeProcessing: true);
     }
     public async Task<IResult> CoverAsync(long id, CancellationToken ct)
     {
@@ -52,7 +67,7 @@ public sealed class ComicPageContent(Database database, IndexingOptions options,
             var directory = Path.Combine(options.CachePath, "comics");
             Directory.CreateDirectory(directory);
             var temp = Path.Combine(directory, Guid.NewGuid().ToString("N"));
-            var raw = temp + Path.GetExtension(sourcePage.Name).ToLowerInvariant();
+            var raw = temp + (comic.Format == "pdf" ? ".png" : Path.GetExtension(sourcePage.Name).ToLowerInvariant());
             var thumbnail = temp + ".webp";
             var preview = temp + ".jpg";
             await options.ProcessingSlots.WaitAsync(ct);
@@ -60,7 +75,12 @@ public sealed class ComicPageContent(Database database, IndexingOptions options,
             {
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 deadline.CancelAfter(TimeSpan.FromSeconds(60));
-                await ComicSources.ExtractIsolatedAsync(source, comic.Format == "folder", sourcePage, raw, deadline.Token);
+                if (comic.Format == "pdf")
+                {
+                    if (variant != "cover") throw ApiRequestException.Invalid();
+                    await PdfComics.RenderCoverAsync(source, page, raw, options, deadline.Token);
+                }
+                else await ComicSources.ExtractIsolatedAsync(source, comic.Format == "folder", sourcePage, raw, deadline.Token);
                 // Reuse the bounded decoder pool for validation, orientation, covers and previews.
                 await decoder.ProcessAsync(raw, "image", thumbnail, variant == "cover" ? null : preview, deadline.Token);
                 var selected = variant switch { "cover" => thumbnail, "original" => raw, _ => preview };

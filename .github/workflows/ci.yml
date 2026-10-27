@@ -24,7 +24,7 @@ jobs:
           cache: npm
           cache-dependency-path: src/Luma.Web/package-lock.json
       - run: dotnet restore Luma.slnx --locked-mode
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg poppler-utils
         if: runner.os == 'Linux'
       - name: Install and verify FFmpeg
         if: runner.os == 'Windows'
@@ -39,6 +39,15 @@ jobs:
             if ($attempt -lt 3) { Start-Sleep -Seconds 5 }
           }
           throw "FFmpeg is unavailable after three installation attempts."
+      - name: Install Poppler
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install poppler --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw "Poppler installation failed." }
+          $poppler = Get-ChildItem C:\ProgramData\chocolatey -Filter pdfinfo.exe -Recurse | Select-Object -First 1
+          if (!$poppler) { throw "pdfinfo is unavailable." }
+          $poppler.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - run: dotnet format Luma.slnx --verify-no-changes --no-restore
       - run: dotnet build Luma.slnx -c Release --no-restore
       - run: dotnet test Luma.slnx -c Release --no-build

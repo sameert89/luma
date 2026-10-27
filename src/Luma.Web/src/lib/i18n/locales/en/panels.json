@@ -26,7 +26,7 @@
   },
   "comicLocations": {
     "comicLocationsSavedRecursiveDiscoveryIsQueuedReadingProgress": "Looking for comics in your saved folders…",
-    "chooseLocationsInsideYourServerConfiguredLibrariesEachLocation": "Where do you keep your comics? Choose folders containing CBZ, CBR, ZIP or RAR files. We’ll look through their subfolders too.\n\nFor comics saved as loose images, turn on the image-folder option below. You can change these locations later without losing your reading progress.",
+    "chooseLocationsInsideYourServerConfiguredLibrariesEachLocation": "Where do you keep your comics? Choose folders containing PDF, CBZ, CBR, ZIP or RAR files. We’ll look through their subfolders too.\n\nFor comics saved as loose images, turn on the image-folder option below. You can change these locations later without losing your reading progress.",
     "comicLocation": "Comic folder {{number}}",
     "library": "Library",
     "chooseLibrary": "Choose library",

@@ -3136,6 +3136,38 @@
         }
       }
     },
+    "/api/panels/comics/{id}/document": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/panels/comics/{id}/cover": {
       "get": {
         "tags": [
@@ -4322,6 +4354,10 @@
           "coverPage": {
             "type": "integer",
             "format": "int32"
+          },
+          "documentUrl": {
+            "type": "string",
+            "nullable": true
           }
         }
       },

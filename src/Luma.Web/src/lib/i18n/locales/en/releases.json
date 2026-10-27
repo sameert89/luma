@@ -1,6 +1,12 @@
 {
   "history": [
     {
+      "version": "2.0.0-beta.13",
+      "date": "2026-10-28",
+      "headline": "PDF comics in Panels",
+      "changes": ["Read PDF comics with the same page controls, zoom and saved reading progress."]
+    },
+    {
       "version": "2.0.0-beta.12",
       "date": "2026-10-24",
       "headline": "Reliable uploads and lighter builds",

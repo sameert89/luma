@@ -28,6 +28,8 @@ public static class PanelEndpoints
             TypedResults.Ok(ComicLibrary.Summary(await library.GetAsync(id, ct)))).WithName("GetComic");
         app.MapGet("/api/panels/comics/{id:long}/pages/{page:int}", (long id, int page, bool? original, ComicPageContent pages, CancellationToken ct) =>
             pages.ServeAsync(id, page, original == true, ct)).WithName("GetComicPage");
+        app.MapGet("/api/panels/comics/{id:long}/document", (long id, int? revision, ComicPageContent pages, CancellationToken ct) =>
+            pages.DocumentAsync(id, revision, ct)).AddEndpointFilter<SameOriginFilter>().WithName("GetComicDocument");
         app.MapGet("/api/panels/comics/{id:long}/cover", (long id, ComicPageContent pages, CancellationToken ct) =>
             pages.CoverAsync(id, ct)).WithName("GetComicCover");
         app.MapPut("/api/panels/comics/{id:long}/progress", async (long id, ReadingUpdate update, ComicProgress progress, CancellationToken ct) =>
