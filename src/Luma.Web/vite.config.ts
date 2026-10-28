@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
@@ -39,10 +39,50 @@ function themeManifests(): Plugin {
   }
 }
 
+/** Keep PDF fonts/CMaps/decoders local, with stable names expected by PDF.js. */
+function pdfAssets(): Plugin {
+  const assets = ['cmaps', 'standard_fonts', 'wasm'].flatMap(directory => {
+    const root = new URL(`./node_modules/pdfjs-dist/${directory}/`, import.meta.url)
+    return readdirSync(root)
+      .filter(name => /\.(bcmap|pfb|ttf|wasm|js)$/.test(name) || /LICENSE/i.test(name))
+      .map(name => ({
+        path: `/pdfjs/${directory}/${name}`,
+        source: new URL(name, root),
+      }))
+  })
+  return {
+    name: 'luma-pdf-assets',
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const asset = assets.find(item => item.path === request.url?.split('?')[0])
+        if (!asset) return next()
+        response.setHeader(
+          'Content-Type',
+          asset.path.endsWith('.wasm')
+            ? 'application/wasm'
+            : asset.path.endsWith('.js')
+              ? 'text/javascript'
+              : 'application/octet-stream',
+        )
+        response.end(readFileSync(asset.source))
+      })
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'pdfjs/LICENSE',
+        source: readFileSync(new URL('./node_modules/pdfjs-dist/LICENSE', import.meta.url)),
+      })
+      for (const asset of assets)
+        this.emitFile({ type: 'asset', fileName: asset.path.slice(1), source: readFileSync(asset.source) })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
   base: mode === 'help' ? './' : '/',
   build: mode === 'help' ? { outDir: 'help-dist', rollupOptions: { input: 'help.html' } } : {},
-  plugins: [react(), tailwindcss(), themeManifests()],
+  plugins: [react(), tailwindcss(), themeManifests(), ...(mode === 'help' ? [] : [pdfAssets()])],
   // Preserve the browser-facing host for the API's same-origin checks.
   server: { proxy: { '/api': { target: apiTarget, changeOrigin: false } } },
   preview: { proxy: { '/api': { target: apiTarget, changeOrigin: false } } },

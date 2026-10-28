@@ -2898,6 +2898,20 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2939,6 +2953,13 @@
           },
           {
             "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
             "in": "query",
             "schema": {
               "type": "string"
@@ -3126,6 +3147,38 @@
             "in": "query",
             "schema": {
               "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/panels/comics/{id}/document": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetComicDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
             }
           }
         ],
@@ -4322,6 +4375,10 @@
           "coverPage": {
             "type": "integer",
             "format": "int32"
+          },
+          "documentUrl": {
+            "type": "string",
+            "nullable": true
           }
         }
       },

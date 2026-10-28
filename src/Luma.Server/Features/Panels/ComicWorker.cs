@@ -61,7 +61,7 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
                 foreach (var entry in SourceTraversal.Enumerate(discoveryRoot))
                 {
                     ct.ThrowIfCancellationRequested();
-                    if (entry is FileInfo ? !ComicSources.IsArchive(entry.Name) : !job.ImageFolders) continue;
+                    if (entry is FileInfo ? !ComicSources.IsBook(entry.Name) : !job.ImageFolders) continue;
                     if (entry is DirectoryInfo folder && !SourceTraversal.Enumerate(folder.FullName, recursive: false).Any(x => x is FileInfo && ComicSources.IsImage(x.Name))) continue;
                     await using (var stateDb = await database.OpenAsync(ct))
                         if (await stateDb.ExecuteScalarAsync<string>(new CommandDefinition("SELECT State FROM ComicJobs WHERE Id=@Id", job, cancellationToken: ct)) != "running") return;
@@ -89,7 +89,8 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
     {
         var source = SourcePaths.Resolve(root, relative);
         var directory = Directory.Exists(source);
-        var sources = await ComicSources.InspectIsolatedAsync(source, directory, ct);
+        var pdf = !directory && ComicSources.IsPdf(source);
+        var sources = pdf ? await PdfComics.InspectAsync(source, options, ct) : await ComicSources.InspectIsolatedAsync(source, directory, ct);
         var modified = File.GetLastWriteTimeUtc(source).Ticks;
         var size = directory ? 0 : new FileInfo(source).Length;
         await database.YieldToForegroundAsync(ct);
@@ -103,7 +104,7 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
                   PageCount=excluded.PageCount,SourceSize=excluded.SourceSize,SourceModifiedTicks=excluded.SourceModifiedTicks,
                   Revision=Comics.Revision+CASE WHEN Comics.SourceSize<>excluded.SourceSize OR Comics.SourceModifiedTicks<>excluded.SourceModifiedTicks THEN 1 ELSE 0 END,
                   Availability='present',LastJobId=excluded.LastJobId RETURNING Id;
-                """, new { job.LibraryId, job.Id, relative, key = root.Key(relative), format = directory ? "folder" : Path.GetExtension(relative).ToLowerInvariant() is ".cbz" or ".zip" ? "zip" : "rar", title = Path.GetFileNameWithoutExtension(relative.Length == 0 ? root.Name : relative), count = sources.Count, size, modified, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+                """, new { job.LibraryId, job.Id, relative, key = root.Key(relative), format = directory ? "folder" : pdf ? "pdf" : Path.GetExtension(relative).ToLowerInvariant() is ".cbz" or ".zip" ? "zip" : "rar", title = Path.GetFileNameWithoutExtension(relative.Length == 0 ? root.Name : relative), count = sources.Count, size, modified, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
             await db.ExecuteAsync(new CommandDefinition("DELETE FROM ComicPages WHERE ComicId=@id", new { id }, tx, cancellationToken: ct));
             await db.ExecuteAsync(new CommandDefinition("""
                 INSERT INTO ComicPages(ComicId,PageIndex,EntryName,SizeBytes)

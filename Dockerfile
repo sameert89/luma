@@ -23,7 +23,7 @@ RUN --mount=type=bind,from=server,source=/app,target=/server-build \
     RAYON_NUM_THREADS=2 UV_THREADPOOL_SIZE=2 npm run build
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg poppler-utils && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=server /app ./
 COPY --from=web /build/src/Luma.Web/dist ./wwwroot

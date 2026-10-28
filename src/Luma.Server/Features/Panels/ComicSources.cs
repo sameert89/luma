@@ -37,6 +37,8 @@ public static class ComicSources
 
     public const int MaximumEntries = 5000;
     public const long MaximumPageBytes = 64L * 1024 * 1024;
+    public static bool IsPdf(string path) => Path.GetExtension(path).Equals(".pdf", StringComparison.OrdinalIgnoreCase);
+    public static bool IsBook(string path) => IsArchive(path) || IsPdf(path);
     public static bool IsArchive(string path) => Path.GetExtension(path).ToLowerInvariant() is ".cbz" or ".zip" or ".cbr" or ".rar";
     public static bool IsImage(string path) => Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" or ".bmp";
     public static IReadOnlyList<ComicPageSource> Inspect(string path, bool directory, CancellationToken ct)

@@ -10,6 +10,8 @@ public sealed class IndexingOptions
     public List<LibraryOptions> Libraries { get; set; } = [];
     public string CachePath { get; set; } = ".local/cache";
     public string FfmpegPath { get; set; } = "ffmpeg";
+    public string PdfinfoPath { get; set; } = "pdfinfo";
+    public string PdftoppmPath { get; set; } = "pdftoppm";
     public string FfprobePath { get; set; } = "ffprobe";
     public int DiscoveryWorkers { get; set; } = 1;
     // Decoders run below normal OS priority, so background work can use every idle core of a

@@ -268,3 +268,32 @@ The browser keeps a single two-worker upload queue across folders and closed dia
 Choosing another batch is blocked while preparation or retained, unfinished source files remain, including paused/failed files. The prompt explains that the batch must finish or be cancelled first. This is a conservative workaround for the reported second-picker interruption; the exact browser/provider cause has not been reproduced on the affected device. Inputs retain their selection while in use and clear only before the next permitted picker opening. This does not promise background execution while the OS suspends or terminates the PWA.
 
 Migration 36 adds a partial ID index over completed restore/purge journals. The idle worker revisits these in pages of 16, deleting only their validated empty recycle staging directories. It never enumerates the recycle tree, follows links, recursively removes leftovers, or touches unknown, live, unfinished or nonempty entries. The shared `.luma-trash` root remains available for future operations.
+
+### PDF comics
+
+Panels discovery accepts `.pdf` alongside comic archives and image folders.
+`ComicSummary.documentUrl` is set only for PDFs. The revision-pinned
+`GET /api/panels/comics/{id}/document?revision=…` endpoint streams the original PDF
+with HTTP byte ranges, ETags and source-change validation. It follows the same
+configured-library and safe-path rules as other comic content. It is an explicit
+original viewing request; shelf listings and covers stay database/cache-only.
+PDF pages are rendered by PDF.js inside the existing reader, including virtualized
+continuous mode. `/pages/{page}` remains an image-page endpoint and rejects PDFs.
+Encrypted PDFs and documents over 1 GiB or 5,000 pages are rejected during discovery.
+Only the selected cover page is rendered and cached on the server; selecting a
+new cover reuses the normal discovery task. Reading progress uses the existing API.
+
+### Comic sorting
+
+`GET /api/panels/comics` accepts `sort=title|added|modified` and `order=asc|desc`.
+Title uses a stored natural key (case/accent folded, digit runs compared by value),
+so Comic 2 precedes Comic 120. Schema 38 backfills existing titles and maintains
+keys through title-edit triggers. Global and library-scoped ordering indexes
+support the three sort fields. The numeric continuation cursor identifies the
+last row; ordering uses its selected sort value plus ID as a stable tie-breaker.
+Restart paging when changing sort or filters. Clients omitting `sort` retain the
+legacy ID-descending order. Panels explicitly requests title ascending by default
+and remembers the selected sort/direction on the device. Continue reading keeps
+its most-recently-read order. Comic folders use natural name ordering and accept
+`order=asc|desc`; date sorts apply to books, while folder names follow the selected
+direction. Saved bookshelf locations also follow natural name order/direction.

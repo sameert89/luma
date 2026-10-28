@@ -39,6 +39,7 @@ public sealed class Database(IConfiguration configuration, IHostEnvironment envi
             connection.CreateFunction<string, string>("luma_key", SearchText.Key, isDeterministic: true);
             connection.CreateFunction<string, string>("luma_reverse", SearchText.Reverse, isDeterministic: true);
             connection.CreateFunction<string, long>("luma_ticks", SearchText.Ticks, isDeterministic: true);
+            connection.CreateFunction<string, string>("luma_natural_key", SearchText.SortKey, isDeterministic: true);
             // Folder keys, maintained by triggers from a folder's relative path.
             connection.CreateFunction<string, string>("luma_folder_key", path => SearchText.Key(SearchText.FolderName(path)), isDeterministic: true);
             connection.CreateFunction<string, string>("luma_sort_key", path => SearchText.SortKey(SearchText.FolderName(path)), isDeterministic: true);

@@ -13,9 +13,9 @@ public static class PanelEndpoints
         app.MapGet("/api/panels/sources", async (PanelSources sources, CancellationToken ct) => TypedResults.Ok(await sources.GetAsync(ct))).WithName("GetComicSources");
         app.MapGet("/api/panels/suggestions", async (string? q, int? limit, ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.SuggestAsync(q, limit ?? 8, ct))).WithName("GetComicSuggestions");
         app.MapGet("/api/panels/source-folders", async (long libraryId, string? path, string? q, int? offset, PanelSources sources, CancellationToken ct) => TypedResults.Ok(await sources.FoldersAsync(libraryId, path ?? "", q, offset ?? 0, ct))).AddEndpointFilter<SameOriginFilter>().WithName("GetComicSourceFolders");
-        app.MapGet("/api/panels/comics", async (string? q, string? state, string? series, bool? favourite, long? cursor, long? libraryId, string? path, string? tag, ComicLibrary library, CancellationToken ct) =>
-            TypedResults.Ok(await library.ListAsync(q, state, series, favourite, cursor, ct, libraryId, path, tag))).WithName("GetComicLibrary");
-        app.MapGet("/api/panels/folders", async (long libraryId, string? path, string? after, ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.FoldersAsync(libraryId, path ?? "", after, ct))).WithName("GetComicFolders");
+        app.MapGet("/api/panels/comics", async (string? q, string? state, string? series, bool? favourite, long? cursor, long? libraryId, string? path, string? tag, string? sort, string? order, ComicLibrary library, CancellationToken ct) =>
+            TypedResults.Ok(await library.ListAsync(q, state, series, favourite, cursor, ct, libraryId, path, tag, sort, order))).WithName("GetComicLibrary");
+        app.MapGet("/api/panels/folders", async (long libraryId, string? path, string? after, string? order, ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.FoldersAsync(libraryId, path ?? "", after, ct, order))).WithName("GetComicFolders");
         app.MapGet("/api/panels/comics/{id:long}/tags", async (long id, ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.TagsAsync(id, ct))).WithName("GetComicTags");
         app.MapGet("/api/panels/tags", async (string? prefix, int? limit, Database database, CancellationToken ct) =>
         {
@@ -28,6 +28,8 @@ public static class PanelEndpoints
             TypedResults.Ok(ComicLibrary.Summary(await library.GetAsync(id, ct)))).WithName("GetComic");
         app.MapGet("/api/panels/comics/{id:long}/pages/{page:int}", (long id, int page, bool? original, ComicPageContent pages, CancellationToken ct) =>
             pages.ServeAsync(id, page, original == true, ct)).WithName("GetComicPage");
+        app.MapGet("/api/panels/comics/{id:long}/document", (long id, int? revision, ComicPageContent pages, CancellationToken ct) =>
+            pages.DocumentAsync(id, revision, ct)).AddEndpointFilter<SameOriginFilter>().WithName("GetComicDocument");
         app.MapGet("/api/panels/comics/{id:long}/cover", (long id, ComicPageContent pages, CancellationToken ct) =>
             pages.CoverAsync(id, ct)).WithName("GetComicCover");
         app.MapPut("/api/panels/comics/{id:long}/progress", async (long id, ReadingUpdate update, ComicProgress progress, CancellationToken ct) =>

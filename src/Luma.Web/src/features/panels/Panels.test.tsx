@@ -7,6 +7,7 @@ import { Panels } from './Panels'
 
 beforeEach(() => {
   localStorage.removeItem('luma-panels-query')
+  localStorage.removeItem('luma-panels-sort')
   window.history.replaceState({}, '', '/panels')
 })
 function mount(nextCursor: number | null = null, configured = true, resume: Comic[] = []) {
@@ -52,14 +53,18 @@ it('honours a series-only deep link over a saved query', async () => {
   const fetch = mount()
   expect(screen.getByRole('textbox', { name: 'Series filter' })).toHaveValue('Moon')
   expect(screen.getByRole('combobox', { name: 'Search comics' })).toHaveValue('')
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?series=Moon', expect.anything()))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith('/api/panels/comics?series=Moon&sort=title&order=asc', expect.anything()),
+  )
 })
 it('restores favourites from a deep link and persists changes', async () => {
   window.history.replaceState({}, '', '/panels?favourite=true')
   const fetch = mount()
   const filter = screen.getByRole('checkbox', { name: 'Favourites only' })
   expect(filter).toBeChecked()
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?favourite=true', expect.anything()))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith('/api/panels/comics?favourite=true&sort=title&order=asc', expect.anything()),
+  )
   await userEvent.click(filter)
   await waitFor(() => expect(localStorage.getItem('luma-panels-query')).toBe(''))
   expect(window.location.search).toBe('')
@@ -69,14 +74,20 @@ it('starts from the first page when the favourites filter changes', async () => 
   const fetch = mount(60)
   await userEvent.click(await screen.findByRole('button', { name: 'More comics' }))
   await waitFor(() =>
-    expect(fetch).toHaveBeenCalledWith('/api/panels/comics?libraryId=1&path=&cursor=60', expect.anything()),
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/panels/comics?libraryId=1&path=&cursor=60&sort=title&order=asc',
+      expect.anything(),
+    ),
   )
   await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
   await userEvent.click(screen.getByRole('checkbox', { name: 'Favourites only' }))
   await waitFor(() =>
-    expect(fetch).toHaveBeenCalledWith('/api/panels/comics?favourite=true&libraryId=1', expect.anything()),
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/panels/comics?favourite=true&libraryId=1&sort=title&order=asc',
+      expect.anything(),
+    ),
   )
-  expect(screen.queryByRole('button', { name: 'Newest comics' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'First page' })).not.toBeInTheDocument()
 })
 
 it('first visit saves recursive comic locations without file-management unlock', async () => {
@@ -104,8 +115,12 @@ it('first visit saves recursive comic locations without file-management unlock',
 it('browses saved locations before listing their direct comics', async () => {
   const fetch = mount()
   await userEvent.click(await screen.findByRole('button', { name: 'Open Comics' }))
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/folders?libraryId=1&path=', expect.anything()))
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/panels/comics?libraryId=1&path=', expect.anything()))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith('/api/panels/folders?libraryId=1&path=&order=asc', expect.anything()),
+  )
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith('/api/panels/comics?libraryId=1&path=&sort=title&order=asc', expect.anything()),
+  )
   expect(window.location.search).toBe('?libraryId=1&path=')
 })
 
@@ -135,4 +150,47 @@ it('shows at most five continued books with saved page indicators and one locati
   expect(within(row).getByRole('progressbar', { name: 'Reading progress for Recent 1' })).toHaveAttribute('value', '4')
   expect(screen.getAllByRole('button', { name: 'Comic locations' })).toHaveLength(1)
   expect(screen.queryByText('Loading comics…')).not.toBeInTheDocument()
+})
+
+it('starts with title ascending and keeps a chosen order when entering a folder', async () => {
+  const fetch = mount()
+  expect(await screen.findByRole('combobox', { name: 'Sort by' })).toHaveValue('title')
+  expect(screen.getByRole('combobox', { name: 'Sort direction' })).toHaveValue('asc')
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort direction' }), 'desc')
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'modified')
+  await userEvent.click(screen.getByRole('button', { name: 'Open Comics' }))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/panels/comics?libraryId=1&path=&sort=modified&order=desc',
+      expect.anything(),
+    ),
+  )
+  expect(JSON.parse(localStorage.getItem('luma-panels-sort')!)).toEqual({ sort: 'modified', order: 'desc' })
+})
+
+it('restores the saved sort and resets both pagers when it changes', async () => {
+  localStorage.setItem('luma-panels-sort', '{"sort":"added","order":"desc"}')
+  window.history.replaceState({}, '', '/panels?libraryId=1&path=')
+  const fetch = mount(60)
+  expect(await screen.findByRole('combobox', { name: 'Sort by' })).toHaveValue('added')
+  expect(screen.getByRole('combobox', { name: 'Sort direction' })).toHaveValue('desc')
+  await userEvent.click(await screen.findByRole('button', { name: 'More comics' }))
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/panels/comics?libraryId=1&path=&cursor=60&sort=added&order=desc',
+      expect.anything(),
+    ),
+  )
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'title')
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith('/api/panels/comics?libraryId=1&path=&sort=title&order=desc', expect.anything()),
+  )
+  expect(screen.queryByRole('button', { name: 'First page' })).not.toBeInTheDocument()
+})
+
+it('falls back to reading order for a damaged saved preference', async () => {
+  localStorage.setItem('luma-panels-sort', 'not JSON')
+  mount()
+  expect(await screen.findByRole('combobox', { name: 'Sort by' })).toHaveValue('title')
+  expect(screen.getByRole('combobox', { name: 'Sort direction' })).toHaveValue('asc')
 })

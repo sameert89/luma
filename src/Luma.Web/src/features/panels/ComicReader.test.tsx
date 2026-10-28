@@ -83,3 +83,30 @@ it('waits for the final progress save before leaving the reader', async () => {
   finish()
   await vi.waitFor(() => expect(exit).toHaveBeenCalledOnce())
 })
+
+const pdfLoader = vi.hoisted(() => ({ openPdf: vi.fn() }))
+vi.mock('./pdf', () => pdfLoader)
+
+it('opens a revision-pinned PDF in the custom reader and releases its worker on exit', async () => {
+  const destroy = vi.fn().mockResolvedValue(undefined)
+  const getPage = vi.fn().mockImplementation(async () => ({
+    getViewport: ({ scale }: { scale: number }) => ({ width: 300 * scale, height: 450 * scale }),
+    render: () => ({ promise: Promise.resolve(), cancel: vi.fn() }),
+    cleanup: vi.fn(),
+  }))
+  pdfLoader.openPdf.mockReturnValue({ promise: Promise.resolve({ numPages: 5000, getPage }), destroy })
+  const { unmount } = render(
+    <ComicReader
+      comic={{ ...comic, format: 'pdf', documentUrl: '/api/panels/comics/1/document?revision=4' }}
+      onExit={() => {}}
+    />,
+  )
+  await vi.waitFor(() => expect(getPage).toHaveBeenCalledWith(22))
+  expect(pdfLoader.openPdf).toHaveBeenCalledWith('/api/panels/comics/1/document?revision=4')
+  expect(screen.getByRole('img')).toHaveAttribute('aria-label', 'Book, page 22')
+  expect(document.querySelector('img')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+  await vi.waitFor(() => expect(getPage).toHaveBeenCalledWith(23))
+  unmount()
+  expect(destroy).toHaveBeenCalledOnce()
+})
