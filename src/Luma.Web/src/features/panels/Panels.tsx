@@ -15,6 +15,19 @@ import type { Comic, ComicList, ReadingStatistics } from './api'
 import { ComicReader } from './ComicReader'
 import { ComicDetails } from './ComicDetails'
 
+type ComicSorting = { sort: 'title' | 'added' | 'modified'; order: 'asc' | 'desc' }
+function savedSorting(): ComicSorting {
+  try {
+    const value = JSON.parse(localStorage.getItem('luma-panels-sort') ?? '{}')
+    return {
+      sort: ['title', 'added', 'modified'].includes(value?.sort) ? value.sort : 'title',
+      order: value?.order === 'desc' ? 'desc' : 'asc',
+    }
+  } catch {
+    return { sort: 'title', order: 'asc' }
+  }
+}
+
 function initialParams() {
   const current = new URLSearchParams(window.location.search)
   if (['comic', 'state', 'q', 'series', 'favourite', 'libraryId', 'path', 'tag'].some(key => current.has(key)))
@@ -41,6 +54,7 @@ export function Panels({
   })
   const favouritesId = useId()
   const [params, setParams] = useState(initialParams)
+  const [sorting, setSorting] = useState(savedSorting)
   const [folderAfter, setFolderAfter] = useState<string>()
   const [cursor, setCursor] = useState<number>()
   const [search, setSearch] = useState(params.get('q') ?? '')
@@ -80,15 +94,27 @@ export function Panels({
     params.get('tag')
   )
   const folders = useQuery({
-    queryKey: ['comic-folders', libraryId, path, folderAfter],
+    queryKey: ['comic-folders', libraryId, path, folderAfter, sorting.order],
     queryFn: ({ signal }) =>
       request<components['schemas']['ComicFolderPage']>(
-        `/api/panels/folders?${new URLSearchParams({ libraryId: String(libraryId), path, ...(folderAfter ? { after: folderAfter } : {}) })}`,
+        `/api/panels/folders?${new URLSearchParams({ libraryId: String(libraryId), path, ...(folderAfter ? { after: folderAfter } : {}), order: sorting.order })}`,
         signal,
       ),
     enabled: !!libraryId && !searching,
     refetchInterval: discovering ? 3000 : false,
   })
+  useEffect(() => {
+    try {
+      localStorage.setItem('luma-panels-sort', JSON.stringify(sorting))
+    } catch {
+      /* Keep the choice for this session. */
+    }
+  }, [sorting])
+  function changeSorting(next: ComicSorting) {
+    setCursor(undefined)
+    setFolderAfter(undefined)
+    setSorting(next)
+  }
   function visit(id?: number, nextPath = '') {
     const next = new URLSearchParams()
     if (id) {
@@ -107,6 +133,8 @@ export function Panels({
   const library = useQuery({
     queryKey: [
       'comics',
+      sorting.sort,
+      sorting.order,
       libraryId,
       path,
       params.get('tag'),
@@ -118,7 +146,7 @@ export function Panels({
     ],
     queryFn: ({ signal }) =>
       request<ComicList>(
-        `/api/panels/comics?${new URLSearchParams({ ...(params.get('q') ? { q: params.get('q')! } : {}), ...(params.get('state') ? { state: params.get('state')! } : {}), ...(params.get('series') ? { series: params.get('series')! } : {}), ...(params.get('favourite') === 'true' ? { favourite: 'true' } : {}), ...(libraryId ? { libraryId: String(libraryId) } : {}), ...(!searching && libraryId ? { path } : {}), ...(params.get('tag') ? { tag: params.get('tag')! } : {}), ...(cursor ? { cursor: String(cursor) } : {}) })}`,
+        `/api/panels/comics?${new URLSearchParams({ ...(params.get('q') ? { q: params.get('q')! } : {}), ...(params.get('state') ? { state: params.get('state')! } : {}), ...(params.get('series') ? { series: params.get('series')! } : {}), ...(params.get('favourite') === 'true' ? { favourite: 'true' } : {}), ...(libraryId ? { libraryId: String(libraryId) } : {}), ...(!searching && libraryId ? { path } : {}), ...(params.get('tag') ? { tag: params.get('tag')! } : {}), ...(cursor ? { cursor: String(cursor) } : {}), sort: sorting.sort, order: sorting.order })}`,
         signal,
       ),
     enabled: !comicId && configured && (!!libraryId || searching),
@@ -211,6 +239,29 @@ export function Panels({
       />
       <div className="flex flex-wrap items-center gap-3 p-4">
         <h1 className="flex-1 text-xl font-semibold">{t('panels:panels.comicLibrary')}</h1>
+        {configured && (
+          <>
+            <Select
+              aria-label={t('panels:panels.sortBy')}
+              className="w-auto"
+              value={sorting.sort}
+              onChange={event => changeSorting({ ...sorting, sort: event.target.value as ComicSorting['sort'] })}
+            >
+              <option value="title">{t('panels:panels.title')}</option>
+              <option value="added">{t('panels:panels.dateAdded')}</option>
+              <option value="modified">{t('panels:panels.modifiedDate')}</option>
+            </Select>
+            <Select
+              aria-label={t('panels:panels.sortDirection')}
+              className="w-auto"
+              value={sorting.order}
+              onChange={event => changeSorting({ ...sorting, order: event.target.value as ComicSorting['order'] })}
+            >
+              <option value="asc">{t('panels:panels.ascending')}</option>
+              <option value="desc">{t('panels:panels.descending')}</option>
+            </Select>
+          </>
+        )}
         {configured && (
           <QuietButton onClick={() => setManage(true)}>
             <FolderCog className="size-4" aria-hidden="true" />
@@ -322,18 +373,30 @@ export function Panels({
             >
               {!libraryId &&
                 !searching &&
-                sources.data?.locations?.map(location => (
-                  <ComicFolderCard
-                    key={`${location.libraryId}:${location.relativePath}`}
-                    name={
+                sources.data?.locations
+                  ?.slice()
+                  .sort((a, b) => {
+                    const name = (location: typeof a) =>
                       location.relativePath ||
                       libraries.data?.find(item => item.id === location.libraryId)?.name ||
-                      `Library ${location.libraryId}`
-                    }
-                    covers={location.coverUrls}
-                    onOpen={() => visit(location.libraryId, location.relativePath)}
-                  />
-                ))}
+                      String(location.libraryId)
+                    return (
+                      name(a).localeCompare(name(b), undefined, { numeric: true, sensitivity: 'base' }) *
+                      (sorting.order === 'desc' ? -1 : 1)
+                    )
+                  })
+                  .map(location => (
+                    <ComicFolderCard
+                      key={`${location.libraryId}:${location.relativePath}`}
+                      name={
+                        location.relativePath ||
+                        libraries.data?.find(item => item.id === location.libraryId)?.name ||
+                        `Library ${location.libraryId}`
+                      }
+                      covers={location.coverUrls}
+                      onOpen={() => visit(location.libraryId, location.relativePath)}
+                    />
+                  ))}
               {!searching &&
                 folders.data?.items.map(folder => (
                   <ComicFolderCard
@@ -376,7 +439,7 @@ export function Panels({
           </QuietButton>
         )}
         <div className="mt-4 flex gap-2">
-          {cursor && <QuietButton onClick={() => setCursor(undefined)}>{t('panels:panels.newestComics')}</QuietButton>}
+          {cursor && <QuietButton onClick={() => setCursor(undefined)}>{t('panels:panels.firstPage')}</QuietButton>}
           {library.data?.nextCursor && (
             <QuietButton onClick={() => setCursor(library.data?.nextCursor ?? undefined)}>
               {t('panels:panels.moreComics')}

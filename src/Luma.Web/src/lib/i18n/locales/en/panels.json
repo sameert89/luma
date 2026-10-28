@@ -116,6 +116,14 @@
     "comicDetails": "Comic details",
     "editLibraryMetadataFavouriteStatusAndCoverSelection": "Give this comic a title, add a few details or pick a cover.",
     "saveRecursiveComicSourcesWithinYourLibrariesImageFolders": "Add the folders where you keep your comics.",
-    "searchComics": "Search comics"
+    "searchComics": "Search comics",
+    "sortBy": "Sort by",
+    "title": "Title",
+    "dateAdded": "Date added",
+    "modifiedDate": "Modified date",
+    "sortDirection": "Sort direction",
+    "ascending": "Ascending",
+    "descending": "Descending",
+    "firstPage": "First page"
   }
 }

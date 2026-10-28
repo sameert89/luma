@@ -3533,6 +3533,8 @@ export interface operations {
                 libraryId?: number;
                 path?: string;
                 tag?: string;
+                sort?: string;
+                order?: string;
             };
             header?: never;
             path?: never;
@@ -3557,6 +3559,7 @@ export interface operations {
                 libraryId: number;
                 path?: string;
                 after?: string;
+                order?: string;
             };
             header?: never;
             path?: never;

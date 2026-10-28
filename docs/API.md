@@ -282,3 +282,18 @@ continuous mode. `/pages/{page}` remains an image-page endpoint and rejects PDFs
 Encrypted PDFs and documents over 1 GiB or 5,000 pages are rejected during discovery.
 Only the selected cover page is rendered and cached on the server; selecting a
 new cover reuses the normal discovery task. Reading progress uses the existing API.
+
+### Comic sorting
+
+`GET /api/panels/comics` accepts `sort=title|added|modified` and `order=asc|desc`.
+Title uses a stored natural key (case/accent folded, digit runs compared by value),
+so Comic 2 precedes Comic 120. Schema 38 backfills existing titles and maintains
+keys through title-edit triggers. Global and library-scoped ordering indexes
+support the three sort fields. The numeric continuation cursor identifies the
+last row; ordering uses its selected sort value plus ID as a stable tie-breaker.
+Restart paging when changing sort or filters. Clients omitting `sort` retain the
+legacy ID-descending order. Panels explicitly requests title ascending by default
+and remembers the selected sort/direction on the device. Continue reading keeps
+its most-recently-read order. Comic folders use natural name ordering and accept
+`order=asc|desc`; date sorts apply to books, while folder names follow the selected
+direction. Saved bookshelf locations also follow natural name order/direction.
