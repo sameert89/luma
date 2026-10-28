@@ -94,7 +94,7 @@ export function PanelFilters({
         </fieldset>
       </div>
       <div
-        className={`flex shrink-0 gap-3 border-t border-line bg-canvas px-5 py-4 ${changed ? 'motion-rise sticky bottom-0 z-10 shadow-lg' : ''}`}
+        className={`sticky bottom-0 z-10 flex shrink-0 gap-3 border-t border-line bg-canvas px-5 py-4 ${changed ? 'motion-rise shadow-lg' : ''}`}
       >
         <Button type="submit">{t('browse:filterForm.applyFilters')}</Button>
         <QuietButton

@@ -52,6 +52,8 @@ test('Panels exposes sorting, starts in reading order and remembers changes on r
   await expect(sort).toHaveValue('title')
   await expect(direction).toHaveValue('asc')
   await expect(dialog.getByRole('combobox', { name: 'Reading status' })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Apply filters', exact: true })).toBeInViewport({ ratio: 1 })
+  await expect(dialog.getByRole('button', { name: 'Reset filters', exact: true })).toBeInViewport({ ratio: 1 })
   await page.screenshot({ path: info.outputPath('panels-filters.png'), animations: 'disabled' })
   await direction.selectOption('desc')
   await sort.selectOption('modified')
