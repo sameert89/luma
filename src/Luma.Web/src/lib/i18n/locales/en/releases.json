@@ -1,6 +1,12 @@
 {
   "history": [
     {
+      "version": "2.0.0-beta.14",
+      "date": "2026-10-28",
+      "headline": "Panels filters",
+      "changes": ["Sorting and reading filters share a popup, with Comic locations beside the library title."]
+    },
+    {
       "version": "2.0.0-beta.13",
       "date": "2026-10-28",
       "headline": "PDF comics in Panels",

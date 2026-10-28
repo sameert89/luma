@@ -6,16 +6,17 @@ import { SearchHeader } from '../../components/ui/SearchHeader'
 import type { components } from '../../lib/api/generated'
 import { ComicLocations } from './ComicLocations'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { BookOpen, FolderPlus, FolderCog, ArrowUp, LoaderCircle } from 'lucide-react'
-import { Checkbox, Input, Select, QuietButton } from '../../components/ui/Controls'
+import { QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { errorMessage, request, type Library } from '../browse/api'
 import type { Comic, ComicList, ReadingStatistics } from './api'
 import { ComicReader } from './ComicReader'
 import { ComicDetails } from './ComicDetails'
+import { PanelFilters, type PanelFilterValue } from './PanelFilters'
 
-type ComicSorting = { sort: 'title' | 'added' | 'modified'; order: 'asc' | 'desc' }
+type ComicSorting = Pick<PanelFilterValue, 'sort' | 'order'>
 function savedSorting(): ComicSorting {
   try {
     const value = JSON.parse(localStorage.getItem('luma-panels-sort') ?? '{}')
@@ -52,15 +53,12 @@ export function Panels({
     queryKey: ['libraries'],
     queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal),
   })
-  const favouritesId = useId()
   const [params, setParams] = useState(initialParams)
   const [sorting, setSorting] = useState(savedSorting)
   const [folderAfter, setFolderAfter] = useState<string>()
   const [cursor, setCursor] = useState<number>()
   const [search, setSearch] = useState(params.get('q') ?? '')
-  const [filtersOpen, setFiltersOpen] = useState(
-    !!(params.get('state') || params.get('series') || params.get('favourite') || params.get('tag')),
-  )
+  const [filtersOpen, setFiltersOpen] = useState(false)
   useEffect(() => setSearch(params.get('q') ?? ''), [params])
   const sources = useQuery({
     queryKey: ['comic-sources'],
@@ -110,10 +108,24 @@ export function Panels({
       /* Keep the choice for this session. */
     }
   }, [sorting])
-  function changeSorting(next: ComicSorting) {
+  function applyFilters(value: PanelFilterValue) {
+    const next = new URLSearchParams(params)
+    for (const key of ['state', 'series', 'tag'] as const) {
+      if (value[key].trim()) next.set(key, value[key].trim())
+      else next.delete(key)
+    }
+    if (value.favourite) next.set('favourite', 'true')
+    else next.delete('favourite')
     setCursor(undefined)
     setFolderAfter(undefined)
-    setSorting(next)
+    setSorting({ sort: value.sort, order: value.order })
+    window.history[window.history.state?.lumaModal ? 'replaceState' : 'pushState'](
+      { ...window.history.state, lumaModal: undefined, section: 'panels' },
+      '',
+      `/panels${next.size ? `?${next}` : ''}`,
+    )
+    setParams(next)
+    setFiltersOpen(false)
   }
   function visit(id?: number, nextPath = '') {
     const next = new URLSearchParams()
@@ -237,33 +249,10 @@ export function Panels({
         searchRequested={false}
         scope={params.toString()}
       />
-      <div className="flex flex-wrap items-center gap-3 p-4">
-        <h1 className="flex-1 text-xl font-semibold">{t('panels:panels.comicLibrary')}</h1>
+      <div className="flex items-center justify-between gap-3 p-4">
+        <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">{t('panels:panels.comicLibrary')}</h1>
         {configured && (
-          <>
-            <Select
-              aria-label={t('panels:panels.sortBy')}
-              className="w-auto"
-              value={sorting.sort}
-              onChange={event => changeSorting({ ...sorting, sort: event.target.value as ComicSorting['sort'] })}
-            >
-              <option value="title">{t('panels:panels.title')}</option>
-              <option value="added">{t('panels:panels.dateAdded')}</option>
-              <option value="modified">{t('panels:panels.modifiedDate')}</option>
-            </Select>
-            <Select
-              aria-label={t('panels:panels.sortDirection')}
-              className="w-auto"
-              value={sorting.order}
-              onChange={event => changeSorting({ ...sorting, order: event.target.value as ComicSorting['order'] })}
-            >
-              <option value="asc">{t('panels:panels.ascending')}</option>
-              <option value="desc">{t('panels:panels.descending')}</option>
-            </Select>
-          </>
-        )}
-        {configured && (
-          <QuietButton onClick={() => setManage(true)}>
+          <QuietButton className="shrink-0" onClick={() => setManage(true)}>
             <FolderCog className="size-4" aria-hidden="true" />
             {t('panels:panels.comicLocations')}
           </QuietButton>
@@ -278,43 +267,26 @@ export function Panels({
           </QuietButton>
         </section>
       )}
-      {filtersOpen && (
-        <div className="flex flex-wrap gap-3 px-4 pb-3">
-          <Select
-            aria-label={t('panels:panels.readingStatus')}
-            className="w-auto"
-            value={params.get('state') ?? ''}
-            onChange={event => change('state', event.target.value)}
-          >
-            <option value="">{t('panels:panels.allComics')}</option>
-            <option value="reading">{t('panels:panels.continueReading')}</option>
-            <option value="unread">{t('panels:panels.unread')}</option>
-            <option value="completed">{t('panels:panels.completed')}</option>
-          </Select>
-          <Input
-            aria-label={t('panels:panels.seriesFilter')}
-            className="w-auto"
-            placeholder={t('panels:panels.series')}
-            value={params.get('series') ?? ''}
-            onChange={event => change('series', event.target.value)}
+      <Modal
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        title={t('app:app.filtersAndSorting')}
+        description={t('panels:panels.chooseComicFilters')}
+        sheet
+      >
+        {filtersOpen && (
+          <PanelFilters
+            value={{
+              ...sorting,
+              state: params.get('state') ?? '',
+              series: params.get('series') ?? '',
+              tag: params.get('tag') ?? '',
+              favourite: params.get('favourite') === 'true',
+            }}
+            onApply={applyFilters}
           />
-          <Input
-            aria-label={t('panels:panels.comicTagFilter')}
-            className="max-w-xs"
-            placeholder={t('panels:panels.comicTag')}
-            value={params.get('tag') ?? ''}
-            onChange={event => change('tag', event.target.value)}
-          />
-          <label htmlFor={favouritesId} className="flex items-center gap-2 text-sm">
-            <Checkbox
-              id={favouritesId}
-              checked={params.get('favourite') === 'true'}
-              onChange={event => change('favourite', event.target.checked ? 'true' : '')}
-            />
-            {t('panels:panels.favouritesOnly')}
-          </label>
-        </div>
-      )}
+        )}
+      </Modal>
       <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
         {libraryId && (
           <QuietButton onClick={() => visit()}>
