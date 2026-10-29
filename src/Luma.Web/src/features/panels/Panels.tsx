@@ -6,7 +6,7 @@ import { SearchHeader } from '../../components/ui/SearchHeader'
 import type { components } from '../../lib/api/generated'
 import { ComicLocations } from './ComicLocations'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { BookOpen, FolderPlus, FolderCog, ArrowUp, LoaderCircle } from 'lucide-react'
 import { QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
@@ -27,6 +27,12 @@ function savedSorting(): ComicSorting {
   } catch {
     return { sort: 'title', order: 'asc' }
   }
+}
+
+type BrowsePosition = { cursors: number[]; page: number; folderAfter?: string; scrollTop: number }
+const firstPosition = (): BrowsePosition => ({ cursors: [], page: 0, scrollTop: 0 })
+function savedPosition(): BrowsePosition {
+  return window.history.state?.panelsPosition ?? firstPosition()
 }
 
 function initialParams() {
@@ -54,9 +60,16 @@ export function Panels({
     queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal),
   })
   const [params, setParams] = useState(initialParams)
-  const [sorting, setSorting] = useState(savedSorting)
-  const [folderAfter, setFolderAfter] = useState<string>()
-  const [cursor, setCursor] = useState<number>()
+  const [sorting, setSorting] = useState<ComicSorting>(() => window.history.state?.panelsSorting ?? savedSorting())
+  const [position, setPosition] = useState(savedPosition)
+  const bookshelf = useRef<HTMLDivElement>(null)
+  const folderAfter = position.folderAfter
+  const cursor = position.page > 0 ? position.cursors[position.page - 1] : undefined
+  function rememberPosition() {
+    const current = { ...position, scrollTop: bookshelf.current?.scrollTop ?? position.scrollTop }
+    window.history.replaceState({ ...window.history.state, panelsPosition: current, panelsSorting: sorting }, '')
+    return current
+  }
   const [search, setSearch] = useState(params.get('q') ?? '')
   const [filtersOpen, setFiltersOpen] = useState(false)
   useEffect(() => setSearch(params.get('q') ?? ''), [params])
@@ -116,11 +129,17 @@ export function Panels({
     }
     if (value.favourite) next.set('favourite', 'true')
     else next.delete('favourite')
-    setCursor(undefined)
-    setFolderAfter(undefined)
+    const nextPosition = firstPosition()
+    setPosition(nextPosition)
     setSorting({ sort: value.sort, order: value.order })
     window.history[window.history.state?.lumaModal ? 'replaceState' : 'pushState'](
-      { ...window.history.state, lumaModal: undefined, section: 'panels' },
+      {
+        ...window.history.state,
+        lumaModal: undefined,
+        section: 'panels',
+        panelsPosition: nextPosition,
+        panelsSorting: { sort: value.sort, order: value.order },
+      },
       '',
       `/panels${next.size ? `?${next}` : ''}`,
     )
@@ -133,10 +152,11 @@ export function Panels({
       next.set('libraryId', String(id))
       next.set('path', nextPath)
     }
-    setCursor(undefined)
-    setFolderAfter(undefined)
+    rememberPosition()
+    const nextPosition = firstPosition()
+    setPosition(nextPosition)
     window.history.pushState(
-      { ...window.history.state, section: 'panels' },
+      { ...window.history.state, section: 'panels', panelsPosition: nextPosition },
       '',
       `/panels${next.size ? `?${next}` : ''}`,
     )
@@ -186,6 +206,9 @@ export function Panels({
         (!!libraryId || searching) &&
         ((library.data === undefined && library.isFetching) ||
           (!searching && folders.data === undefined && folders.isFetching)))
+  useLayoutEffect(() => {
+    if (!comicId && !initialLoading && bookshelf.current) bookshelf.current.scrollTop = position.scrollTop
+  }, [comicId, initialLoading, position])
   const stats = useQuery({
     queryKey: ['reading-statistics'],
     queryFn: ({ signal }) => request<ReadingStatistics>('/api/panels/statistics', signal),
@@ -194,7 +217,7 @@ export function Panels({
   useEffect(() => {
     const query = params.toString()
     window.history.replaceState(
-      { ...window.history.state, section: 'panels' },
+      { ...window.history.state, section: 'panels', panelsSorting: sorting },
       '',
       `/panels${query ? `?${query}` : ''}`,
     )
@@ -203,11 +226,14 @@ export function Panels({
     } catch {
       /* URL remains authoritative. */
     }
-  }, [params])
+  }, [params, sorting])
   useEffect(() => {
     const back = () => {
-      if (!window.history.state?.lumaModal && window.location.pathname.startsWith('/panels'))
+      if (!window.history.state?.lumaModal && window.location.pathname.startsWith('/panels')) {
+        setPosition(savedPosition())
+        if (window.history.state?.panelsSorting) setSorting(window.history.state.panelsSorting)
         setParams(new URLSearchParams(window.location.search))
+      }
     }
     window.addEventListener('popstate', back)
     return () => window.removeEventListener('popstate', back)
@@ -216,13 +242,27 @@ export function Panels({
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
-    setCursor(undefined)
+    const nextPosition = key === 'comic' ? (comicId ? savedPosition() : rememberPosition()) : firstPosition()
+    if (key !== 'comic') rememberPosition()
+    setPosition(nextPosition)
     window.history.pushState(
-      { ...window.history.state, section: 'panels' },
+      { ...window.history.state, section: 'panels', panelsPosition: nextPosition },
       '',
       `/panels${next.size ? `?${next}` : ''}`,
     )
     setParams(next)
+  }
+  function turnPage(page: number) {
+    if (library.isFetching || page < 0) return
+    const cursors = position.cursors.slice(0, position.page)
+    if (page > position.page) {
+      if (!library.data?.nextCursor) return
+      cursors.push(library.data.nextCursor)
+    }
+    rememberPosition()
+    const nextPosition = { ...position, cursors, page, scrollTop: 0 }
+    window.history.pushState({ ...window.history.state, panelsPosition: nextPosition, section: 'panels' }, '')
+    setPosition(nextPosition)
   }
   function exit() {
     change('comic', '')
@@ -317,7 +357,13 @@ export function Panels({
           {errorMessage(library.error || reading.error || folders.error)}
         </p>
       )}
-      <div className={`min-h-0 flex-1 overflow-auto p-4 ${!configured && !sources.isPending ? 'hidden' : ''}`}>
+      <div
+        ref={bookshelf}
+        onScroll={() => {
+          if (!comicId && !initialLoading) rememberPosition()
+        }}
+        className={`min-h-0 flex-1 overflow-auto p-4 ${!configured && !sources.isPending ? 'hidden' : ''}`}
+      >
         {initialLoading ? (
           <div role="status" className="grid h-full min-h-48 place-items-center text-muted">
             <span className="flex items-center gap-2">
@@ -406,18 +452,36 @@ export function Panels({
             <p className="text-muted">{t('panels:panels.noComicsMatchAddArchivesOrExplicitlyClassifyAn')}</p>
           )}
         {folders.data?.nextCursor && (
-          <QuietButton onClick={() => setFolderAfter(folders.data!.nextCursor!)}>
+          <QuietButton
+            onClick={() => {
+              rememberPosition()
+              const nextPosition = { ...position, folderAfter: folders.data!.nextCursor!, scrollTop: 0 }
+              window.history.pushState({ ...window.history.state, panelsPosition: nextPosition }, '')
+              setPosition(nextPosition)
+            }}
+          >
             {t('panels:panels.moreFolders')}
           </QuietButton>
         )}
-        <div className="mt-4 flex gap-2">
-          {cursor && <QuietButton onClick={() => setCursor(undefined)}>{t('panels:panels.firstPage')}</QuietButton>}
-          {library.data?.nextCursor && (
-            <QuietButton onClick={() => setCursor(library.data?.nextCursor ?? undefined)}>
-              {t('panels:panels.moreComics')}
+        {(position.page > 0 || library.data?.nextCursor) && (
+          <nav aria-label={t('panels:panels.comicPages')} className="mt-4 flex items-center justify-center gap-3">
+            <QuietButton
+              disabled={position.page === 0 || library.isFetching}
+              onClick={() => turnPage(position.page - 1)}
+            >
+              {t('panels:panels.previousPage')}
             </QuietButton>
-          )}
-        </div>
+            <span role="status" className="text-sm text-muted">
+              {t('panels:panels.pageNumber', { number: position.page + 1 })}
+            </span>
+            <QuietButton
+              disabled={!library.data?.nextCursor || library.isFetching}
+              onClick={() => turnPage(position.page + 1)}
+            >
+              {t('panels:panels.nextPage')}
+            </QuietButton>
+          </nav>
+        )}
       </div>
       <Modal
         open={details !== null}
