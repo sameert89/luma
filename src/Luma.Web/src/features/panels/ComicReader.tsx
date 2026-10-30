@@ -98,7 +98,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     // Resume the current page when entering continuous mode.
   }, [mode])
   const pageUrl = (index: number) =>
-    `/api/panels/comics/${comic.id}/pages/${index}${fit === 'original' || zoom > 1 ? '?original=true' : ''}`
+    `/api/panels/comics/${comic.id}/pages/${index}?v=2${fit === 'original' || zoom > 1 ? '&original=true' : ''}`
   useEffect(() => {
     function keys(event: KeyboardEvent) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
@@ -128,7 +128,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       .filter(index => index >= 0 && index < comic.pageCount)
       .map(index => {
         const image = new Image()
-        image.src = `/api/panels/comics/${comic.id}/pages/${index}`
+        image.src = `/api/panels/comics/${comic.id}/pages/${index}?v=2`
         return image
       })
     return () => {

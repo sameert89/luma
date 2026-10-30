@@ -32,3 +32,8 @@ VTT without another extraction. General orphan cleanup preserves both registered
 raw and converted paths. The dedicated 128 MiB / 512-entry LRU is additional to
 image/video cache accounting. Assets are disposable; CC explicitly rebuilds them
 when needed, subject to source availability, size limits and processing deadlines.
+
+Panels reader pages preserve animated WebP and GIF source bytes in the bounded
+comic cache, using a still first-frame decode for validation and covers. Other reader
+pages retain the existing JPEG preview path. Reader cache variants and URLs are
+versioned to avoid reusing flattened pages generated before animation support.

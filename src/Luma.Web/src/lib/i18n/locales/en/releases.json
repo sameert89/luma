@@ -1,6 +1,15 @@
 {
   "history": [
     {
+      "version": "2.0.0-beta.14",
+      "date": "2026-10-30",
+      "headline": "Comic metadata and animated pages",
+      "changes": [
+        "Import ComicInfo.xml titles, series, writers, summaries, cover choices and tags when discovering comics. Rediscover existing comics to import their metadata.",
+        "Animated WebP and GIF pages play in the comic reader, including when zoomed in."
+      ]
+    },
+    {
       "version": "2.0.0-beta.13",
       "date": "2026-10-28",
       "headline": "PDF comics in Panels",
