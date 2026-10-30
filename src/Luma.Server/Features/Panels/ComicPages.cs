@@ -52,7 +52,7 @@ public sealed class ComicPageContent(Database database, IndexingOptions options,
         try
         {
             await using var db = await database.OpenAsync(ct);
-            var cacheVariant = variant == "cover" ? "cover" : $"{variant}-{page}";
+            var cacheVariant = variant == "cover" ? "cover" : $"{variant}-v2-{page}";
             var existing = await db.ExecuteScalarAsync<string>(new CommandDefinition("SELECT RelativePath FROM ComicCache WHERE ComicId=@Id AND Revision=@Revision AND Variant=@cacheVariant", new { comic.Id, comic.Revision, cacheVariant }, cancellationToken: ct));
             if (existing is not null && File.Exists(Path.Combine(options.CachePath, existing)))
             {
@@ -67,8 +67,8 @@ public sealed class ComicPageContent(Database database, IndexingOptions options,
             var directory = Path.Combine(options.CachePath, "comics");
             Directory.CreateDirectory(directory);
             var temp = Path.Combine(directory, Guid.NewGuid().ToString("N"));
-            var raw = temp + (comic.Format == "pdf" ? ".png" : Path.GetExtension(sourcePage.Name).ToLowerInvariant());
-            var thumbnail = temp + ".webp";
+            var raw = temp + ".source" + (comic.Format == "pdf" ? ".png" : Path.GetExtension(sourcePage.Name).ToLowerInvariant());
+            var thumbnail = temp + ".thumb.webp";
             var preview = temp + ".jpg";
             await options.ProcessingSlots.WaitAsync(ct);
             try
@@ -81,9 +81,10 @@ public sealed class ComicPageContent(Database database, IndexingOptions options,
                     await PdfComics.RenderCoverAsync(source, page, raw, options, deadline.Token);
                 }
                 else await ComicSources.ExtractIsolatedAsync(source, comic.Format == "folder", sourcePage, raw, deadline.Token);
-                // Reuse the bounded decoder pool for validation, orientation, covers and previews.
-                await decoder.ProcessAsync(raw, "image", thumbnail, variant == "cover" ? null : preview, deadline.Token);
-                var selected = variant switch { "cover" => thumbnail, "original" => raw, _ => preview };
+                // Preserve browser animation; only decode its first frame for validation/covers.
+                var keepSource = variant == "original" || (variant == "page" && await HasAnimationAsync(raw, deadline.Token));
+                await decoder.ProcessAsync(raw, "image", thumbnail, variant == "cover" || keepSource ? null : preview, deadline.Token);
+                var selected = variant == "cover" ? thumbnail : keepSource ? raw : preview;
                 var relative = Path.GetRelativePath(options.CachePath, selected);
                 await db.ExecuteAsync(new CommandDefinition("""
                     INSERT INTO ComicCache(ComicId,Revision,Variant,RelativePath,SizeBytes,LastAccessAt) VALUES(@Id,@Revision,@cacheVariant,@relative,@size,@now)
@@ -103,6 +104,17 @@ public sealed class ComicPageContent(Database database, IndexingOptions options,
             finally { options.ProcessingSlots.Release(); }
         }
         finally { slots.Release(); }
+    }
+    private static async Task<bool> HasAnimationAsync(string path, CancellationToken ct)
+    {
+        if (Path.GetExtension(path) == ".gif") return true;
+        if (Path.GetExtension(path) != ".webp") return false;
+        // Animated WebP uses VP8X with the animation flag set. Read no pixel data here.
+        await using var input = File.OpenRead(path);
+        var header = new byte[21];
+        var count = await input.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, cancellationToken: ct);
+        return count == header.Length && header.AsSpan(0, 4).SequenceEqual("RIFF"u8)
+            && header.AsSpan(8, 8).SequenceEqual("WEBPVP8X"u8) && (header[20] & 2) != 0;
     }
     private async Task TrimAsync(CancellationToken ct)
     {

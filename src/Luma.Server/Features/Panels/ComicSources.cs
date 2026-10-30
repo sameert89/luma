@@ -12,15 +12,15 @@ public static class ComicSources
     public static async Task RunWorkerAsync(string[] args, CancellationToken ct)
     {
         if (args.Length == 3 && args[0] == "--comic-inspect")
-            await Console.Out.WriteAsync(System.Text.Json.JsonSerializer.Serialize(Inspect(args[1], args[2] == "folder", ct)));
+            await Console.Out.WriteAsync(System.Text.Json.JsonSerializer.Serialize(InspectBook(args[1], args[2] == "folder", ct)));
         else if (args.Length == 6 && args[0] == "--comic-page")
             await ExtractPageAsync(args[1], args[2] == "folder", new(args[3], long.Parse(args[4])), args[5], ct);
         else throw new InvalidDataException("Invalid comic worker arguments.");
     }
-    public static async Task<IReadOnlyList<ComicPageSource>> InspectIsolatedAsync(string path, bool directory, CancellationToken ct)
+    public static async Task<ComicInspection> InspectIsolatedAsync(string path, bool directory, CancellationToken ct)
     {
         var json = await RunIsolatedAsync(["--comic-inspect", path, directory ? "folder" : "archive"], ct);
-        return System.Text.Json.JsonSerializer.Deserialize<ComicPageSource[]>(json) ?? throw new InvalidDataException();
+        return System.Text.Json.JsonSerializer.Deserialize<ComicInspection>(json) ?? throw new InvalidDataException();
     }
     public static Task<string> ExtractIsolatedAsync(string path, bool directory, ComicPageSource page, string destination, CancellationToken ct) =>
         RunIsolatedAsync(["--comic-page", path, directory ? "folder" : "archive", page.Name, page.SizeBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), destination], ct);
@@ -41,8 +41,10 @@ public static class ComicSources
     public static bool IsBook(string path) => IsArchive(path) || IsPdf(path);
     public static bool IsArchive(string path) => Path.GetExtension(path).ToLowerInvariant() is ".cbz" or ".zip" or ".cbr" or ".rar";
     public static bool IsImage(string path) => Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" or ".bmp";
-    public static IReadOnlyList<ComicPageSource> Inspect(string path, bool directory, CancellationToken ct)
+    public static IReadOnlyList<ComicPageSource> Inspect(string path, bool directory, CancellationToken ct) => InspectBook(path, directory, ct).Pages;
+    public static ComicInspection InspectBook(string path, bool directory, CancellationToken ct)
     {
+        ComicMetadata? metadata = null;
         var pages = new List<ComicPageSource>();
         if (directory)
         {
@@ -52,6 +54,11 @@ public static class ComicSources
                 ct.ThrowIfCancellationRequested();
                 if (++count > MaximumEntries) throw Invalid("comic_entry_limit");
                 if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw Invalid("comic_symlink");
+                if (entry is FileInfo info && info.Name.Equals("ComicInfo.xml", StringComparison.OrdinalIgnoreCase) && info.Length <= ComicMetadata.MaximumBytes)
+                {
+                    using var input = info.OpenRead();
+                    metadata = ComicMetadata.Read(input);
+                }
                 if (entry is FileInfo file && IsImage(file.Name))
                 {
                     if (file.Length is <= 0 or > MaximumPageBytes) throw Invalid("comic_page_limit");
@@ -72,6 +79,12 @@ public static class ComicSources
                 var name = entry.Key ?? throw Invalid("comic_invalid_name");
                 MutationPaths.Normalize(name.Replace('\\', '/').TrimEnd('/'));
                 if (entry.IsEncrypted) throw Invalid("comic_encrypted");
+                if (!entry.IsDirectory && name.Replace('\\', '/').Split('/')[^1].Equals("ComicInfo.xml", StringComparison.OrdinalIgnoreCase)
+                    && !name.StartsWith("__MACOSX/", StringComparison.Ordinal) && entry.Size <= ComicMetadata.MaximumBytes && metadata is null)
+                {
+                    using var input = entry.OpenEntryStream();
+                    metadata = ComicMetadata.Read(input);
+                }
                 if (entry.IsDirectory || !IsImage(name) || name.StartsWith("__MACOSX/", StringComparison.Ordinal)) continue;
                 if (entry.Size is <= 0 or > MaximumPageBytes) throw Invalid("comic_page_limit");
                 totalSize += entry.Size;
@@ -81,7 +94,7 @@ public static class ComicSources
         }
         if (pages.Count == 0) throw Invalid("comic_no_pages");
         if (pages.Select(x => x.Name).Distinct(StringComparer.Ordinal).Count() != pages.Count) throw Invalid("comic_duplicate_page");
-        return pages.OrderBy(x => SearchText.SortKey(x.Name), StringComparer.Ordinal).ThenBy(x => x.Name, StringComparer.Ordinal).ToArray();
+        return new(pages.OrderBy(x => SearchText.SortKey(x.Name), StringComparer.Ordinal).ThenBy(x => x.Name, StringComparer.Ordinal).ToArray(), metadata);
     }
 
     private static void ValidateArchive(IArchive archive)

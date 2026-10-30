@@ -90,7 +90,8 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
         var source = SourcePaths.Resolve(root, relative);
         var directory = Directory.Exists(source);
         var pdf = !directory && ComicSources.IsPdf(source);
-        var sources = pdf ? await PdfComics.InspectAsync(source, options, ct) : await ComicSources.InspectIsolatedAsync(source, directory, ct);
+        var inspection = pdf ? new ComicInspection(await PdfComics.InspectAsync(source, options, ct), null) : await ComicSources.InspectIsolatedAsync(source, directory, ct);
+        var sources = inspection.Pages;
         var modified = File.GetLastWriteTimeUtc(source).Ticks;
         var size = directory ? 0 : new FileInfo(source).Length;
         await database.YieldToForegroundAsync(ct);
@@ -105,6 +106,7 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
                   Revision=Comics.Revision+CASE WHEN Comics.SourceSize<>excluded.SourceSize OR Comics.SourceModifiedTicks<>excluded.SourceModifiedTicks THEN 1 ELSE 0 END,
                   Availability='present',LastJobId=excluded.LastJobId RETURNING Id;
                 """, new { job.LibraryId, job.Id, relative, key = root.Key(relative), format = directory ? "folder" : pdf ? "pdf" : Path.GetExtension(relative).ToLowerInvariant() is ".cbz" or ".zip" ? "zip" : "rar", title = Path.GetFileNameWithoutExtension(relative.Length == 0 ? root.Name : relative), count = sources.Count, size, modified, now = DateTimeOffset.UtcNow.ToString("O") }, tx, cancellationToken: ct));
+            await ImportMetadataAsync(db, tx, id, inspection.Metadata, sources.Count, Path.GetFileNameWithoutExtension(relative.Length == 0 ? root.Name : relative), ct);
             await db.ExecuteAsync(new CommandDefinition("DELETE FROM ComicPages WHERE ComicId=@id", new { id }, tx, cancellationToken: ct));
             await db.ExecuteAsync(new CommandDefinition("""
                 INSERT INTO ComicPages(ComicId,PageIndex,EntryName,SizeBytes)
@@ -118,4 +120,38 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
             await pages.PrepareAsync(comic, comic.CoverPage, "cover", ct);
         }
     }
+    private static async Task ImportMetadataAsync(Microsoft.Data.Sqlite.SqliteConnection db, Microsoft.Data.Sqlite.SqliteTransaction tx,
+        long id, ComicMetadata? metadata, int pageCount, string fallbackTitle, CancellationToken ct)
+    {
+        if (metadata is null) return;
+        var row = await db.QuerySingleAsync<ComicRow>(new CommandDefinition("SELECT * FROM Comics WHERE Id=@id", new { id }, tx, cancellationToken: ct));
+        var previous = row.ImportedMetadata is null ? null : System.Text.Json.JsonSerializer.Deserialize<ComicMetadata>(row.ImportedMetadata);
+        metadata = metadata with { Title = metadata.Title.Length == 0 ? fallbackTitle : metadata.Title, CoverPage = metadata.CoverPage < pageCount ? metadata.CoverPage : 0 };
+        // On first import, fill empty fields/the filename title; thereafter only replace values we imported.
+        string Merge(string value, string? old, string imported, string fallback = "") => value == (old ?? fallback) ? imported : value;
+        var cover = row.CoverPage == (previous?.CoverPage ?? 0) ? metadata.CoverPage : Math.Min(row.CoverPage, pageCount - 1);
+        await db.ExecuteAsync(new CommandDefinition("""
+            UPDATE Comics SET Title=@title,Series=@series,Author=@author,Description=@description,CoverPage=@cover,
+              Revision=Revision+CASE WHEN CoverPage<>@cover THEN 1 ELSE 0 END,ImportedMetadata=@snapshot WHERE Id=@id
+            """, new
+        {
+            id,
+            title = Merge(row.Title, previous?.Title, metadata.Title, fallbackTitle),
+            series = Merge(row.Series, previous?.Series, metadata.Series),
+            author = Merge(row.Author, previous?.Author, metadata.Author),
+            description = Merge(row.Description, previous?.Description, metadata.Description),
+            cover,
+            snapshot = System.Text.Json.JsonSerializer.Serialize(metadata)
+        }, tx, cancellationToken: ct));
+        // Union tags, just like other metadata imports. Never remove application tags.
+        var remaining = 100 - await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM ComicTags WHERE ComicId=@id", new { id }, tx, cancellationToken: ct));
+        foreach (var name in metadata.Tags)
+        {
+            if (remaining <= 0) break;
+            var normalized = Luma.Server.Features.Tags.TagText.Normalize(name);
+            await db.ExecuteAsync(new CommandDefinition("INSERT INTO Tags(Name,NormalizedKey) VALUES(@Name,@Key) ON CONFLICT DO NOTHING", new { normalized.Name, normalized.Key }, tx, cancellationToken: ct));
+            remaining -= await db.ExecuteAsync(new CommandDefinition("INSERT INTO ComicTags(ComicId,TagId) SELECT @id,Id FROM Tags WHERE NormalizedKey=@Key ON CONFLICT DO NOTHING", new { id, normalized.Key }, tx, cancellationToken: ct));
+        }
+    }
+
 }

@@ -16,6 +16,7 @@ public sealed class ComicRow
     public string Series { get; set; } = "";
     public string Author { get; set; } = "";
     public string Description { get; set; } = "";
+    public string? ImportedMetadata { get; set; }
     public int PageCount { get; set; }
     public int CoverPage { get; set; }
     public long SourceSize { get; set; }
