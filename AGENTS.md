@@ -205,6 +205,14 @@ Changes to domain behavior require tests.
 
 Bug fixes should include a regression test where practical.
 
+Before starting a feature branch, inspect open pull requests and the current default
+branch. Account for overlapping work and preserve changes from earlier PRs.
+
+After pushing, follow every applicable CI workflow for the final commit through to
+completion. Inspect failed-job logs and fix the causes; queued/running checks are
+not a completed validation. Resolve merge conflicts and verify the combined branch
+before reporting the PR as ready.
+
 Before completing work:
 
 1. build backend

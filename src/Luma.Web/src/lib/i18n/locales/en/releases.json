@@ -1,12 +1,22 @@
 {
   "history": [
     {
-      "version": "2.0.0-beta.14",
+      "version": "2.0.0-beta.15",
       "date": "2026-10-30",
       "headline": "Comic metadata and animated pages",
       "changes": [
         "Import ComicInfo.xml titles, series, writers, summaries, cover choices and tags when discovering comics. Rediscover existing comics to import their metadata.",
         "Animated WebP and GIF pages play in the comic reader, including when zoomed in."
+      ]
+    },
+    {
+      "version": "2.0.0-beta.14",
+      "date": "2026-10-29",
+      "headline": "Panels browsing",
+      "changes": [
+        "Sorting and reading filters share a popup, with Comic locations beside the library title.",
+        "Move between comic pages with Previous and Next, starting each page at the top.",
+        "Return from a comic to the same bookshelf page and scroll position."
       ]
     },
     {
