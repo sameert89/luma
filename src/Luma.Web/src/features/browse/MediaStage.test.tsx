@@ -119,7 +119,8 @@ describe('media viewing', () => {
   it('keeps the generated poster for paused Gallery videos', () => {
     const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={vi.fn()} />)
     expect(container.querySelector('video')).toHaveAttribute('poster', '/cached.jpg')
-    expect(container.querySelector('video')).toHaveClass('motion-media')
+    expect(container.querySelector('video')!.parentElement).toHaveClass('motion-media')
+    expect(container.querySelector('video')).not.toHaveClass('motion-media')
   })
 
   it('shows the original over its thumbnail until a preview exists and does not swap mid-visit', () => {
@@ -388,7 +389,7 @@ describe('media viewing', () => {
         <MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={vi.fn()} onBoostChange={boosted} />,
       )
       const video = container.querySelector('video')!
-      const stage = video.parentElement!
+      const stage = video.closest('.touch-none') as HTMLElement
       vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ top: 0, left: 0, width: 900, height: 600 } as DOMRect)
       Object.defineProperty(video, 'duration', { configurable: true, value: 120 })
       video.currentTime = 50
@@ -886,4 +887,57 @@ it('leaves vertical drags and wheel input to native Flick scrolling, including t
   expect(navigate).not.toHaveBeenCalled()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   vi.restoreAllMocks()
+})
+
+it('zooms video by an arbitrary percentage without changing Fit or Fill and resets when changing fit', () => {
+  localStorage.setItem('luma-viewer-fill', '0')
+  const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} optionsOpen onNavigate={vi.fn()} />)
+  const player = container.querySelector('video')!
+  const slider = screen.getByRole('slider', { name: 'Zoom' })
+  fireEvent.change(slider, { target: { value: '1.73' } })
+  expect(player.style.transform).toContain('scale(1.73)')
+  expect(player).toHaveClass('object-contain')
+  expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('173%')
+  fireEvent.click(screen.getByRole('button', { name: 'Fill' }))
+  expect(player).toHaveClass('object-cover')
+  expect(player.style.transform).toContain('scale(1)')
+  fireEvent.change(slider, { target: { value: '2.35' } })
+  expect(player).toHaveClass('object-cover')
+  expect(player.style.transform).toContain('scale(2.35)')
+  fireEvent.click(screen.getByRole('button', { name: 'Fit' }))
+  expect(player).toHaveClass('object-contain')
+  expect(player.style.transform).toContain('scale(1)')
+  expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument()
+})
+
+it('pinches and pans video at the touched region without triggering volume, seeking or navigation', () => {
+  const navigate = vi.fn()
+  const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} onNavigate={navigate} />)
+  const stage = container.querySelector('.touch-none') as HTMLElement
+  const player = container.querySelector('video')!
+  stage.setPointerCapture = () => {}
+  vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 400,
+    height: 800,
+    right: 400,
+    bottom: 800,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  })
+  fireEvent.pointerDown(stage, { pointerId: 1, button: 0, clientX: 300, clientY: 400 })
+  fireEvent.pointerDown(stage, { pointerId: 2, button: 0, clientX: 350, clientY: 400 })
+  fireEvent.pointerMove(stage, { pointerId: 2, clientX: 400, clientY: 400 })
+  expect(player.style.transform).toBe('translate(-100px, 0px) scale(2)')
+  fireEvent.pointerUp(stage, { pointerId: 2, clientX: 400, clientY: 400 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 300, clientY: 400 })
+  fireEvent.pointerDown(stage, { pointerId: 1, button: 0, clientX: 350, clientY: 300 })
+  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 320, clientY: 350 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 320, clientY: 350 })
+  expect(player.style.transform).toBe('translate(-130px, 50px) scale(2)')
+  expect(player.volume).toBe(1)
+  expect(player.currentTime).toBe(0)
+  expect(navigate).not.toHaveBeenCalled()
 })

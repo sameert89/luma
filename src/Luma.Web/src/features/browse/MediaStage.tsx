@@ -1,4 +1,5 @@
 import { t } from '../../lib/i18n'
+import { zoomPan, type ZoomPoint } from '../../lib/zoom'
 import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
@@ -184,7 +185,7 @@ export function MediaStage({
   const captions = useCaptions(item.id, isVideo)
   // Zoom, pan and rotate belong to the viewer. In Reels a photo or GIF keeps Reels' own
   // gestures (double tap likes, swipes move on) instead of picture controls.
-  const zoomable = !isVideo && !reels
+  const zoomable = !reels
   // Fullscreen chrome steps aside while media plays; a paused video keeps its controls.
   const chromeHidden = useIdle(isFullscreen && presented && (!isVideo || playing) && !optionsOpen)
   const originalUrl = `/api/media/${item.id}/original`
@@ -243,9 +244,12 @@ export function MediaStage({
     panRef.current = next
     setPan(next)
   }
-  function scale(value: number) {
-    setZoom(Math.max(1, Math.min(8, value)))
-    if (value <= 1) setPan({ x: 0, y: 0 })
+  function scale(value: number, point: ZoomPoint = { x: 0, y: 0 }) {
+    const level = Math.max(1, Math.min(8, value))
+    const next = zoomPan(panRef.current, zoomRef.current, level, point)
+    setZoom(level)
+    zoomRef.current = level
+    boundedPan(next, level)
   }
   function toggleFill() {
     setFill(value => {
@@ -258,7 +262,8 @@ export function MediaStage({
   function actualSize() {
     setOriginalId(item.id)
     setFill(false)
-    setPan({ x: 0, y: 0 })
+    panRef.current = { x: 0, y: 0 }
+    setPan(panRef.current)
     const bounds = host.current?.getBoundingClientRect()
     if (bounds && item.width && item.height) scale(Math.max(item.width / bounds.width, item.height / bounds.height))
   }
@@ -445,7 +450,7 @@ export function MediaStage({
       Math.abs(along) > Math.abs(across)
     )
       onNavigate(along < 0 ? 'next' : 'previous')
-    else if (!gesture.current.distance && zoomable && Math.hypot(dx, dy) < 10) {
+    else if (!gesture.current.distance && zoomable && !isVideo && Math.hypot(dx, dy) < 10) {
       const now = Date.now()
       if (now - photoTap.current < doubleTapMs) {
         if (zoomRef.current > 1) {
@@ -455,14 +460,10 @@ export function MediaStage({
         } else {
           const bounds = event.currentTarget.getBoundingClientRect()
           const value = 2.5
-          scale(value)
-          zoomRef.current = value
-          const next = {
-            x: -(event.clientX - bounds.left - bounds.width / 2) * (value - 1),
-            y: -(event.clientY - bounds.top - bounds.height / 2) * (value - 1),
-          }
-          setPan(next)
-          panRef.current = next
+          scale(value, {
+            x: event.clientX - bounds.left - bounds.width / 2,
+            y: event.clientY - bounds.top - bounds.height / 2,
+          })
         }
         photoTap.current = 0
       } else photoTap.current = now
@@ -644,8 +645,11 @@ export function MediaStage({
         event.preventDefault()
         scale(zoom / 1.25)
       }
-      if (event.key === '1') actualSize()
-      if (event.key.toLowerCase() === 'r') setRotation(value => (value + 90) % 360)
+      if (event.key === '1') {
+        if (isVideo) scale(1)
+        else actualSize()
+      }
+      if (!isVideo && event.key.toLowerCase() === 'r') setRotation(value => (value + 90) % 360)
     }
     if (event.key.toLowerCase() === 'f') void fullscreen()
     if (!isVideo) return
@@ -672,7 +676,13 @@ export function MediaStage({
           if (reels && !scrollNavigation && Math.abs(event.deltaY) > 40 && Date.now() - lastWheel.current > 500) {
             lastWheel.current = Date.now()
             onNavigate(event.deltaY > 0 ? 'next' : 'previous')
-          } else if (!reels && item.mediaType === 'image') scale(zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1))
+          } else if (zoomable && !(event.target as HTMLElement).closest('button,input,select,a')) {
+            const bounds = event.currentTarget.getBoundingClientRect()
+            scale(zoomRef.current * (event.deltaY < 0 ? 1.1 : 1 / 1.1), {
+              x: event.clientX - bounds.left - bounds.width / 2,
+              y: event.clientY - bounds.top - bounds.height / 2,
+            })
+          }
         }}
         onContextMenu={event => {
           if (holding.current || holdArmed.current) event.preventDefault()
@@ -690,11 +700,16 @@ export function MediaStage({
             isVideo &&
             !(reels && scrollNavigation) &&
             pointers.current.size === 1 &&
+            zoomRef.current === 1 &&
             event.clientX > bounds.left + bounds.width * 0.75 &&
             event.clientY < bounds.bottom - seekStripHeight
           )
             volumeSwipe.current = { y: event.clientY, volume, active: false }
           if (zoomable && pointers.current.size === 2) {
+            volumeSwipe.current = null
+            window.clearTimeout(tapTimer.current)
+            photoTap.current = 0
+            endHold()
             const points = [...pointers.current.values()]
             pinch.current = {
               distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
@@ -733,7 +748,13 @@ export function MediaStage({
             volumeSwipe.current = null
           if (Math.hypot(dx, dy) > 10) photoTap.current = 0
           const swipe = volumeSwipe.current
-          if (isVideo && swipe && (swipe.active || (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)))) {
+          if (
+            isVideo &&
+            pointers.current.size === 1 &&
+            zoomRef.current === 1 &&
+            swipe &&
+            (swipe.active || (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)))
+          ) {
             swipe.active = true
             heldGesture.current = true
             changeVolume(
@@ -757,11 +778,10 @@ export function MediaStage({
                   Math.max(1, start.distance),
               ),
             )
-            const ratio = nextZoom / start.zoom
-            const next = {
-              x: (points[0].x + points[1].x) / 2 - bounds.left - bounds.width / 2 - (start.x - start.pan.x) * ratio,
-              y: (points[0].y + points[1].y) / 2 - bounds.top - bounds.height / 2 - (start.y - start.pan.y) * ratio,
-            }
+            const next = zoomPan(start.pan, start.zoom, nextZoom, start, {
+              x: (points[0].x + points[1].x) / 2 - bounds.left - bounds.width / 2,
+              y: (points[0].y + points[1].y) / 2 - bounds.top - bounds.height / 2,
+            })
             setZoom(nextZoom)
             zoomRef.current = nextZoom
             boundedPan(next, nextZoom)
@@ -780,67 +800,74 @@ export function MediaStage({
         }}
       >
         {isVideo ? (
-          // eslint-disable-next-line jsx-a11y/media-has-caption -- The real track is inserted by useCaptions only after explicit CC opt-in.
-          <video
-            key={item.id}
+          <div
             data-axis={reels ? 'vertical' : 'horizontal'}
             data-direction={direction}
-            aria-label={item.fileName}
-            ref={video}
-            src={originalUrl}
-            poster={!reels && item.preview.status === 'ready' ? item.preview.url : undefined}
-            playsInline
-            loop={loop}
-            muted={reels ? muted : viewerMuted || volume === 0}
-            controls={false}
-            preload="auto"
-            onEnded={() => {
-              setPlaying(false)
-              syncSession()
-              onEnded?.()
-            }}
-            onPlay={() => {
-              setPlaying(true)
-              syncSession()
-            }}
-            onPause={() => {
-              setPlaying(false)
-              endHold()
-              syncSession()
-            }}
-            onWaiting={waiting}
-            onSeeking={waiting}
-            onSeeked={() => {
-              ready()
-              syncSession()
-            }}
-            onLoadedData={event => {
-              if (event.currentTarget === video.current) setFrameReadyId(item.id)
-            }}
-            onCanPlay={event => {
-              ready()
-              // Keep the prepared frame/buffer without asking for the rest of the file.
-              if (preparing) event.currentTarget.preload = 'none'
-            }}
-            onDurationChange={syncSession}
-            onRateChange={syncSession}
-            onPlaying={event => {
-              if (event.currentTarget !== video.current) return
-              // Playing also covers browsers that skip loadeddata in data-saving modes.
-              setFrameReadyId(item.id)
-              if (!playbackSuspended.current) playbackStarted.current?.()
-              ready()
-              if (!video.current?.error) setFailure('')
-            }}
-            onError={() => {
-              ready()
-              if (!preparing) playbackFailed.current?.()
-              setFailure(t('browse:mediaStage.thisVideoCouldNotPlayCopyItsStreamURL'))
-            }}
-            className={`pointer-events-none h-full w-full ${!reels ? 'motion-media' : frameReady ? '' : 'opacity-0'} ${displayFill ? 'object-cover' : 'object-contain'}`}
+            className={`flex h-full w-full items-center justify-center ${!reels ? 'motion-media' : ''}`}
           >
-            {captions.track}
-          </video>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption -- The real track is inserted by useCaptions only after explicit CC opt-in. */}
+            <video
+              key={item.id}
+              data-axis={reels ? 'vertical' : 'horizontal'}
+              data-direction={direction}
+              aria-label={item.fileName}
+              ref={video}
+              src={originalUrl}
+              poster={!reels && item.preview.status === 'ready' ? item.preview.url : undefined}
+              playsInline
+              loop={loop}
+              muted={reels ? muted : viewerMuted || volume === 0}
+              controls={false}
+              preload="auto"
+              onEnded={() => {
+                setPlaying(false)
+                syncSession()
+                onEnded?.()
+              }}
+              onPlay={() => {
+                setPlaying(true)
+                syncSession()
+              }}
+              onPause={() => {
+                setPlaying(false)
+                endHold()
+                syncSession()
+              }}
+              onWaiting={waiting}
+              onSeeking={waiting}
+              onSeeked={() => {
+                ready()
+                syncSession()
+              }}
+              onLoadedData={event => {
+                if (event.currentTarget === video.current) setFrameReadyId(item.id)
+              }}
+              onCanPlay={event => {
+                ready()
+                // Keep the prepared frame/buffer without asking for the rest of the file.
+                if (preparing) event.currentTarget.preload = 'none'
+              }}
+              onDurationChange={syncSession}
+              onRateChange={syncSession}
+              onPlaying={event => {
+                if (event.currentTarget !== video.current) return
+                // Playing also covers browsers that skip loadeddata in data-saving modes.
+                setFrameReadyId(item.id)
+                if (!playbackSuspended.current) playbackStarted.current?.()
+                ready()
+                if (!video.current?.error) setFailure('')
+              }}
+              onError={() => {
+                ready()
+                if (!preparing) playbackFailed.current?.()
+                setFailure(t('browse:mediaStage.thisVideoCouldNotPlayCopyItsStreamURL'))
+              }}
+              className={`pointer-events-none h-full w-full ${reels && !frameReady ? 'opacity-0' : ''} ${displayFill ? 'object-cover' : 'object-contain'}`}
+              style={zoomable ? { transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` } : undefined}
+            >
+              {captions.track}
+            </video>
+          </div>
         ) : (
           <div
             key={item.id}
@@ -1075,6 +1102,20 @@ export function MediaStage({
             </Field>
           </div>
         )}
+        {zoomable && (
+          <div className="px-5 pt-5">
+            <Field label={t('browse:mediaStage.zoom')}>
+              <Range
+                aria-label={t('browse:mediaStage.zoom')}
+                min={1}
+                max={8}
+                step={0.01}
+                value={zoom}
+                onChange={event => scale(Number(event.target.value))}
+              />
+            </Field>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 p-5">
           <QuietButton
             onClick={() => {
@@ -1094,10 +1135,14 @@ export function MediaStage({
               <QuietButton aria-label={t('browse:mediaStage.zoomIn')} onClick={() => scale(zoom * 1.25)}>
                 +
               </QuietButton>
-              <QuietButton onClick={actualSize}>{t('browse:mediaStage.actualSize')}</QuietButton>
-              <QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>
-                {t('browse:mediaStage.rotate')}
-              </QuietButton>
+              {!isVideo && (
+                <>
+                  <QuietButton onClick={actualSize}>{t('browse:mediaStage.actualSize')}</QuietButton>
+                  <QuietButton onClick={() => setRotation(value => (value + 90) % 360)}>
+                    {t('browse:mediaStage.rotate')}
+                  </QuietButton>
+                </>
+              )}
             </>
           )}
           {reels && onOpenViewer && (
