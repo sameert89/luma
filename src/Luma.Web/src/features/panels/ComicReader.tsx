@@ -48,14 +48,25 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     center: ZoomPoint
     point: ZoomPoint
     scroll: ZoomPoint
+    pageAnchor?: { index: number; u: number; v: number }
   }
+  const continuousAnchor = useRef<{ index: number; u: number; v: number; client: ZoomPoint } | null>(null)
   const pinch = useRef<(ZoomFrame & { distance: number }) | null>(null)
   const pinched = useRef(false)
+  const lastTap = useRef<{ time: number; point: ZoomPoint } | null>(null)
+  const touchDoubleClickUntil = useRef(0)
   useEffect(() => containWheelZoom(mode === 'single' ? singlePage.current : scroll.current), [mode])
   const restoring = useRef(false)
   const resumeTarget = useRef(page)
   const [exiting, setExiting] = useState(false)
   const exitPending = useRef(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const { error, flush } = useReadingSession(comic.id, page, direction, { mode, fit })
   async function exitReader() {
     if (exitPending.current) return
@@ -76,7 +87,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       // Reading progress already reports save failures; navigation stays usable.
     } finally {
       clearTimeout(deadline)
-      onExit()
+      if (mounted.current) onExit()
     }
   }
   useEffect(() => {
@@ -113,6 +124,8 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   function resetZoom() {
     view.current = { zoom: 1, pan: { x: 0, y: 0 } }
     pendingScroll.current = null
+    continuousAnchor.current = null
+    lastTap.current = null
     setZoom(1)
     setPan({ x: 0, y: 0 })
   }
@@ -136,9 +149,24 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       x: (bounds?.left ?? 0) + (bounds?.width ?? 0) / 2,
       y: (bounds?.top ?? 0) + (bounds?.height ?? 0) / 2,
     }
+    let pageAnchor: ZoomFrame['pageAnchor']
+    if (mode === 'continuous') {
+      for (const element of surface?.querySelectorAll<HTMLElement>('[data-index]') ?? []) {
+        const rect = element.getBoundingClientRect()
+        if (rect.height > 0 && target.y >= rect.top && target.y <= rect.bottom) {
+          pageAnchor = {
+            index: Number(element.dataset.index),
+            u: (target.x - rect.left) / rect.width,
+            v: (target.y - rect.top) / rect.height,
+          }
+          break
+        }
+      }
+    }
     return {
       ...view.current,
       center,
+      pageAnchor,
       point: { x: target.x - center.x, y: target.y - center.y },
       scroll: { x: surface?.scrollLeft ?? 0, y: surface?.scrollTop ?? 0 },
     }
@@ -149,6 +177,9 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     const next =
       mode === 'single' && level > 1 ? zoomPan(frame.pan, frame.zoom, level, frame.point, point) : { x: 0, y: 0 }
     if (mode === 'continuous') {
+      continuousAnchor.current = frame.pageAnchor
+        ? { ...frame.pageAnchor, client: { x: frame.center.x + point.x, y: frame.center.y + point.y } }
+        : null
       const ratio = level / frame.zoom
       pendingScroll.current = {
         x: (frame.scroll.x + frame.point.x) * ratio - point.x,
@@ -167,7 +198,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     }
   }, [zoom, pan])
   function doubleClick(event: React.MouseEvent<HTMLDivElement>) {
-    if (pinched.current) return
+    if (pinched.current || Date.now() < touchDoubleClickUntil.current) return
     scaleTo(view.current.zoom === 1 ? 2 : 1, zoomFrame({ x: event.clientX, y: event.clientY }))
   }
   const virtual = useVirtualizer({
@@ -176,6 +207,24 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     estimateSize: () => Math.max(1, (scroll.current?.clientWidth ?? window.innerWidth) * zoom * 1.5),
     enabled: mode === 'continuous',
     overscan: 1,
+  })
+  // Virtual rows are measured asynchronously after their width changes. Preserve
+  // the point on the actual page as those measurements update, rather than
+  // anchoring to an estimated total height that can shift in a long comic.
+  useLayoutEffect(() => {
+    const anchor = continuousAnchor.current
+    const surface = scroll.current
+    if (mode !== 'continuous' || !anchor || !surface) return
+    const row = surface.querySelector<HTMLElement>(`[data-index="${anchor.index}"]`)
+    if (!row) {
+      virtual.scrollToIndex(anchor.index, { align: 'start' })
+      return
+    }
+    const rect = row.getBoundingClientRect()
+    const dx = rect.left + rect.width * anchor.u - anchor.client.x
+    const dy = rect.top + rect.height * anchor.v - anchor.client.y
+    if (Math.abs(dx) > 0.5) surface.scrollLeft += dx
+    if (Math.abs(dy) > 0.5) surface.scrollTop += dy
   })
   useEffect(() => {
     if (mode === 'continuous') {
@@ -225,7 +274,12 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   }, [comic.id, comic.format, comic.pageCount, page])
   function down(event: React.PointerEvent) {
     restoring.current = false
-    if (pointers.current.size === 0) pinched.current = false
+    if (pointers.current.size === 0) {
+      pinched.current = false
+      continuousAnchor.current = null
+      start.current = { x: event.clientX, y: event.clientY }
+    }
+    if (event.pointerType !== 'touch') touchDoubleClickUntil.current = 0
     event.currentTarget.setPointerCapture(event.pointerId)
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
     if (pointers.current.size === 2) {
@@ -235,11 +289,43 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
         distance: Math.hypot(a.x - b.x, a.y - b.y),
       }
       pinched.current = true
+      lastTap.current = null
+    }
+  }
+  function up(event: React.PointerEvent<HTMLDivElement>) {
+    const origin = start.current
+    pointers.current.delete(event.pointerId)
+    if (pointers.current.size === 0) {
+      pinch.current = null
+      start.current = null
+    }
+    if (pinched.current || !origin) return
+    const dx = event.clientX - origin.x,
+      dy = event.clientY - origin.y
+    if (mode === 'single' && view.current.zoom === 1 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+      lastTap.current = null
+      move((dx > 0 ? -1 : 1) * (direction === 'rtl' ? -1 : 1))
+    } else if (event.pointerType === 'touch' && Math.hypot(dx, dy) < 10) {
+      const point = { x: event.clientX, y: event.clientY }
+      const previous = lastTap.current
+      const now = Date.now()
+      if (
+        previous &&
+        now - previous.time < 280 &&
+        Math.hypot(point.x - previous.point.x, point.y - previous.point.y) < 24
+      ) {
+        scaleTo(view.current.zoom === 1 ? 2 : 1, zoomFrame(point))
+        lastTap.current = null
+        // Ignore the compatibility dblclick generated for this same touch pair.
+        touchDoubleClickUntil.current = now + 400
+      } else lastTap.current = { time: now, point }
     }
   }
   function pointerMove(event: React.PointerEvent) {
     const previous = pointers.current.get(event.pointerId)
     if (!previous) return
+    if (start.current && Math.hypot(event.clientX - start.current.x, event.clientY - start.current.y) > 10)
+      lastTap.current = null
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()]
@@ -353,22 +439,13 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
           aria-label={t('panels:comicReader.comicPageGestures')}
           className={`relative flex min-h-0 flex-1 ${fit === 'width' || fit === 'original' ? 'items-start overflow-auto' : 'items-center overflow-hidden'} justify-center`}
           style={{ touchAction: 'none' }}
-          onPointerDown={event => {
-            start.current = { x: event.clientX, y: event.clientY }
-            down(event)
-          }}
+          onPointerDown={down}
           onPointerMove={pointerMove}
-          onPointerUp={event => {
-            const origin = start.current
-            pointers.current.delete(event.pointerId)
-            pinch.current = null
-            if (!pinched.current && zoom === 1 && origin && Math.abs(event.clientX - origin.x) > 60)
-              move((event.clientX > origin.x ? -1 : 1) * (direction === 'rtl' ? -1 : 1))
-            start.current = null
-          }}
+          onPointerUp={up}
           onPointerCancel={() => {
             pointers.current.clear()
             pinch.current = null
+            lastTap.current = null
             start.current = null
           }}
           onDoubleClick={doubleClick}
@@ -413,16 +490,15 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
           onPointerDown={down}
           onDoubleClick={doubleClick}
           onPointerMove={pointerMove}
-          onPointerUp={event => {
-            pointers.current.delete(event.pointerId)
-            pinch.current = null
-          }}
+          onPointerUp={up}
           onPointerCancel={() => {
             pointers.current.clear()
             pinch.current = null
+            lastTap.current = null
           }}
           onWheel={event => {
             restoring.current = false
+            if (!event.ctrlKey) continuousAnchor.current = null
             if (event.ctrlKey)
               scaleTo(view.current.zoom - event.deltaY / 200, zoomFrame({ x: event.clientX, y: event.clientY }))
           }}

@@ -185,3 +185,38 @@ it('leaves the reader even if the final progress save throws', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Exit reader' }))
   await vi.waitFor(() => expect(exit).toHaveBeenCalledOnce())
 })
+
+it('recognizes consecutive touch double taps without relying on compatibility double-click events', () => {
+  render(<ComicReader comic={comic} onExit={() => {}} />)
+  const stage = screen.getByRole('group', { name: 'Comic page gestures' })
+  stage.setPointerCapture = () => {}
+  const image = screen.getByRole('img')
+  vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400, height: 800 } as DOMRect)
+  const tap = () => {
+    fireEvent.pointerDown(stage, { pointerId: 1, pointerType: 'touch', clientX: 300, clientY: 200 })
+    fireEvent.pointerUp(stage, { pointerId: 1, pointerType: 'touch', clientX: 300, clientY: 200 })
+  }
+  tap()
+  tap()
+  expect(image.style.transform).toBe('translate(-100px,200px) scale(2)')
+  fireEvent.doubleClick(stage, { clientX: 300, clientY: 200 })
+  expect(image.style.transform).toContain('scale(2)')
+  tap()
+  tap()
+  expect(image.style.transform).toBe('translate(0px,0px) scale(1)')
+})
+
+it('does not navigate again if browser Back already unmounted a reader waiting to save', async () => {
+  vi.useFakeTimers()
+  try {
+    vi.mocked(useReadingSession).mockReturnValueOnce({ error: '', flush: () => new Promise<void>(() => {}) })
+    const exit = vi.fn()
+    const { unmount } = render(<ComicReader comic={comic} onExit={exit} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Exit reader' }))
+    unmount()
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(exit).not.toHaveBeenCalled()
+  } finally {
+    vi.useRealTimers()
+  }
+})
