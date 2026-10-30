@@ -482,7 +482,9 @@ test('Flick reserves the whole right quarter for touch volume without scrolling 
     const before = await player.evaluate(video => video.volume)
     await swipe(fraction, true)
     await expect.poll(() => player.evaluate(video => video.volume)).toBeLessThan(before)
-    await expect.poll(() => viewport.evaluate((element, before) => Math.abs(element.scrollTop - before), beforeScroll)).toBeLessThan(2)
+    await expect
+      .poll(() => viewport.evaluate((element, before) => Math.abs(element.scrollTop - before), beforeScroll))
+      .toBeLessThan(2)
     await expect(current).toHaveAttribute('data-reel-id', originalId!)
     await expect(reels.getByRole('status').filter({ hasText: /Volume/ })).toBeVisible()
     await swipe(fraction, false)
