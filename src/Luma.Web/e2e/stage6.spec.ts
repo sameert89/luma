@@ -185,6 +185,9 @@ test('mobile pinch zoom and pan retain swipe navigation for images and videos', 
   let y = bounds!.y + bounds!.height / 2
   const viewerMarker = await page.evaluate(() => history.state?.lumaModal)
   async function closeOptions() {
+    // Radix registers the nested dismissable layer after rendering its contents.
+    // Wait until it owns interaction before sending Escape to that layer.
+    await expect(page.getByRole('dialog', { name: 'View options' })).toHaveCSS('pointer-events', 'auto')
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog', { name: 'View options' })).toHaveCount(0)
     await expect.poll(() => page.evaluate(() => history.state?.lumaModal)).toBe(viewerMarker)
