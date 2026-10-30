@@ -1,6 +1,16 @@
 {
   "history": [
     {
+      "version": "2.0.0-beta.14",
+      "date": "2026-10-29",
+      "headline": "Panels browsing",
+      "changes": [
+        "Sorting and reading filters share a popup, with Comic locations beside the library title.",
+        "Move between comic pages with Previous and Next, starting each page at the top.",
+        "Return from a comic to the same bookshelf page and scroll position."
+      ]
+    },
+    {
       "version": "2.0.0-beta.13",
       "date": "2026-10-28",
       "headline": "PDF comics in Panels",

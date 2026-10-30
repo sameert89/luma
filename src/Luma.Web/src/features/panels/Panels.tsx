@@ -6,16 +6,17 @@ import { SearchHeader } from '../../components/ui/SearchHeader'
 import type { components } from '../../lib/api/generated'
 import { ComicLocations } from './ComicLocations'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { BookOpen, FolderPlus, FolderCog, ArrowUp, LoaderCircle } from 'lucide-react'
-import { Checkbox, Input, Select, QuietButton } from '../../components/ui/Controls'
+import { QuietButton } from '../../components/ui/Controls'
 import { Modal } from '../../components/ui/Modal'
 import { errorMessage, request, type Library } from '../browse/api'
 import type { Comic, ComicList, ReadingStatistics } from './api'
 import { ComicReader } from './ComicReader'
 import { ComicDetails } from './ComicDetails'
+import { PanelFilters, type PanelFilterValue } from './PanelFilters'
 
-type ComicSorting = { sort: 'title' | 'added' | 'modified'; order: 'asc' | 'desc' }
+type ComicSorting = Pick<PanelFilterValue, 'sort' | 'order'>
 function savedSorting(): ComicSorting {
   try {
     const value = JSON.parse(localStorage.getItem('luma-panels-sort') ?? '{}')
@@ -26,6 +27,12 @@ function savedSorting(): ComicSorting {
   } catch {
     return { sort: 'title', order: 'asc' }
   }
+}
+
+type BrowsePosition = { cursors: number[]; page: number; folderAfter?: string; scrollTop: number }
+const firstPosition = (): BrowsePosition => ({ cursors: [], page: 0, scrollTop: 0 })
+function savedPosition(): BrowsePosition {
+  return window.history.state?.panelsPosition ?? firstPosition()
 }
 
 function initialParams() {
@@ -52,15 +59,19 @@ export function Panels({
     queryKey: ['libraries'],
     queryFn: ({ signal }) => request<Library[]>('/api/libraries', signal),
   })
-  const favouritesId = useId()
   const [params, setParams] = useState(initialParams)
-  const [sorting, setSorting] = useState(savedSorting)
-  const [folderAfter, setFolderAfter] = useState<string>()
-  const [cursor, setCursor] = useState<number>()
+  const [sorting, setSorting] = useState<ComicSorting>(() => window.history.state?.panelsSorting ?? savedSorting())
+  const [position, setPosition] = useState(savedPosition)
+  const bookshelf = useRef<HTMLDivElement>(null)
+  const folderAfter = position.folderAfter
+  const cursor = position.page > 0 ? position.cursors[position.page - 1] : undefined
+  function rememberPosition() {
+    const current = { ...position, scrollTop: bookshelf.current?.scrollTop ?? position.scrollTop }
+    window.history.replaceState({ ...window.history.state, panelsPosition: current, panelsSorting: sorting }, '')
+    return current
+  }
   const [search, setSearch] = useState(params.get('q') ?? '')
-  const [filtersOpen, setFiltersOpen] = useState(
-    !!(params.get('state') || params.get('series') || params.get('favourite') || params.get('tag')),
-  )
+  const [filtersOpen, setFiltersOpen] = useState(false)
   useEffect(() => setSearch(params.get('q') ?? ''), [params])
   const sources = useQuery({
     queryKey: ['comic-sources'],
@@ -110,10 +121,30 @@ export function Panels({
       /* Keep the choice for this session. */
     }
   }, [sorting])
-  function changeSorting(next: ComicSorting) {
-    setCursor(undefined)
-    setFolderAfter(undefined)
-    setSorting(next)
+  function applyFilters(value: PanelFilterValue) {
+    const next = new URLSearchParams(params)
+    for (const key of ['state', 'series', 'tag'] as const) {
+      if (value[key].trim()) next.set(key, value[key].trim())
+      else next.delete(key)
+    }
+    if (value.favourite) next.set('favourite', 'true')
+    else next.delete('favourite')
+    const nextPosition = firstPosition()
+    setPosition(nextPosition)
+    setSorting({ sort: value.sort, order: value.order })
+    window.history[window.history.state?.lumaModal ? 'replaceState' : 'pushState'](
+      {
+        ...window.history.state,
+        lumaModal: undefined,
+        section: 'panels',
+        panelsPosition: nextPosition,
+        panelsSorting: { sort: value.sort, order: value.order },
+      },
+      '',
+      `/panels${next.size ? `?${next}` : ''}`,
+    )
+    setParams(next)
+    setFiltersOpen(false)
   }
   function visit(id?: number, nextPath = '') {
     const next = new URLSearchParams()
@@ -121,10 +152,11 @@ export function Panels({
       next.set('libraryId', String(id))
       next.set('path', nextPath)
     }
-    setCursor(undefined)
-    setFolderAfter(undefined)
+    rememberPosition()
+    const nextPosition = firstPosition()
+    setPosition(nextPosition)
     window.history.pushState(
-      { ...window.history.state, section: 'panels' },
+      { ...window.history.state, section: 'panels', panelsPosition: nextPosition },
       '',
       `/panels${next.size ? `?${next}` : ''}`,
     )
@@ -174,6 +206,9 @@ export function Panels({
         (!!libraryId || searching) &&
         ((library.data === undefined && library.isFetching) ||
           (!searching && folders.data === undefined && folders.isFetching)))
+  useLayoutEffect(() => {
+    if (!comicId && !initialLoading && bookshelf.current) bookshelf.current.scrollTop = position.scrollTop
+  }, [comicId, initialLoading, position])
   const stats = useQuery({
     queryKey: ['reading-statistics'],
     queryFn: ({ signal }) => request<ReadingStatistics>('/api/panels/statistics', signal),
@@ -182,7 +217,7 @@ export function Panels({
   useEffect(() => {
     const query = params.toString()
     window.history.replaceState(
-      { ...window.history.state, section: 'panels' },
+      { ...window.history.state, section: 'panels', panelsSorting: sorting },
       '',
       `/panels${query ? `?${query}` : ''}`,
     )
@@ -191,11 +226,14 @@ export function Panels({
     } catch {
       /* URL remains authoritative. */
     }
-  }, [params])
+  }, [params, sorting])
   useEffect(() => {
     const back = () => {
-      if (!window.history.state?.lumaModal && window.location.pathname.startsWith('/panels'))
+      if (!window.history.state?.lumaModal && window.location.pathname.startsWith('/panels')) {
+        setPosition(savedPosition())
+        if (window.history.state?.panelsSorting) setSorting(window.history.state.panelsSorting)
         setParams(new URLSearchParams(window.location.search))
+      }
     }
     window.addEventListener('popstate', back)
     return () => window.removeEventListener('popstate', back)
@@ -204,13 +242,27 @@ export function Panels({
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
-    setCursor(undefined)
+    const nextPosition = key === 'comic' ? (comicId ? savedPosition() : rememberPosition()) : firstPosition()
+    if (key !== 'comic') rememberPosition()
+    setPosition(nextPosition)
     window.history.pushState(
-      { ...window.history.state, section: 'panels' },
+      { ...window.history.state, section: 'panels', panelsPosition: nextPosition },
       '',
       `/panels${next.size ? `?${next}` : ''}`,
     )
     setParams(next)
+  }
+  function turnPage(page: number) {
+    if (library.isFetching || page < 0) return
+    const cursors = position.cursors.slice(0, position.page)
+    if (page > position.page) {
+      if (!library.data?.nextCursor) return
+      cursors.push(library.data.nextCursor)
+    }
+    rememberPosition()
+    const nextPosition = { ...position, cursors, page, scrollTop: 0 }
+    window.history.pushState({ ...window.history.state, panelsPosition: nextPosition, section: 'panels' }, '')
+    setPosition(nextPosition)
   }
   function exit() {
     change('comic', '')
@@ -237,33 +289,10 @@ export function Panels({
         searchRequested={false}
         scope={params.toString()}
       />
-      <div className="flex flex-wrap items-center gap-3 p-4">
-        <h1 className="flex-1 text-xl font-semibold">{t('panels:panels.comicLibrary')}</h1>
+      <div className="flex items-center justify-between gap-3 p-4">
+        <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">{t('panels:panels.comicLibrary')}</h1>
         {configured && (
-          <>
-            <Select
-              aria-label={t('panels:panels.sortBy')}
-              className="w-auto"
-              value={sorting.sort}
-              onChange={event => changeSorting({ ...sorting, sort: event.target.value as ComicSorting['sort'] })}
-            >
-              <option value="title">{t('panels:panels.title')}</option>
-              <option value="added">{t('panels:panels.dateAdded')}</option>
-              <option value="modified">{t('panels:panels.modifiedDate')}</option>
-            </Select>
-            <Select
-              aria-label={t('panels:panels.sortDirection')}
-              className="w-auto"
-              value={sorting.order}
-              onChange={event => changeSorting({ ...sorting, order: event.target.value as ComicSorting['order'] })}
-            >
-              <option value="asc">{t('panels:panels.ascending')}</option>
-              <option value="desc">{t('panels:panels.descending')}</option>
-            </Select>
-          </>
-        )}
-        {configured && (
-          <QuietButton onClick={() => setManage(true)}>
+          <QuietButton className="shrink-0" onClick={() => setManage(true)}>
             <FolderCog className="size-4" aria-hidden="true" />
             {t('panels:panels.comicLocations')}
           </QuietButton>
@@ -278,43 +307,26 @@ export function Panels({
           </QuietButton>
         </section>
       )}
-      {filtersOpen && (
-        <div className="flex flex-wrap gap-3 px-4 pb-3">
-          <Select
-            aria-label={t('panels:panels.readingStatus')}
-            className="w-auto"
-            value={params.get('state') ?? ''}
-            onChange={event => change('state', event.target.value)}
-          >
-            <option value="">{t('panels:panels.allComics')}</option>
-            <option value="reading">{t('panels:panels.continueReading')}</option>
-            <option value="unread">{t('panels:panels.unread')}</option>
-            <option value="completed">{t('panels:panels.completed')}</option>
-          </Select>
-          <Input
-            aria-label={t('panels:panels.seriesFilter')}
-            className="w-auto"
-            placeholder={t('panels:panels.series')}
-            value={params.get('series') ?? ''}
-            onChange={event => change('series', event.target.value)}
+      <Modal
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        title={t('app:app.filtersAndSorting')}
+        description={t('panels:panels.chooseComicFilters')}
+        sheet
+      >
+        {filtersOpen && (
+          <PanelFilters
+            value={{
+              ...sorting,
+              state: params.get('state') ?? '',
+              series: params.get('series') ?? '',
+              tag: params.get('tag') ?? '',
+              favourite: params.get('favourite') === 'true',
+            }}
+            onApply={applyFilters}
           />
-          <Input
-            aria-label={t('panels:panels.comicTagFilter')}
-            className="max-w-xs"
-            placeholder={t('panels:panels.comicTag')}
-            value={params.get('tag') ?? ''}
-            onChange={event => change('tag', event.target.value)}
-          />
-          <label htmlFor={favouritesId} className="flex items-center gap-2 text-sm">
-            <Checkbox
-              id={favouritesId}
-              checked={params.get('favourite') === 'true'}
-              onChange={event => change('favourite', event.target.checked ? 'true' : '')}
-            />
-            {t('panels:panels.favouritesOnly')}
-          </label>
-        </div>
-      )}
+        )}
+      </Modal>
       <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
         {libraryId && (
           <QuietButton onClick={() => visit()}>
@@ -345,7 +357,13 @@ export function Panels({
           {errorMessage(library.error || reading.error || folders.error)}
         </p>
       )}
-      <div className={`min-h-0 flex-1 overflow-auto p-4 ${!configured && !sources.isPending ? 'hidden' : ''}`}>
+      <div
+        ref={bookshelf}
+        onScroll={() => {
+          if (!comicId && !initialLoading) rememberPosition()
+        }}
+        className={`min-h-0 flex-1 overflow-auto p-4 ${!configured && !sources.isPending ? 'hidden' : ''}`}
+      >
         {initialLoading ? (
           <div role="status" className="grid h-full min-h-48 place-items-center text-muted">
             <span className="flex items-center gap-2">
@@ -434,18 +452,36 @@ export function Panels({
             <p className="text-muted">{t('panels:panels.noComicsMatchAddArchivesOrExplicitlyClassifyAn')}</p>
           )}
         {folders.data?.nextCursor && (
-          <QuietButton onClick={() => setFolderAfter(folders.data!.nextCursor!)}>
+          <QuietButton
+            onClick={() => {
+              rememberPosition()
+              const nextPosition = { ...position, folderAfter: folders.data!.nextCursor!, scrollTop: 0 }
+              window.history.pushState({ ...window.history.state, panelsPosition: nextPosition }, '')
+              setPosition(nextPosition)
+            }}
+          >
             {t('panels:panels.moreFolders')}
           </QuietButton>
         )}
-        <div className="mt-4 flex gap-2">
-          {cursor && <QuietButton onClick={() => setCursor(undefined)}>{t('panels:panels.firstPage')}</QuietButton>}
-          {library.data?.nextCursor && (
-            <QuietButton onClick={() => setCursor(library.data?.nextCursor ?? undefined)}>
-              {t('panels:panels.moreComics')}
+        {(position.page > 0 || library.data?.nextCursor) && (
+          <nav aria-label={t('panels:panels.comicPages')} className="mt-4 flex items-center justify-center gap-3">
+            <QuietButton
+              disabled={position.page === 0 || library.isFetching}
+              onClick={() => turnPage(position.page - 1)}
+            >
+              {t('panels:panels.previousPage')}
             </QuietButton>
-          )}
-        </div>
+            <span role="status" className="text-sm text-muted">
+              {t('panels:panels.pageNumber', { number: position.page + 1 })}
+            </span>
+            <QuietButton
+              disabled={!library.data?.nextCursor || library.isFetching}
+              onClick={() => turnPage(position.page + 1)}
+            >
+              {t('panels:panels.nextPage')}
+            </QuietButton>
+          </nav>
+        )}
       </div>
       <Modal
         open={details !== null}

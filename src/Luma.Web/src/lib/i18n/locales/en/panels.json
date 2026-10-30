@@ -124,6 +124,13 @@
     "sortDirection": "Sort direction",
     "ascending": "Ascending",
     "descending": "Descending",
-    "firstPage": "First page"
+    "firstPage": "First page",
+    "order": "Order",
+    "filterComics": "Filter comics",
+    "chooseComicFilters": "Choose how to browse your comics.",
+    "comicPages": "Comic pages",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "pageNumber": "Page {{number}}"
   }
 }
