@@ -349,3 +349,38 @@ it('restores the bookshelf page and scroll on browser Back from a nested folder'
   expect(screen.getByText('Page 2')).toBeVisible()
   expect(shelf.scrollTop).toBe(240)
 })
+
+it('requests a folder timestamp refresh separately from indexed browsing on open', async () => {
+  window.history.replaceState({}, '', '/panels?libraryId=1&path=Manga')
+  const fetch = mount()
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.some(
+        ([url, init]) =>
+          url === '/api/panels/refresh' && init?.method === 'POST' && JSON.parse(init.body).relativePath === 'Manga',
+      ),
+    ).toBe(true),
+  )
+  expect(fetch.mock.calls.filter(([url]) => url === '/api/panels/refresh')).toHaveLength(1)
+  expect(fetch.mock.calls.some(([url]) => url === '/api/panels/discover')).toBe(false)
+})
+
+it('refreshes saved source folders from the bookshelf without starting a full-library scan', async () => {
+  const fetch = mount()
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.some(
+        ([url, init]) =>
+          url === '/api/panels/refresh' && init?.method === 'POST' && JSON.parse(init.body).libraryId === 1,
+      ),
+    ).toBe(true),
+  )
+  expect(fetch.mock.calls.some(([url]) => url === '/api/panels/discover')).toBe(false)
+})
+
+it('does not request source access for a search', async () => {
+  window.history.replaceState({}, '', '/panels?q=moon')
+  const fetch = mount()
+  await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('/api/panels/comics?'))).toBe(true))
+  expect(fetch.mock.calls.some(([url]) => url === '/api/panels/refresh')).toBe(false)
+})

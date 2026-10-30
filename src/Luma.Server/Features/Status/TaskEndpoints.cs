@@ -93,7 +93,7 @@ public static class TaskEndpoints
                 await using var comicDb = await database.OpenAsync(ct);
                 var old = await comicDb.QuerySingleOrDefaultAsync<ComicJob>(new CommandDefinition("SELECT * FROM ComicJobs WHERE Id=@key", new { key }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
                 if (old.State is "queued" or "running") throw new ApiRequestException(409, "comic_job_active", "The comic task is still active.");
-                var queued = await comics.QueueAsync(new(old.LibraryId, old.Source), ct);
+                var queued = await comics.QueueAsync(new(old.LibraryId, old.Source), ct, old.Recursive, old.ImageFolders, old.Shallow, old.Automatic);
                 await comicDb.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET QueueDismissed=1 WHERE Id=@key", new { key }, cancellationToken: ct));
                 return Results.Accepted(value: queued);
             }

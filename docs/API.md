@@ -297,3 +297,14 @@ and remembers the selected sort/direction on the device. Continue reading keeps
 its most-recently-read order. Comic folders use natural name ordering and accept
 `order=asc|desc`; date sorts apply to books, while folder names follow the selected
 direction. Saved bookshelf locations also follow natural name order/direction.
+
+### Comic folder refresh
+
+`POST /api/panels/refresh` accepts `{ "libraryId": 1, "relativePath": "Comics/Series" }`
+and returns `204`. The same-origin discovery request checks the library's saved
+Refresh on open preference and probes the selected configured source folder's
+mtime outside a writer transaction. A changed or uncheckpointed folder becomes a
+durable shallow discovery hint; unchanged, disabled or unavailable sources are
+no-ops. New child folders expand into their own subtrees. Requests coalesce and
+wait behind active comic/file operations. This does not change `/panels/discover`
+semantics or access originals from browse GETs. Completion appears in `/api/tasks`.

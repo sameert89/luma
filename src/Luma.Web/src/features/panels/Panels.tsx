@@ -104,6 +104,31 @@ export function Panels({
     params.get('favourite') ||
     params.get('tag')
   )
+  const refreshLocations =
+    configured && !comicId && !searching
+      ? libraryId
+        ? [{ libraryId, relativePath: path }]
+        : (sources.data?.locations ?? [])
+      : []
+  const refreshScope = JSON.stringify(
+    refreshLocations.map(({ libraryId, relativePath }) => ({ libraryId, relativePath })),
+  )
+  useEffect(() => {
+    const controller = new AbortController()
+    const locations = JSON.parse(refreshScope) as { libraryId: number; relativePath: string }[]
+    void (async () => {
+      for (const location of locations) {
+        if (controller.signal.aborted) return
+        try {
+          await request('/api/panels/refresh', controller.signal, 'POST', location)
+        } catch {
+          // Indexed browsing remains available when a source is offline.
+        }
+      }
+      if (!controller.signal.aborted && locations.length) void client.invalidateQueries({ queryKey: ['tasks'] })
+    })()
+    return () => controller.abort()
+  }, [refreshScope, client])
   const folders = useQuery({
     queryKey: ['comic-folders', libraryId, path, folderAfter, sorting.order],
     queryFn: ({ signal }) =>

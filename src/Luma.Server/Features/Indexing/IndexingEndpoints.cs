@@ -73,7 +73,7 @@ public static class IndexingEndpoints
             }, tx, cancellationToken: ct));
             if (changed == 0) return Problem(404, context);
             if (request.Mode != "watcher")
-                await db.ExecuteAsync(new CommandDefinition("DELETE FROM DirtyFolders WHERE LibraryId=@id", new { id }, tx, cancellationToken: ct));
+                await db.ExecuteAsync(new CommandDefinition("DELETE FROM DirtyFolders WHERE LibraryId=@id; DELETE FROM ComicDirtyFolders WHERE LibraryId=@id", new { id }, tx, cancellationToken: ct));
             tx.Commit();
             refresh.ApplySettings(id, request);
             return TypedResults.NoContent();

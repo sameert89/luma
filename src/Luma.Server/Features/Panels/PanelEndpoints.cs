@@ -40,6 +40,8 @@ public static class PanelEndpoints
         var manage = app.MapGroup("/api/panels").AddEndpointFilter<SameOriginFilter>();
 
         manage.MapPost("/comics/{id:long}/tags", async (long id, ComicTagUpdate update, ComicLibrary library, CancellationToken ct) => { await library.UpdateTagsAsync(id, update, ct); return TypedResults.NoContent(); }).WithName("UpdateComicTags");
+        manage.MapPost("/refresh", async (ComicRegistration registration, ComicDiscovery discovery, CancellationToken ct) =>
+        { await discovery.RefreshAsync(registration, ct); return TypedResults.NoContent(); }).WithName("RefreshComicFolder");
         manage.MapPost("/discover", async (ComicRegistration registration, ComicLibrary library, CancellationToken ct) =>
             TypedResults.Accepted(uri: (string?)null, value: await library.QueueAsync(registration, ct))).WithName("DiscoverComics");
         manage.MapPut("/comics/{id:long}/metadata", async (long id, ComicMetadataUpdate update, Database database, ComicLibrary library, CancellationToken ct) =>

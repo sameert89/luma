@@ -3645,6 +3645,29 @@
         }
       }
     },
+    "/api/panels/refresh": {
+      "post": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "RefreshComicFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComicRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/panels/discover": {
       "post": {
         "tags": [

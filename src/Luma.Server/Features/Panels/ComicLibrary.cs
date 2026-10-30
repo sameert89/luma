@@ -17,6 +17,7 @@ public sealed class ComicRow
     public string Author { get; set; } = "";
     public string Description { get; set; } = "";
     public string? ImportedMetadata { get; set; }
+    public string? SourceFingerprint { get; set; }
     public int PageCount { get; set; }
     public int CoverPage { get; set; }
     public long SourceSize { get; set; }
@@ -47,6 +48,8 @@ public sealed class ComicJob
     public long Id { get; set; }
     public long LibraryId { get; set; }
     public bool Recursive { get; set; }
+    public bool Shallow { get; set; }
+    public bool Automatic { get; set; }
     public bool ImageFolders { get; set; }
     public string? Source { get; set; }
     public string State { get; set; } = "queued";
@@ -159,14 +162,14 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         return await db.QuerySingleOrDefaultAsync<ComicRow>(new CommandDefinition(ReadSql + " AND c.Id=@id", new { id }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
     }
     internal static ComicSummary Summary(ComicRow row, bool? cover = null) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, (cover ?? row.HasCover) ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null, row.CoverPage) { DocumentUrl = row.Format == "pdf" ? $"/api/panels/comics/{row.Id}/document?revision={row.Revision}" : null };
-    public async Task<ComicJobAccepted> QueueAsync(ComicRegistration request, CancellationToken ct)
+    public async Task<ComicJobAccepted> QueueAsync(ComicRegistration request, CancellationToken ct, bool recursive = false, bool imageFolders = false, bool shallow = false, bool automatic = false)
     {
         var root = options.Libraries.Find(x => x.Id == request.LibraryId) ?? throw ApiRequestException.Missing();
         if (request.RelativePath is not null) Luma.Server.Features.Files.MutationPaths.Normalize(request.RelativePath, true);
         await using var db = await database.OpenAsync(ct);
         try
         {
-            var id = await db.ExecuteScalarAsync<long>(new CommandDefinition("INSERT INTO ComicJobs(LibraryId,Source,CreatedAt) VALUES(@LibraryId,@RelativePath,@now) RETURNING Id", new { request.LibraryId, request.RelativePath, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
+            var id = await db.ExecuteScalarAsync<long>(new CommandDefinition("INSERT INTO ComicJobs(LibraryId,Source,Recursive,ImageFolders,Shallow,Automatic,CreatedAt) VALUES(@LibraryId,@RelativePath,@recursive,@imageFolders,@shallow,@automatic,@now) RETURNING Id", new { request.LibraryId, request.RelativePath, recursive, imageFolders, shallow, automatic, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
             return new(id);
         }
         catch (SqliteException error) when (error.SqliteErrorCode == 19) { throw new ApiRequestException(409, "comic_job_active", "A comic discovery task is already active for this library."); }

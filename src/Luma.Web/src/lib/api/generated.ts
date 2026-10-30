@@ -1120,6 +1120,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panels/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RefreshComicFolder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panels/discover": {
         parameters: {
             query?: never;
@@ -4045,6 +4061,28 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FileOperation"][];
                 };
+            };
+        };
+    };
+    RefreshComicFolder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicRegistration"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

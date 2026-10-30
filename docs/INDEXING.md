@@ -105,3 +105,33 @@ Refresh-on-open reads the stored folder row and probes its directory timestamp b
 Shallow reconciliation seeks `Media` by `FolderId` using `IX_Media_Folder`. It covers the selected directory plus the known descendants of missing immediate children, rather than rechecking unrelated media/missing folders/processing jobs across the library. Recursive and full-library scans retain their respective scopes. Idle file-operation polls use a read-only existence check, yield to foreground requests before claiming actual work, and treat transient writer contention as waiting.
 
 Folder modified ordering uses the latest observed directory time or committed Luma activity. Renaming/moving a folder updates the folder and affected ancestors; content uploads, moves, renames, copies and deletions update affected parents and ancestors. Copies do not modify the source folder; purging an already recycled item does not modify its old public parent. Source checkpoints remain separate, so a later scan cannot erase a move/rename timestamp. Migration 37 repairs stored checkpoint dates and reconstructs known directory move/restore activity from immutable operation snapshots. All browse ordering remains database-only and uses the existing modified-date index.
+
+## Panels discovery
+
+Panels uses the same per-library watcher/manual/periodic policy, debounce and file
+stability wait as Gallery. The existing watcher atomically persists a separate
+`ComicDirtyFolders` hint before Gallery consumes its own hint. Panels' single
+worker turns these into durable `ComicJobs`; changes arriving during an active
+job remain pending. Events are clipped to configured comic sources, including
+sources excluded from Gallery or absent from Gallery's folder index. Periodic
+comic passes have per-source timestamps independent of Gallery's periodic pass.
+
+The bookshelf issues a separate `POST /api/panels/refresh` for its saved source
+folders, or the visited folder. With Refresh on open enabled this probes one
+directory timestamp outside a write transaction. A changed/unindexed folder gets
+shallow discovery; only new/uncheckpointed child folders expand recursively.
+Browse GETs, pagination, search and covers remain database/cache-only. Existing
+folders have their own timestamp checkpoints, so missed events in deeper folders
+are caught when those folders are opened. Watcher/periodic limitations are the
+same as Gallery; saving locations and scanning remains a full reconciliation.
+
+Automatic jobs compare archive/PDF size and mtime before inspection, reusing
+unchanged pages/covers. Image folders additionally fingerprint bounded page and
+ComicInfo filename/size/mtime metadata (not content) to invalidate in-place image
+edits without depending on the folder timestamp. Manual discovery still inspects
+sources. Replacements retain comic IDs, tags and reading progress, advancing the
+cache revision. Successful discovery reconciles missing books within its scope,
+including descendants of removed immediate folders; failed/cancelled/inaccessible
+traversals never reconcile missing entries. Removed books retain metadata and
+progress and recover the same identity when the path reappears. Interrupted jobs
+resume after restart; durable dirty hints wait behind active comic/file jobs.

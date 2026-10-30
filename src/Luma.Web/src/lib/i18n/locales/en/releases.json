@@ -5,10 +5,11 @@
       "date": "2026-10-30",
       "headline": "Comic metadata and viewer zoom",
       "changes": [
-        "Import ComicInfo.xml titles, series, writers, summaries, cover choices and tags when discovering comics. Rediscover existing comics to import their metadata.",
+        "Import ComicInfo.xml titles, series, writers, summaries, cover choices and tags when discovering comics.",
         "Animated WebP and GIF pages play in the comic reader, including when zoomed in.",
         "Zoom into the region you tap or pinch in comics, and zoom videos without changing Fit or Fill.",
-        "Leave the comic reader even when saving progress is slow or offline."
+        "Leave the comic reader even when saving progress is slow or offline.",
+        "Comic locations now follow library watcher and periodic refresh settings. Opening a changed folder discovers additions and removals without rescanning the whole library."
       ]
     },
     {
