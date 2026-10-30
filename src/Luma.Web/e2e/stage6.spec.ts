@@ -386,3 +386,66 @@ test('holding 2x replaces the top bar in portrait and landscape and restores it 
     await expect(viewer.getByRole('button', { name: 'Close viewer' })).toBeVisible()
   }
 })
+
+test('video arbitrary zoom preserves Fit and Fill, and mobile pinch stays on the touched region', async ({
+  page,
+}, info) => {
+  await page.goto('/?q=stage6-video')
+  await page.getByTestId('media-cell').first().click()
+  const player = page.locator('video')
+  await expect.poll(() => player.evaluate(element => element.readyState)).toBeGreaterThanOrEqual(2)
+  const originalFit = await player.evaluate(element => getComputedStyle(element).objectFit)
+  const viewerMarker = await page.evaluate(() => history.state?.lumaModal)
+  await (await viewerAction(page, 'View options')).click()
+  const options = page.getByRole('dialog', { name: 'View options' })
+  await expect(options).toHaveCSS('pointer-events', 'auto')
+  const slider = options.getByRole('slider', { name: 'Zoom', exact: true })
+  await slider.focus()
+  await slider.press('Home')
+  await slider.press('ArrowRight')
+  await expect(options.getByRole('button', { name: 'Reset zoom' })).toHaveText('101%')
+  // Check rendered geometry, not just the inline transform: the entry animation
+  // previously occupied the transform property on the video element itself.
+  await expect
+    .poll(() => player.evaluate(element => new DOMMatrixReadOnly(getComputedStyle(element).transform).a))
+    .toBeCloseTo(1.01)
+  await expect(player).toHaveCSS('object-fit', originalFit)
+  await options.getByRole('button', { name: /^(Fit|Fill)$/ }).click()
+  await expect(options.getByRole('button', { name: 'Reset zoom' })).toHaveText('100%')
+  await expect(player).toHaveCSS('object-fit', originalFit === 'contain' ? 'cover' : 'contain')
+  await options.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => history.state?.lumaModal)).toBe(viewerMarker)
+  if (info.project.name === 'mobile') {
+    const bounds = (await player.boundingBox())!
+    const x = bounds.x + bounds.width * 0.7,
+      y = bounds.y + bounds.height * 0.35
+    const volume = await player.evaluate(element => element.volume)
+    const session = await page.context().newCDPSession(page)
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { x: x - 20, y, id: 0 },
+        { x: x + 20, y, id: 1 },
+      ],
+    })
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        { x: x - 40, y, id: 0 },
+        { x: x + 40, y, id: 1 },
+      ],
+    })
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await expect
+      .poll(() => player.evaluate(element => new DOMMatrixReadOnly(getComputedStyle(element).transform).a))
+      .toBeCloseTo(2)
+    await expect
+      .poll(async () => {
+        const zoomed = (await player.boundingBox())!
+        return Math.hypot(zoomed.x + zoomed.width * 0.7 - x, zoomed.y + zoomed.height * 0.35 - y)
+      })
+      .toBeLessThan(1)
+    expect(await player.evaluate(element => element.volume)).toBe(volume)
+  }
+  await page.screenshot({ path: info.outputPath('video-zoom.png'), animations: 'disabled' })
+})
