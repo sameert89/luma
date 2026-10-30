@@ -701,7 +701,6 @@ export function MediaStage({
           // previous/next swipes everywhere else, so the gestures remain unambiguous.
           if (
             isVideo &&
-            !(reels && scrollNavigation) &&
             pointers.current.size === 1 &&
             zoomRef.current === 1 &&
             event.clientX > bounds.left + bounds.width * 0.75 &&
@@ -900,6 +899,16 @@ export function MediaStage({
               />
             </div>
           </div>
+        )}
+        {isVideo && reels && scrollNavigation && (
+          // touch-action is decided at touch-down. This hit area reserves the same
+          // right quarter as the gesture handler before native scrolling can claim it.
+          <div
+            aria-hidden="true"
+            data-volume-lane
+            className="absolute right-0 top-0 w-1/4 touch-none"
+            style={{ bottom: seekStripHeight }}
+          />
         )}
         {isVideo && volumeOverlay && (
           <span

@@ -35,7 +35,8 @@ describe('Help guide', () => {
     expect(libraries).toHaveTextContent('Date sorts use the folder’s last-change date')
     expect(libraries).toHaveTextContent('Pull down inside a folder to check its files')
     expect(libraries).toHaveTextContent('To stop filtering your results, use Clear all filters instead')
-    expect(section('Flick')).toHaveTextContent('Vertical swipes move between reels')
+    expect(section('Flick')).toHaveTextContent('Vertical swipes elsewhere move between reels')
+    expect(section('Flick')).toHaveTextContent('right quarter of a video to adjust volume')
     expect(section('Background jobs')).toHaveTextContent('without affecting your files or scan history')
     expect(section('Photo and video viewer')).toHaveTextContent(
       'Watch progress is shared by everyone using this Luma server',

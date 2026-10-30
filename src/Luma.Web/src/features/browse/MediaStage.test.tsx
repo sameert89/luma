@@ -739,13 +739,25 @@ it('offers persisted resume and start-over choices only for a partially watched 
   vi.restoreAllMocks()
 })
 
-it('uses the right-side volume lane in Reels while vertical swipes elsewhere still navigate', () => {
+it.each([false, true])('keeps the full right-quarter volume lane with native scrolling=%s', scrollNavigation => {
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
   const navigate = vi.fn()
-  const { container } = render(<MediaStage item={{ ...image, mediaType: 'video' }} reels muted onNavigate={navigate} />)
-  const stage = container.querySelector('.touch-none') as HTMLElement
+  const { container } = render(
+    <MediaStage
+      item={{ ...image, mediaType: 'video' }}
+      reels
+      scrollNavigation={scrollNavigation}
+      muted
+      onNavigate={navigate}
+    />,
+  )
+  const stage = (
+    scrollNavigation
+      ? container.querySelector('[data-volume-lane]')?.parentElement
+      : container.querySelector('.touch-none')
+  ) as HTMLElement
   stage.setPointerCapture = () => {}
   vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({
     left: 0,
@@ -767,7 +779,10 @@ it('uses the right-side volume lane in Reels while vertical swipes elsewhere sti
   fireEvent.pointerDown(stage, { pointerId: 2, button: 0, clientX: 150, clientY: 500 })
   fireEvent.pointerMove(stage, { pointerId: 2, clientX: 150, clientY: 300 })
   fireEvent.pointerUp(stage, { pointerId: 2, clientX: 150, clientY: 300 })
-  expect(navigate).toHaveBeenCalledWith('next')
+  if (scrollNavigation) {
+    expect(navigate).not.toHaveBeenCalled() // Native scrolling owns navigation outside the lane.
+    expect(container.querySelector('[data-volume-lane]')).toHaveClass('w-1/4', 'touch-none')
+  } else expect(navigate).toHaveBeenCalledWith('next')
   vi.restoreAllMocks()
 })
 
@@ -858,7 +873,7 @@ it('shows an Autoplay toggle in the viewer player bar but not in Reels', async (
   }
 })
 
-it('leaves vertical drags and wheel input to native Flick scrolling, including the right edge', () => {
+it('leaves vertical drags and wheel input to native Flick scrolling, outside the volume lane', () => {
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
@@ -879,10 +894,10 @@ it('leaves vertical drags and wheel input to native Flick scrolling, including t
     y: 0,
     toJSON: () => ({}),
   })
-  fireEvent.pointerDown(stage, { pointerId: 1, button: 0, clientX: 350, clientY: 500 })
-  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 350, clientY: 250 })
+  fireEvent.pointerDown(stage, { pointerId: 1, button: 0, clientX: 150, clientY: 500 })
+  fireEvent.pointerMove(stage, { pointerId: 1, clientX: 150, clientY: 250 })
   fireEvent.pointerCancel(stage, { pointerId: 1 })
-  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 350, clientY: 250 })
+  fireEvent.pointerUp(stage, { pointerId: 1, clientX: 150, clientY: 250 })
   fireEvent.wheel(stage, { deltaY: 180 })
   expect(navigate).not.toHaveBeenCalled()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
