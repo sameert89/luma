@@ -1,5 +1,5 @@
 import { t } from '../../lib/i18n'
-import { zoomPan, type ZoomPoint } from '../../lib/zoom'
+import { containWheelZoom, zoomPan, type ZoomPoint } from '../../lib/zoom'
 import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
@@ -186,6 +186,9 @@ export function MediaStage({
   // Zoom, pan and rotate belong to the viewer. In Reels a photo or GIF keeps Reels' own
   // gestures (double tap likes, swipes move on) instead of picture controls.
   const zoomable = !reels
+  useEffect(() => {
+    if (zoomable) return containWheelZoom(host.current)
+  }, [zoomable])
   // Fullscreen chrome steps aside while media plays; a paused video keeps its controls.
   const chromeHidden = useIdle(isFullscreen && presented && (!isVideo || playing) && !optionsOpen)
   const originalUrl = `/api/media/${item.id}/original`

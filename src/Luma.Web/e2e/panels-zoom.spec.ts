@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
 
-async function openComic(page: Page, fit: string) {
+async function openComic(page: Page, fit: string, mode = 'single') {
   await page.route('**/api/panels/sources', route =>
     route.fulfill({
       json: { configured: true, locations: [{ libraryId: 1, relativePath: '', imageFolders: false }] },
@@ -21,7 +21,7 @@ async function openComic(page: Page, fit: string) {
         state: 'reading',
         readingSeconds: 0,
         direction: 'ltr',
-        settings: JSON.stringify({ mode: 'single', fit }),
+        settings: JSON.stringify({ mode, fit }),
         lastReadAt: null,
         favourite: false,
         coverUrl: null,
@@ -97,6 +97,17 @@ for (const fit of ['screen', 'width']) {
       await page.mouse.dblclick(anchor.point.x, anchor.point.y)
     }
     await expect(image).toHaveAttribute('style', /scale\(1\)/)
+    if (info.project.name === 'desktop') {
+      anchor = await region(image, stage)
+      const width = await page.evaluate(() => window.innerWidth)
+      await page.mouse.move(anchor.point.x, anchor.point.y)
+      await page.keyboard.down('Control')
+      await page.mouse.wheel(0, -200)
+      await page.keyboard.up('Control')
+      await expect(image).toHaveAttribute('style', /scale\(2\)/)
+      await expectAnchor(image, anchor)
+      expect(await page.evaluate(() => window.innerWidth)).toBe(width)
+    }
     if (info.project.name === 'mobile') {
       anchor = await region(image, stage)
       const { x, y } = anchor.point
@@ -137,4 +148,39 @@ test('reader Back remains usable when a progress request stalls', async ({ page 
   await page.getByRole('button', { name: 'Exit reader', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Exit reader', exact: true })).toHaveCount(0)
   await expect(page).not.toHaveURL(/comic=/)
+})
+
+test('continuous comic zoom stays on a region near the end of a scrolled comic', async ({ page }, info) => {
+  const { stage } = await openComic(page, 'width', 'continuous')
+  await stage.evaluate(element => {
+    element.scrollTop = element.scrollHeight - element.clientHeight - 50
+  })
+  const image = page.getByRole('img', { name: 'Zoom comic, page 2', exact: true })
+  await expect(image).toBeVisible()
+  const anchor = await region(image, stage)
+  if (info.project.name === 'mobile') {
+    const { x, y } = anchor.point
+    const session = await page.context().newCDPSession(page)
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { x: x - 20, y, id: 0 },
+        { x: x + 20, y, id: 1 },
+      ],
+    })
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        { x: x - 40, y, id: 0 },
+        { x: x + 40, y, id: 1 },
+      ],
+    })
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  } else {
+    await page.mouse.move(anchor.point.x, anchor.point.y)
+    await page.keyboard.down('Control')
+    await page.mouse.wheel(0, -200)
+    await page.keyboard.up('Control')
+  }
+  await expectAnchor(image, anchor)
 })

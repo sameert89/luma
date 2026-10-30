@@ -2,7 +2,7 @@ import { t } from '../../lib/i18n'
 import { Modal } from '../../components/ui/Modal'
 import { readSetting } from '../../app/uiDefaults'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { zoomPan, type ZoomPoint } from '../../lib/zoom'
+import { containWheelZoom, zoomPan, type ZoomPoint } from '../../lib/zoom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minus, Plus, SlidersHorizontal } from 'lucide-react'
 import { IconButton, QuietButton, Select, Input, Range } from '../../components/ui/Controls'
@@ -51,6 +51,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   }
   const pinch = useRef<(ZoomFrame & { distance: number }) | null>(null)
   const pinched = useRef(false)
+  useEffect(() => containWheelZoom(mode === 'single' ? singlePage.current : scroll.current), [mode])
   const restoring = useRef(false)
   const resumeTarget = useRef(page)
   const [exiting, setExiting] = useState(false)
@@ -405,6 +406,8 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       ) : (
         <div
           ref={scroll}
+          role="group"
+          aria-label={t('panels:comicReader.comicPageGestures')}
           className="min-h-0 flex-1 overflow-auto"
           style={{ touchAction: 'none' }}
           onPointerDown={down}
@@ -418,8 +421,10 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
             pointers.current.clear()
             pinch.current = null
           }}
-          onWheel={() => {
+          onWheel={event => {
             restoring.current = false
+            if (event.ctrlKey)
+              scaleTo(view.current.zoom - event.deltaY / 200, zoomFrame({ x: event.clientX, y: event.clientY }))
           }}
           onScroll={() => {
             const visible = virtual.getVirtualItems().find(item => item.end > (scroll.current?.scrollTop ?? 0))
