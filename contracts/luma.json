@@ -2677,6 +2677,29 @@
         }
       }
     },
+    "/api/panels/recently-added": {
+      "get": {
+        "tags": [
+          "Luma.Server"
+        ],
+        "operationId": "GetRecentlyAddedComics",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComicSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/panels/continue-reading": {
       "get": {
         "tags": [
@@ -4402,6 +4425,17 @@
           "documentUrl": {
             "type": "string",
             "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagSummary"
+            },
+            "nullable": true
+          },
+          "tagCount": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

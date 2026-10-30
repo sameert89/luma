@@ -460,6 +460,8 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
                 key={page}
                 document={pdf}
                 index={page}
+                zoom={zoom}
+                original={fit === 'original'}
                 label={`${comic.title}, page ${page + 1}`}
                 className={`${fit === 'width' ? 'w-full h-auto' : fit === 'height' ? 'h-full w-auto' : fit === 'original' ? 'max-w-none' : 'h-full w-full object-contain'} select-none`}
                 style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }}

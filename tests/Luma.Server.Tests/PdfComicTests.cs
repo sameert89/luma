@@ -14,7 +14,7 @@ public sealed class PdfComicTests
     [Theory]
     [InlineData("Pages: 0\nEncrypted: no")]
     [InlineData("Pages: 5001\nEncrypted: no")]
-    [InlineData("Pages: 2\nEncrypted: yes (print:yes)")]
+    [InlineData("Pages: 2\nEncrypted: unknown")]
     [InlineData("not a PDF")]
     public void Unsupported_documents_are_rejected(string info) =>
         Assert.Equal("comic_pdf_unsupported", Assert.Throws<ApiRequestException>(() => PdfComics.ParseInfo(info)).Code);
@@ -27,6 +27,22 @@ public sealed class PdfComicTests
         var pages = PdfComics.ParseInfo("Title: A book\nPages: 12\nEncrypted: no\n");
         Assert.Equal("10.png", pages[9].Name);
         Assert.Equal(12, pages.Count);
+    }
+
+    [Theory]
+    [InlineData("Pages: 41\nEncrypted: yes (print:yes copy:no change:no addNotes:no algorithm:AES-256)")]
+    [InlineData("Title: Multiple fields\nPages: not a number\nPages: 41\nEncrypted: no")]
+    public void Documents_opened_without_a_password_support_owner_restrictions_and_duplicate_metadata(string info) =>
+        Assert.Equal(41, PdfComics.ParseInfo(info).Count);
+
+    [Fact]
+    public async Task Poppler_imports_an_owner_restricted_pdf_without_a_password_but_rejects_a_required_password()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "owner-restricted.pdf");
+        Assert.Single(await PdfComics.InspectAsync(path, f.Options, default));
+        await Assert.ThrowsAsync<Luma.Server.MediaProcessing.ProcessingException>(() => PdfComics.InspectAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "password-required.pdf"), f.Options, default));
     }
 
     // Small valid two-page PDF, without another test-generation dependency.

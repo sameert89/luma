@@ -66,6 +66,14 @@ test('PDF pages render in Panels with navigation, saved progress and continuous 
       return Array.from(canvas.getContext('2d')!.getImageData(10, 10, 1, 1).data)
     })
   await expect.poll(() => color(1)).toEqual([255, 0, 0, 255])
+  const bitmapWidth = () =>
+    page.getByRole('img', { name: 'PDF reader, page 1' }).evaluate(element => (element as HTMLCanvasElement).width)
+  const required = await page.getByRole('img', { name: 'PDF reader, page 1' }).evaluate(element => {
+    const scale = Math.min(element.clientWidth / 300, element.clientHeight / 450) * devicePixelRatio
+    return Math.floor(300 * Math.min(scale, Math.sqrt(8_000_000 / (300 * 450))))
+  })
+  await expect.poll(bitmapWidth).toBeGreaterThanOrEqual(required - 1)
+
   await page.getByRole('button', { name: 'Next page', exact: true }).click()
   await expect(counter).toHaveText('2 / 2')
   await expect.poll(() => color(2)).toEqual([0, 0, 255, 255])
@@ -76,6 +84,11 @@ test('PDF pages render in Panels with navigation, saved progress and continuous 
   await expect(counter).toHaveText('2 / 2')
   await expect.poll(() => color(2)).toEqual([0, 0, 255, 255])
   await page.getByRole('button', { name: 'Reader settings', exact: true }).click()
+  const secondWidth = () =>
+    page.locator('canvas[aria-label="PDF reader, page 2"]').evaluate(element => (element as HTMLCanvasElement).width)
+  const beforeZoom = await secondWidth()
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+  await expect.poll(secondWidth).toBeGreaterThan(beforeZoom)
   await page.getByRole('combobox', { name: 'Reading mode' }).selectOption('continuous')
   await page.getByRole('button', { name: 'Close', exact: true }).click()
   await expect.poll(() => color(2)).toEqual([0, 0, 255, 255])

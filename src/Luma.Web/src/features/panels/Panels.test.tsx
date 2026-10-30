@@ -161,7 +161,10 @@ it('shows at most five continued books with saved page indicators and one locati
   mount(null, true, comics)
   const row = await screen.findByRole('region', { name: 'Continue reading' })
   expect(within(row).getAllByRole('button', { name: /^Read Recent/ })).toHaveLength(5)
-  expect(within(row).getByRole('progressbar', { name: 'Reading progress for Recent 1' })).toHaveAttribute('value', '4')
+  expect(within(row).getByRole('progressbar', { name: 'Reading progress for Recent 1' })).toHaveAttribute(
+    'aria-valuenow',
+    '4',
+  )
   expect(screen.getAllByRole('button', { name: 'Comic locations' })).toHaveLength(1)
   expect(screen.queryByText('Loading comics…')).not.toBeInTheDocument()
 })
@@ -383,4 +386,20 @@ it('does not request source access for a search', async () => {
   const fetch = mount()
   await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('/api/panels/comics?'))).toBe(true))
   expect(fetch.mock.calls.some(([url]) => url === '/api/panels/refresh')).toBe(false)
+})
+
+it('shows the ten most recently added comics in a separate horizontal row on the bookshelf', async () => {
+  const comics = Array.from({ length: 12 }, (_, index) => ({
+    id: index + 1,
+    title: `New ${index + 1}`,
+    format: 'pdf',
+    pageCount: 41,
+    pageIndex: 0,
+    state: 'unread',
+  }))
+  mount(null, true, [], url => (url === '/api/panels/recently-added' ? comics : undefined))
+  const row = await screen.findByRole('region', { name: 'Recently added' })
+  expect(within(row).getAllByRole('button', { name: /^Read New/ })).toHaveLength(10)
+  expect(within(row).getAllByRole('button', { name: /^Edit details for/ })).toHaveLength(10)
+  expect(within(row).queryByText('New 11')).not.toBeInTheDocument()
 })

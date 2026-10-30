@@ -9,6 +9,7 @@ public static class PanelEndpoints
 {
     public static void MapPanels(this IEndpointRouteBuilder app)
     {
+        app.MapGet("/api/panels/recently-added", async (ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.RecentAsync(ct))).WithName("GetRecentlyAddedComics");
         app.MapGet("/api/panels/continue-reading", async (ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.ContinueAsync(ct))).WithName("GetContinueReading");
         app.MapGet("/api/panels/sources", async (PanelSources sources, CancellationToken ct) => TypedResults.Ok(await sources.GetAsync(ct))).WithName("GetComicSources");
         app.MapGet("/api/panels/suggestions", async (string? q, int? limit, ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.SuggestAsync(q, limit ?? 8, ct))).WithName("GetComicSuggestions");

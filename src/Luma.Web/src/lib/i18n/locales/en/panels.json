@@ -7,7 +7,10 @@
     "editDetailsFor": "Edit details for {{value1}}",
     "details": "Details",
     "pages_one": "{{series}} · {{count}} page",
-    "pages_other": "{{series}} · {{count}} pages"
+    "pages_other": "{{series}} · {{count}} pages",
+    "tags": "Tags",
+    "moreTags_one": "{{count}} more tag",
+    "moreTags_other": "{{count}} more tags"
   },
   "comicDetails": {
     "loadingComicDetails": "Loading comic details…",
@@ -85,7 +88,7 @@
     "done": "Done"
   },
   "panels": {
-    "searchComicTitlesOrSeries": "Search comic titles or series",
+    "searchComicTitlesOrSeries": "Search titles, authors, series or tags",
     "comicLibrary": "Comic library",
     "comicLocations": "Comic locations",
     "setUpComicLibrary": "Set up comic library",
@@ -131,6 +134,7 @@
     "comicPages": "Comic pages",
     "previousPage": "Previous page",
     "nextPage": "Next page",
-    "pageNumber": "Page {{number}}"
+    "pageNumber": "Page {{number}}",
+    "recentlyAdded": "Recently added"
   }
 }

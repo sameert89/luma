@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Fixtures/*.pdf" CopyToOutputDirectory="PreserveNewest" />
     <Using Include="Xunit" />
   </ItemGroup>
 

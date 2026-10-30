@@ -22,8 +22,10 @@ public static class PdfComics
     internal static IReadOnlyList<ComicPageSource> ParseInfo(string info)
     {
         var fields = info.Split('\n').Select(line => line.Split(':', 2))
-            .Where(parts => parts.Length == 2).ToDictionary(parts => parts[0].Trim(), parts => parts[1].Trim(), StringComparer.Ordinal);
-        if (!fields.TryGetValue("Encrypted", out var encrypted) || encrypted != "no"
+            .Where(parts => parts.Length == 2).GroupBy(parts => parts[0].Trim(), StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Last()[1].Trim(), StringComparer.Ordinal);
+        // pdfinfo already opened the document without a password. "Encrypted: yes" can
+        // mean owner restrictions with an empty user password, which PDF.js can read.
+        if (!fields.TryGetValue("Encrypted", out var encrypted) || !(encrypted == "no" || encrypted.StartsWith("yes", StringComparison.Ordinal))
             || !fields.TryGetValue("Pages", out var pages)
             || !int.TryParse(pages, NumberStyles.None, CultureInfo.InvariantCulture, out var count)
             || count is < 1 or > ComicSources.MaximumEntries) throw Invalid();
@@ -42,5 +44,5 @@ public static class PdfComics
         if (!File.Exists(destination) || new FileInfo(destination).Length is <= 0 or > ComicSources.MaximumPageBytes) throw Invalid();
     }
 
-    private static ApiRequestException Invalid() => new(422, "comic_pdf_unsupported", "This PDF is encrypted, damaged or exceeds the comic limits.");
+    private static ApiRequestException Invalid() => new(422, "comic_pdf_unsupported", "This PDF requires a password, is damaged or exceeds the comic limits.");
 }

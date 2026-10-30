@@ -26,7 +26,7 @@ public sealed class SourceSelectionTests
         finally { Directory.Move(offline, f.Root.Path); }
     }
     [Fact]
-    public async Task Flick_suggestions_exclude_photos_and_comic_suggestions_only_match_titles()
+    public async Task Flick_suggestions_exclude_photos_and_comic_suggestions_also_match_authors()
     {
         await using var f = await PipelineFixture.CreateAsync();
         await f.CreateImageAsync("clip-photo.jpg");
@@ -42,6 +42,6 @@ public sealed class SourceSelectionTests
             """);
         var comics = new ComicLibrary(f.Database, f.Options);
         Assert.Equal("comic", Assert.Single(await comics.SuggestAsync("Moon", 8, default)).Kind);
-        Assert.Empty(await comics.SuggestAsync("Sun", 8, default));
+        Assert.Equal("Moon", Assert.Single(await comics.SuggestAsync("Sun", 8, default)).Label);
     }
 }
