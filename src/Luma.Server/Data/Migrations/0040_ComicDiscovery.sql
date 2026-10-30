@@ -24,3 +24,4 @@ ALTER TABLE PanelSources ADD COLUMN LastPeriodicScanAt TEXT;
 
 CREATE INDEX IX_ComicFolders_Parent ON ComicFolders(LibraryId,ParentKey);
 CREATE INDEX IX_ComicFolders_Job ON ComicFolders(LastJobId,LibraryId);
+CREATE INDEX IX_ComicDirtyFolders_Detected ON ComicDirtyFolders(DetectedAt,LibraryId);
