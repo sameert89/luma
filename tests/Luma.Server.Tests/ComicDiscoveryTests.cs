@@ -374,4 +374,30 @@ public sealed class ComicDiscoveryTests
         Assert.Equal(1, job.Processed);
     }
 
+    [Fact]
+    public async Task Parent_refresh_preserves_a_known_image_comic_until_its_directory_is_removed()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        await ConfigureAsync(f, images: true);
+        Directory.CreateDirectory(Path.Combine(f.Root.Path, "Comics", "Images"));
+        await f.CreateImageAsync("Comics/Images/page.png");
+        await RunAsync(f);
+        await HintAsync(f, "Comics");
+        Assert.Equal(0, (await RunAsync(f)).Processed);
+        await using var db = await f.Database.OpenAsync(default);
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Comics"));
+        // Archive-only passes also leave observed image comics intact.
+        await db.ExecuteAsync("UPDATE PanelSources SET ImageFolders=0");
+        await HintAsync(f, "Comics");
+        await RunAsync(f);
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Comics"));
+        await HintAsync(f, "Comics", true);
+        await RunAsync(f);
+        Assert.Equal("present", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Comics"));
+        Directory.Delete(Path.Combine(f.Root.Path, "Comics", "Images"), true);
+        await HintAsync(f, "Comics");
+        await RunAsync(f);
+        Assert.Equal("missing", await db.ExecuteScalarAsync<string>("SELECT Availability FROM Comics"));
+    }
+
 }

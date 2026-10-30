@@ -81,14 +81,18 @@ public sealed class ComicWorker(Database database, IndexingOptions options, Comi
                     UPDATE Comics SET Availability='missing' WHERE LibraryId=@LibraryId
                       AND PathKey>=@key AND PathKey<@end AND COALESCE(LastJobId,0)<>@Id
                       AND (@key='' OR PathKey=@key OR (PathKey>=@prefix AND PathKey<@branchEnd))
-                      AND (@recursive OR PathKey=@key OR instr(substr(PathKey,length(@prefix)+1),'/')=0
+                      AND NOT (Format='folder' AND NOT @images AND EXISTS(SELECT 1 FROM ComicFolders observed
+                        WHERE observed.LibraryId=@LibraryId AND observed.PathKey=Comics.PathKey
+                          AND (observed.SeenJobId=@Id OR observed.LastJobId=@Id)))
+                      AND (@recursive OR PathKey=@key OR (Format<>'folder' AND instr(substr(PathKey,length(@prefix)+1),'/')=0)
                         OR EXISTS(SELECT 1 FROM ComicFolders visited WHERE visited.LibraryId=@LibraryId AND visited.LastJobId=@Id
-                          AND Comics.PathKey>=visited.PathKey||'/' AND Comics.PathKey<visited.PathKey||'0'
-                          AND instr(substr(Comics.PathKey,length(visited.PathKey)+2),'/')=0)
+                          AND (Comics.PathKey=visited.PathKey OR (Comics.Format<>'folder'
+                            AND Comics.PathKey>=visited.PathKey||'/' AND Comics.PathKey<visited.PathKey||'0'
+                            AND instr(substr(Comics.PathKey,length(visited.PathKey)+2),'/')=0)))
                         OR EXISTS(SELECT 1 FROM ComicFolders f WHERE f.LibraryId=@LibraryId
                           AND f.ParentKey=@key AND COALESCE(f.SeenJobId,0)<>@Id
                           AND (Comics.PathKey=f.PathKey OR (Comics.PathKey>=f.PathKey||'/' AND Comics.PathKey<f.PathKey||'0'))))
-                    """, new { job.LibraryId, job.Id, key, end = key + "\U0010FFFF", prefix = key.Length == 0 ? "" : key + "/", branchEnd = key + "0", recursive = recursiveReconciliation }, tx, cancellationToken: ct));
+                    """, new { job.LibraryId, job.Id, key, end = key + "\U0010FFFF", prefix = key.Length == 0 ? "" : key + "/", branchEnd = key + "0", recursive = recursiveReconciliation, images = job.ImageFolders }, tx, cancellationToken: ct));
             }
             await db.ExecuteAsync(new CommandDefinition("UPDATE ComicJobs SET State='completed' WHERE Id=@Id AND State='running'", job, tx, cancellationToken: ct));
             tx.Commit();
