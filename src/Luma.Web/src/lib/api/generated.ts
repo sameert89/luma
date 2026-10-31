@@ -704,6 +704,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panels/recently-added": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRecentlyAddedComics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panels/continue-reading": {
         parameters: {
             query?: never;
@@ -1120,6 +1136,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panels/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RefreshComicFolder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panels/discover": {
         parameters: {
             query?: never;
@@ -1374,6 +1406,9 @@ export interface components {
             /** Format: int32 */
             coverPage: number;
             documentUrl?: string | null;
+            tags?: components["schemas"]["TagSummary"][] | null;
+            /** Format: int32 */
+            tagCount?: number;
         };
         ComicTagUpdate: {
             addTagIds: number[];
@@ -3412,6 +3447,26 @@ export interface operations {
             };
         };
     };
+    GetRecentlyAddedComics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicSummary"][];
+                };
+            };
+        };
+    };
     GetContinueReading: {
         parameters: {
             query?: never;
@@ -4045,6 +4100,28 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FileOperation"][];
                 };
+            };
+        };
+    };
+    RefreshComicFolder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicRegistration"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

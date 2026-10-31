@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using Dapper;
+using SixLabors.ImageSharp;
 using Luma.Server.Features.Panels;
 using Luma.Server.Features.Files;
 using Luma.Server.Http;
@@ -62,6 +63,12 @@ public sealed class ComicTests
         {
             archive.CreateEntryFromFile(Path.Combine(f.Root.Path, "page2.png"), "page10.png");
             archive.CreateEntryFromFile(Path.Combine(f.Root.Path, "page2.png"), "page2.png");
+            using var metadata = new StreamWriter(archive.CreateEntry("nested/cOmIcInFo.XmL").Open());
+            metadata.Write("""
+                <ComicInfo><Title>Imported title</Title><Series>Series</Series><Writer>Writer</Writer>
+                <Summary>A summary</Summary><Genre>Adventure, adventure; Hindi</Genre><Tags>Custom</Tags>
+                <Pages><Page Image="1" Type="FrontCover" /></Pages></ComicInfo>
+                """);
         }
         var library = new ComicLibrary(f.Database, f.Options);
         using var decoder = new Luma.Server.MediaProcessing.MediaProcessor(f.Options);
@@ -76,11 +83,92 @@ public sealed class ComicTests
         var listed = await library.ListAsync(null, null, null, null, null, default);
         var comic = Assert.Single(listed.Items);
         Assert.Equal(2, comic.PageCount);
+        Assert.Equal("Imported title", comic.Title);
+        Assert.Equal("Series", comic.Series);
+        Assert.Equal("Writer", comic.Author);
+        Assert.Equal("A summary", comic.Description);
+        Assert.Equal(1, comic.CoverPage);
+        Assert.Equal(3, (await library.TagsAsync(comic.Id, default)).Count);
+        Assert.Equal(comic.Id, Assert.Single((await library.ListAsync(null, null, null, null, null, default, tag: "hindi")).Items).Id);
         Assert.NotNull(comic.CoverUrl);
         var path = await pages.PrepareAsync(await library.GetAsync(comic.Id, default), 1, "page", default);
         Assert.True(new FileInfo(path).Length > 0);
         Assert.Equal(2, await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM ComicCache"));
         Assert.Equal("page2.png", await db.ExecuteScalarAsync<string>("SELECT EntryName FROM ComicPages WHERE PageIndex=0"));
+        await db.ExecuteAsync("UPDATE Comics SET Title='My title',Author='My author' WHERE Id=@Id", comic);
+        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update))
+        {
+            archive.GetEntry("nested/cOmIcInFo.XmL")!.Delete();
+            using var metadata = new StreamWriter(archive.CreateEntry("ComicInfo.xml").Open());
+            metadata.Write("<ComicInfo><Title>Changed title</Title><Series>Changed series</Series><Writer>Changed writer</Writer></ComicInfo>");
+        }
+        await db.ExecuteAsync("UPDATE ComicJobs SET State='running' WHERE Id=@Id", accepted);
+        await worker.ProcessAsync(await db.QuerySingleAsync<ComicJob>("SELECT * FROM ComicJobs"), default);
+        Assert.Equal("Changed series", (await library.GetAsync(comic.Id, default)).Series);
+        Assert.Equal("My title", (await library.GetAsync(comic.Id, default)).Title);
+        Assert.Equal("My author", (await library.GetAsync(comic.Id, default)).Author);
+        Assert.Equal(3, (await library.TagsAsync(comic.Id, default)).Count);
+    }
+
+    [Theory]
+    [InlineData("<ComicInfo><Title>Broken")]
+    [InlineData("<!DOCTYPE ComicInfo [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><ComicInfo><Title>&x;</Title></ComicInfo>")]
+    public async Task Invalid_optional_metadata_does_not_reject_comic_pages(string xml)
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var path = Path.Combine(f.Root.Path, "book.cbz");
+        Zip(path, "1.jpg");
+        using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+        {
+            using var writer = new StreamWriter(archive.CreateEntry("ComicInfo.xml").Open());
+            writer.Write(xml);
+        }
+        var result = ComicSources.InspectBook(path, false, default);
+        Assert.Single(result.Pages);
+        Assert.Null(result.Metadata);
+    }
+    [Fact]
+    public void Metadata_has_size_limits_and_normalized_tags()
+    {
+        using var oversized = new MemoryStream(new byte[ComicMetadata.MaximumBytes + 1]);
+        Assert.Null(ComicMetadata.Read(oversized));
+        using var xml = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("<ComicInfo><Title> Title </Title><Genre>Fantasy, fantasy; Hindi</Genre><Tags>Hindi;Custom</Tags><Characters>Hero</Characters></ComicInfo>"));
+        var metadata = Assert.IsType<ComicMetadata>(ComicMetadata.Read(xml));
+        Assert.Equal("Title", metadata.Title);
+        Assert.Equal(new[] { "Fantasy", "Hindi", "Custom", "Hero" }, metadata.Tags);
+    }
+    [Fact]
+    public async Task Animated_webp_pages_keep_all_frames_and_original_bytes_in_both_reader_sizes()
+    {
+        await using var f = await PipelineFixture.CreateAsync();
+        var source = Path.Combine(f.Root.Path, "animated.webp");
+        using (var image = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(8, 8))
+        {
+            using var frame = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(8, 8, SixLabors.ImageSharp.Color.Red);
+            image.Frames.AddFrame(frame.Frames.RootFrame);
+            await image.SaveAsync(source, new SixLabors.ImageSharp.Formats.Webp.WebpEncoder());
+        }
+        var archivePath = Path.Combine(f.Root.Path, "animated.cbz");
+        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create)) archive.CreateEntryFromFile(source, "1.webp");
+        var library = new ComicLibrary(f.Database, f.Options);
+        using var decoder = new Luma.Server.MediaProcessing.MediaProcessor(f.Options);
+        var pages = new ComicPageContent(f.Database, f.Options, library, decoder);
+        var worker = new ComicWorker(f.Database, f.Options, library, pages, NullLogger<ComicWorker>.Instance);
+        await library.QueueAsync(new(1, "animated.cbz"), default);
+        await using var db = await f.Database.OpenAsync(default);
+        await db.ExecuteAsync("UPDATE ComicJobs SET State='running'");
+        await worker.ProcessAsync(await db.QuerySingleAsync<ComicJob>("SELECT * FROM ComicJobs"), default);
+        Assert.Equal("completed", await db.ExecuteScalarAsync<string>("SELECT State FROM ComicJobs"));
+        var comic = await library.GetAsync(await db.ExecuteScalarAsync<long>("SELECT Id FROM Comics"), default);
+        foreach (var variant in new[] { "page", "original" })
+        {
+            var path = await pages.PrepareAsync(comic, 0, variant, default);
+            Assert.EndsWith(".webp", path);
+            Assert.Equal(await File.ReadAllBytesAsync(source), await File.ReadAllBytesAsync(path));
+            using var decoded = await SixLabors.ImageSharp.Image.LoadAsync(path);
+            Assert.Equal(2, decoded.Frames.Count);
+            Assert.Equal(path, await pages.PrepareAsync(comic, 0, variant, default));
+        }
     }
 
     private static async Task<long> SeedAsync(PipelineFixture f, string path = "book.cbz")

@@ -63,3 +63,37 @@ describe('PDF page rendering', () => {
     await waitFor(() => expect(error).toHaveBeenCalledOnce())
   })
 })
+
+it('renders small-point PDFs at screen density rather than capping scale at two', async () => {
+  const { pdfRenderScale } = await import('./PdfPage')
+  expect(pdfRenderScale(300, 450, 360, 540, 3, 1)).toBeCloseTo(3.6)
+  expect(pdfRenderScale(300, 450, 360, 540, 3, 2)).toBeCloseTo(7.2)
+  const scale = pdfRenderScale(10000, 20000, 4000, 8000, 4, 8)
+  expect(10000 * 20000 * scale ** 2).toBeLessThanOrEqual(8_000_001)
+  expect(20000 * scale).toBeLessThanOrEqual(6144)
+})
+
+it('rerenders on zoom without fetching another page or changing its logical aspect', async () => {
+  const f = fixture(300, 450)
+  const loaded = vi.fn()
+  const { rerender } = render(
+    <PdfPage document={f.document} index={0} label="Page" className="w-full" onLoad={loaded} onError={vi.fn()} />,
+  )
+  await waitFor(() => expect(loaded).toHaveBeenCalledOnce())
+  const canvas = screen.getByRole('img') as HTMLCanvasElement
+  const width = canvas.width
+  rerender(
+    <PdfPage
+      document={f.document}
+      index={0}
+      label="Page"
+      className="w-full"
+      zoom={2}
+      onLoad={loaded}
+      onError={vi.fn()}
+    />,
+  )
+  await waitFor(() => expect(canvas.width).toBeGreaterThan(width))
+  expect(f.document.getPage).toHaveBeenCalledOnce()
+  expect(canvas.style.aspectRatio).toBe('300 / 450')
+})

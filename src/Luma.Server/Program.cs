@@ -39,6 +39,7 @@ builder.Services.AddSingleton<FileRecovery>();
 builder.Services.AddSingleton<Luma.Server.Features.Uploads.UploadSessions>();
 builder.Services.AddSingleton<FileOperationWorker>();
 builder.Services.AddSingleton<ComicLibrary>();
+builder.Services.AddSingleton<ComicDiscovery>();
 builder.Services.AddSingleton<PanelSources>();
 builder.Services.AddSingleton<ComicPageContent>();
 builder.Services.AddSingleton<ComicProgress>();

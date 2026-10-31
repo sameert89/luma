@@ -90,6 +90,8 @@ export function Panels({
     void client.invalidateQueries({ queryKey: ['comics'] })
     void client.invalidateQueries({ queryKey: ['comic-folders'] })
     void client.invalidateQueries({ queryKey: ['comic-sources'] })
+    void client.invalidateQueries({ queryKey: ['recently-added-comics'] })
+    void client.invalidateQueries({ queryKey: ['continue-reading'] })
   }, [comicCheckpoint, client])
   const configured = sources.data?.configured === true && (sources.data.locations?.length ?? 0) > 0
   const [manage, setManage] = useState(false)
@@ -104,6 +106,31 @@ export function Panels({
     params.get('favourite') ||
     params.get('tag')
   )
+  const refreshLocations =
+    configured && !comicId && !searching
+      ? libraryId
+        ? [{ libraryId, relativePath: path }]
+        : (sources.data?.locations ?? [])
+      : []
+  const refreshScope = JSON.stringify(
+    refreshLocations.map(({ libraryId, relativePath }) => ({ libraryId, relativePath })),
+  )
+  useEffect(() => {
+    const controller = new AbortController()
+    const locations = JSON.parse(refreshScope) as { libraryId: number; relativePath: string }[]
+    void (async () => {
+      for (const location of locations) {
+        if (controller.signal.aborted) return
+        try {
+          await request('/api/panels/refresh', controller.signal, 'POST', location)
+        } catch {
+          // Indexed browsing remains available when a source is offline.
+        }
+      }
+      if (!controller.signal.aborted && locations.length) void client.invalidateQueries({ queryKey: ['tasks'] })
+    })()
+    return () => controller.abort()
+  }, [refreshScope, client])
   const folders = useQuery({
     queryKey: ['comic-folders', libraryId, path, folderAfter, sorting.order],
     queryFn: ({ signal }) =>
@@ -198,6 +225,11 @@ export function Panels({
     queryFn: ({ signal }) => request<Comic[]>('/api/panels/continue-reading', signal),
     enabled: !comicId && configured,
   })
+  const recent = useQuery({
+    queryKey: ['recently-added-comics'],
+    queryFn: ({ signal }) => request<Comic[]>('/api/panels/recently-added', signal),
+    enabled: !comicId && configured,
+  })
   const initialLoading =
     sources.isPending ||
     (comicId > 0
@@ -266,7 +298,7 @@ export function Panels({
   }
   function exit() {
     change('comic', '')
-    for (const key of ['comics', 'comic', 'reading-statistics', 'continue-reading'])
+    for (const key of ['comics', 'comic', 'reading-statistics', 'continue-reading', 'recently-added-comics'])
       void client.invalidateQueries({ queryKey: [key] })
   }
   if (comicId && reading.data && reading.isFetchedAfterMount)
@@ -379,7 +411,27 @@ export function Panels({
                 <div className="flex gap-3 overflow-x-auto pb-3">
                   {continuing.data.slice(0, 5).map(comic => (
                     <div key={comic.id} className="w-32 shrink-0 sm:w-40">
-                      <ComicCard comic={comic} onOpen={() => change('comic', String(comic.id))} />
+                      <ComicCard
+                        comic={comic}
+                        onOpen={() => change('comic', String(comic.id))}
+                        onDetails={() => setDetails(comic.id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            {!libraryId && !searching && !!recent.data?.length && (
+              <section aria-label={t('panels:panels.recentlyAdded')} className="mb-6">
+                <h2 className="mb-3 text-lg font-semibold">{t('panels:panels.recentlyAdded')}</h2>
+                <div className="flex items-stretch gap-3 overflow-x-auto pb-3">
+                  {recent.data.slice(0, 10).map(comic => (
+                    <div key={comic.id} className="w-32 shrink-0 sm:w-40">
+                      <ComicCard
+                        comic={comic}
+                        onOpen={() => change('comic', String(comic.id))}
+                        onDetails={() => setDetails(comic.id)}
+                      />
                     </div>
                   ))}
                 </div>

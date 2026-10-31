@@ -19,3 +19,14 @@ Explicit export generates standalone XMP sidecars as a downloadable archive with
 Full-path dislike export is a separate, explicit operation: UTF-8 JSON Lines containing media ID, configured full source path and presence state for disliked items at the export snapshot. JSON escaping makes newlines in filenames unambiguous. Include missing records; paths are reconstructed from stored configuration and relative paths without touching originals. This is the sole public full-path exception, intended for user-reviewed external deletion. Luma never deletes these files.
 
 Stage 8 adds automatic indexing metadata stages with durable per-file atomic checkpoints and revision skips. Manual import always forces extraction for overrides and repair. Found/updated/skipped counters refer to files, not tag counts; see API.md for their overlap and outcome definitions.
+
+Panels discovery imports optional `ComicInfo.xml` from CBZ/ZIP/CBR/RAR archives
+(including nested entries, with case-insensitive filenames) and image folders.
+Rediscover existing comics to import metadata. Title, Series, Writer and Summary
+populate the corresponding comic fields; a valid FrontCover page selects the cover.
+Genre, Tags, Characters, Teams and Locations become comic tags, split on commas or
+semicolons and normalized using the shared tag rules. Imports union up to 100 tags
+without removing local tags or exposing comic-only tags in Gallery. Later discoveries
+refresh imported fields only while they still match the last import, preserving local
+edits. Invalid, oversized (over 1 MiB), or DTD-bearing XML is ignored; page discovery
+continues. Other ComicInfo fields are not currently mapped into Panels.

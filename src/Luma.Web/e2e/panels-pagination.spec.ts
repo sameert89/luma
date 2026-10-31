@@ -75,8 +75,21 @@ test('comic pages start at the top and reader navigation restores the bookshelf 
   await expect(target).toBeVisible()
   await expect(shelf()).toHaveJSProperty('scrollTop', offset)
   await next.scrollIntoViewIfNeeded()
-  const beforeNext = await shelf().evaluate(element => element.scrollTop)
+  await expect(next).toBeEnabled()
+  // Clicking can focus/scroll the button after scrollIntoViewIfNeeded. Capture
+  // the real departure offset before React handles navigation, not an earlier one.
+  await next.evaluate(button => {
+    button.addEventListener(
+      'click',
+      () => {
+        document.documentElement.dataset.panelsDepartureScroll = String(button.closest('.overflow-auto')!.scrollTop)
+      },
+      { capture: true, once: true },
+    )
+  })
   await next.click()
+  const beforeNext = Number(await page.locator('html').getAttribute('data-panels-departure-scroll'))
+  expect(beforeNext).toBeGreaterThan(100)
   await expect(page.getByRole('button', { name: 'Read Comic 61', exact: true })).toBeVisible()
   await expect(next).toBeDisabled()
   await expect(page.getByText('Page 3', { exact: true })).toBeVisible()

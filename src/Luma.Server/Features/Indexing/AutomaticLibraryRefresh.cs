@@ -146,6 +146,14 @@ public sealed class AutomaticLibraryRefresh(
             if (managed is 1) continue; // A mutation still owns this notification; check again after commit.
             if (managed is 2)
             {
+                // File operations already reconciled Gallery, but may have introduced a new
+                // comic/image folder. Persist Panels' hint before suppressing this notification.
+                await database.YieldToForegroundAsync(ct);
+                await using var db = await database.OpenAsync(ct);
+                using var tx = db.BeginTransaction();
+                await Luma.Server.Features.Panels.ComicDiscovery.HintAsync(db, tx, change.Library.Id,
+                    change.RelativePath, change.Library.Key(change.RelativePath), change.Recursive, ct);
+                tx.Commit();
                 ((ICollection<KeyValuePair<string, PendingChange>>)pending).Remove(new(key, change));
                 continue;
             }
@@ -156,9 +164,9 @@ public sealed class AutomaticLibraryRefresh(
                 pending[key] = change with { Sample = sample, NotBefore = now.AddSeconds(stabilitySeconds) };
                 continue;
             }
-            if (!((ICollection<KeyValuePair<string, PendingChange>>)pending).Remove(new(key, change))) continue;
             await QueueDirtyFolderAsync(change.Library.Id, change.RelativePath, change.Library.Key(change.RelativePath),
                 change.Recursive, priority: 1, ct);
+            ((ICollection<KeyValuePair<string, PendingChange>>)pending).Remove(new(key, change));
         }
     }
 
@@ -223,16 +231,21 @@ public sealed class AutomaticLibraryRefresh(
         bool recursive, int priority, CancellationToken ct)
     {
         await using var db = await database.OpenAsync(ct);
+        using var tx = db.BeginTransaction();
+        await Luma.Server.Features.Panels.ComicDiscovery.HintAsync(db, tx, libraryId, relativePath, pathKey, recursive, ct);
         await db.ExecuteAsync(new CommandDefinition("""
             INSERT INTO DirtyFolders(LibraryId,RelativePath,PathKey,Recursive,Priority,DetectedAt)
-            VALUES(@libraryId,@relativePath,@pathKey,@recursive,@priority,@now)
+            SELECT @libraryId,@relativePath,@pathKey,@recursive,@priority,@now
+            WHERE NOT EXISTS(SELECT 1 FROM PanelSources s WHERE s.LibraryId=@libraryId AND s.ExcludeFromGallery=1
+              AND (s.PathKey='' OR @pathKey=s.PathKey OR (@pathKey>=s.PathKey||'/' AND @pathKey<s.PathKey||'0')))
             ON CONFLICT(LibraryId,PathKey) DO UPDATE SET
               RelativePath=excluded.RelativePath,
               Recursive=MAX(DirtyFolders.Recursive,excluded.Recursive),
               Priority=MAX(DirtyFolders.Priority,excluded.Priority),
               DetectedAt=excluded.DetectedAt
             """, new { libraryId, relativePath, pathKey, recursive, priority, now = DateTimeOffset.UtcNow.ToString("O") },
-            cancellationToken: ct));
+            tx, cancellationToken: ct));
+        tx.Commit();
     }
 
     internal async Task ProcessPendingFolderAsync(CancellationToken ct)
@@ -280,6 +293,7 @@ public sealed class AutomaticLibraryRefresh(
     {
         await using var db = await database.OpenAsync(ct);
         using var tx = db.BeginTransaction();
+        await Luma.Server.Features.Panels.ComicDiscovery.QueuePeriodicAsync(db, tx, ct);
         var library = await db.QuerySingleOrDefaultAsync<PeriodicRow>(new CommandDefinition("""
             SELECT l.Id,l.MetadataMode FROM Libraries l
             WHERE l.Enabled=1 AND l.RefreshMode='periodic'

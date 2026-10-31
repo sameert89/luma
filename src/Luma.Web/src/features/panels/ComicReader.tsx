@@ -1,7 +1,8 @@
 import { t } from '../../lib/i18n'
 import { Modal } from '../../components/ui/Modal'
 import { readSetting } from '../../app/uiDefaults'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { containWheelZoom, zoomPan, type ZoomPoint } from '../../lib/zoom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minus, Plus, SlidersHorizontal } from 'lucide-react'
 import { IconButton, QuietButton, Select, Input, Range } from '../../components/ui/Controls'
@@ -38,17 +39,56 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   const root = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
-  const pinch = useRef<{ distance: number; zoom: number } | null>(null)
+  const singlePage = useRef<HTMLDivElement>(null)
+  const view = useRef({ zoom: 1, pan: { x: 0, y: 0 } })
+  const pendingScroll = useRef<ZoomPoint | null>(null)
+  type ZoomFrame = {
+    zoom: number
+    pan: ZoomPoint
+    center: ZoomPoint
+    point: ZoomPoint
+    scroll: ZoomPoint
+    pageAnchor?: { index: number; u: number; v: number }
+  }
+  const continuousAnchor = useRef<{ index: number; u: number; v: number; client: ZoomPoint } | null>(null)
+  const pinch = useRef<(ZoomFrame & { distance: number }) | null>(null)
   const pinched = useRef(false)
+  const lastTap = useRef<{ time: number; point: ZoomPoint } | null>(null)
+  const touchDoubleClickUntil = useRef(0)
+  useEffect(() => containWheelZoom(mode === 'single' ? singlePage.current : scroll.current), [mode])
   const restoring = useRef(false)
   const resumeTarget = useRef(page)
   const [exiting, setExiting] = useState(false)
+  const exitPending = useRef(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const { error, flush } = useReadingSession(comic.id, page, direction, { mode, fit })
   async function exitReader() {
-    if (exiting) return
+    if (exitPending.current) return
+    exitPending.current = true
     setExiting(true)
-    await flush()
-    onExit()
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    try {
+      // Let ordinary saves finish before the shelf refreshes, but a stalled
+      // connection must never trap someone in the reader. The keepalive save
+      // continues in the background after this deadline.
+      await Promise.race([
+        flush(),
+        new Promise<void>(resolve => {
+          deadline = setTimeout(resolve, 1500)
+        }),
+      ])
+    } catch {
+      // Reading progress already reports save failures; navigation stays usable.
+    } finally {
+      clearTimeout(deadline)
+      if (mounted.current) onExit()
+    }
   }
   useEffect(() => {
     if (comic.format !== 'pdf') return
@@ -79,8 +119,87 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       return next
     })
     setImageError(false)
+    resetZoom()
+  }
+  function resetZoom() {
+    view.current = { zoom: 1, pan: { x: 0, y: 0 } }
+    pendingScroll.current = null
+    continuousAnchor.current = null
+    lastTap.current = null
     setZoom(1)
     setPan({ x: 0, y: 0 })
+  }
+  function zoomFrame(client?: ZoomPoint): ZoomFrame {
+    const surface = mode === 'single' ? singlePage.current : scroll.current
+    const bounds = surface?.getBoundingClientRect()
+    const element = mode === 'single' ? surface?.querySelector('img,canvas')?.getBoundingClientRect() : undefined
+    // Transform origins belong to the page itself, which can be taller than the
+    // viewport in Fit width/Original mode or already scrolled partway down.
+    const center =
+      mode === 'single' && element && element.width > 0 && element.height > 0
+        ? {
+            x: element.left + element.width / 2 - view.current.pan.x,
+            y: element.top + element.height / 2 - view.current.pan.y,
+          }
+        : {
+            x: (bounds?.left ?? 0) + (mode === 'single' ? (bounds?.width ?? 0) / 2 : 0),
+            y: (bounds?.top ?? 0) + (mode === 'single' ? (bounds?.height ?? 0) / 2 : 0),
+          }
+    const target = client ?? {
+      x: (bounds?.left ?? 0) + (bounds?.width ?? 0) / 2,
+      y: (bounds?.top ?? 0) + (bounds?.height ?? 0) / 2,
+    }
+    let pageAnchor: ZoomFrame['pageAnchor']
+    if (mode === 'continuous') {
+      for (const element of surface?.querySelectorAll<HTMLElement>('[data-index]') ?? []) {
+        const rect = element.getBoundingClientRect()
+        if (rect.height > 0 && target.y >= rect.top && target.y <= rect.bottom) {
+          pageAnchor = {
+            index: Number(element.dataset.index),
+            u: (target.x - rect.left) / rect.width,
+            v: (target.y - rect.top) / rect.height,
+          }
+          break
+        }
+      }
+    }
+    return {
+      ...view.current,
+      center,
+      pageAnchor,
+      point: { x: target.x - center.x, y: target.y - center.y },
+      scroll: { x: surface?.scrollLeft ?? 0, y: surface?.scrollTop ?? 0 },
+    }
+  }
+  function scaleTo(value: number, frame = zoomFrame(), client?: ZoomPoint) {
+    const level = Math.max(1, Math.min(8, value))
+    const point = client ? { x: client.x - frame.center.x, y: client.y - frame.center.y } : frame.point
+    const next =
+      mode === 'single' && level > 1 ? zoomPan(frame.pan, frame.zoom, level, frame.point, point) : { x: 0, y: 0 }
+    if (mode === 'continuous') {
+      continuousAnchor.current = frame.pageAnchor
+        ? { ...frame.pageAnchor, client: { x: frame.center.x + point.x, y: frame.center.y + point.y } }
+        : null
+      const ratio = level / frame.zoom
+      pendingScroll.current = {
+        x: (frame.scroll.x + frame.point.x) * ratio - point.x,
+        y: (frame.scroll.y + frame.point.y) * ratio - point.y,
+      }
+    }
+    view.current = { zoom: level, pan: next }
+    setZoom(level)
+    setPan(next)
+  }
+  useLayoutEffect(() => {
+    if (pendingScroll.current && scroll.current) {
+      scroll.current.scrollLeft = pendingScroll.current.x
+      scroll.current.scrollTop = pendingScroll.current.y
+      pendingScroll.current = null
+    }
+  }, [zoom, pan])
+  function doubleClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (pinched.current || Date.now() < touchDoubleClickUntil.current) return
+    scaleTo(view.current.zoom === 1 ? 2 : 1, zoomFrame({ x: event.clientX, y: event.clientY }))
   }
   const virtual = useVirtualizer({
     count: comic.pageCount,
@@ -88,6 +207,24 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     estimateSize: () => Math.max(1, (scroll.current?.clientWidth ?? window.innerWidth) * zoom * 1.5),
     enabled: mode === 'continuous',
     overscan: 1,
+  })
+  // Virtual rows are measured asynchronously after their width changes. Preserve
+  // the point on the actual page as those measurements update, rather than
+  // anchoring to an estimated total height that can shift in a long comic.
+  useLayoutEffect(() => {
+    const anchor = continuousAnchor.current
+    const surface = scroll.current
+    if (mode !== 'continuous' || !anchor || !surface) return
+    const row = surface.querySelector<HTMLElement>(`[data-index="${anchor.index}"]`)
+    if (!row) {
+      virtual.scrollToIndex(anchor.index, { align: 'start' })
+      return
+    }
+    const rect = row.getBoundingClientRect()
+    const dx = rect.left + rect.width * anchor.u - anchor.client.x
+    const dy = rect.top + rect.height * anchor.v - anchor.client.y
+    if (Math.abs(dx) > 0.5) surface.scrollLeft += dx
+    if (Math.abs(dy) > 0.5) surface.scrollTop += dy
   })
   useEffect(() => {
     if (mode === 'continuous') {
@@ -98,7 +235,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
     // Resume the current page when entering continuous mode.
   }, [mode])
   const pageUrl = (index: number) =>
-    `/api/panels/comics/${comic.id}/pages/${index}${fit === 'original' || zoom > 1 ? '?original=true' : ''}`
+    `/api/panels/comics/${comic.id}/pages/${index}?v=2${fit === 'original' || zoom > 1 ? '&original=true' : ''}`
   useEffect(() => {
     function keys(event: KeyboardEvent) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
@@ -128,7 +265,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       .filter(index => index >= 0 && index < comic.pageCount)
       .map(index => {
         const image = new Image()
-        image.src = `/api/panels/comics/${comic.id}/pages/${index}`
+        image.src = `/api/panels/comics/${comic.id}/pages/${index}?v=2`
         return image
       })
     return () => {
@@ -137,30 +274,75 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
   }, [comic.id, comic.format, comic.pageCount, page])
   function down(event: React.PointerEvent) {
     restoring.current = false
-    if (pointers.current.size === 0) pinched.current = false
+    if (pointers.current.size === 0) {
+      pinched.current = false
+      continuousAnchor.current = null
+      start.current = { x: event.clientX, y: event.clientY }
+    }
+    if (event.pointerType !== 'touch') touchDoubleClickUntil.current = 0
     event.currentTarget.setPointerCapture(event.pointerId)
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()]
-      pinch.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), zoom }
+      pinch.current = {
+        ...zoomFrame({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }),
+        distance: Math.hypot(a.x - b.x, a.y - b.y),
+      }
       pinched.current = true
+      lastTap.current = null
+    }
+  }
+  function up(event: React.PointerEvent<HTMLDivElement>) {
+    const origin = start.current
+    pointers.current.delete(event.pointerId)
+    if (pointers.current.size === 0) {
+      pinch.current = null
+      start.current = null
+    }
+    if (pinched.current || !origin) return
+    const dx = event.clientX - origin.x,
+      dy = event.clientY - origin.y
+    if (mode === 'single' && view.current.zoom === 1 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+      lastTap.current = null
+      move((dx > 0 ? -1 : 1) * (direction === 'rtl' ? -1 : 1))
+    } else if (event.pointerType === 'touch' && Math.hypot(dx, dy) < 10) {
+      const point = { x: event.clientX, y: event.clientY }
+      const previous = lastTap.current
+      const now = Date.now()
+      if (
+        previous &&
+        now - previous.time < 280 &&
+        Math.hypot(point.x - previous.point.x, point.y - previous.point.y) < 24
+      ) {
+        scaleTo(view.current.zoom === 1 ? 2 : 1, zoomFrame(point))
+        lastTap.current = null
+        // Ignore the compatibility dblclick generated for this same touch pair.
+        touchDoubleClickUntil.current = now + 400
+      } else lastTap.current = { time: now, point }
     }
   }
   function pointerMove(event: React.PointerEvent) {
     const previous = pointers.current.get(event.pointerId)
     if (!previous) return
+    if (start.current && Math.hypot(event.clientX - start.current.x, event.clientY - start.current.y) > 10)
+      lastTap.current = null
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()]
       const distance = Math.hypot(a.x - b.x, a.y - b.y)
       const initial = pinch.current
       if (initial && initial.distance > 0)
-        setZoom(Math.max(1, Math.min(8, (initial.zoom * distance) / initial.distance)))
+        scaleTo((initial.zoom * distance) / initial.distance, initial, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
     } else if (mode === 'continuous') {
       event.currentTarget.scrollTop += previous.y - event.clientY
       event.currentTarget.scrollLeft += previous.x - event.clientX
-    } else if (zoom > 1) {
-      setPan(value => ({ x: value.x + event.clientX - previous.x, y: value.y + event.clientY - previous.y }))
+    } else if (view.current.zoom > 1) {
+      const next = {
+        x: view.current.pan.x + event.clientX - previous.x,
+        y: view.current.pan.y + event.clientY - previous.y,
+      }
+      view.current = { ...view.current, pan: next }
+      setPan(next)
     } else if (fit === 'width' || fit === 'original') event.currentTarget.scrollTop += previous.y - event.clientY
   }
 
@@ -194,8 +376,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
             value={mode}
             onChange={event => {
               setMode(event.target.value)
-              setZoom(1)
-              setPan({ x: 0, y: 0 })
+              resetZoom()
             }}
           >
             <option value="single">{t('panels:comicReader.singlePage')}</option>
@@ -214,20 +395,20 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
             aria-label={t('panels:comicReader.pageFit')}
             className="w-auto"
             value={fit}
-            onChange={event => setFit(event.target.value)}
+            onChange={event => {
+              setFit(event.target.value)
+              resetZoom()
+            }}
           >
             <option value="screen">{t('panels:comicReader.fitScreen')}</option>
             <option value="width">{t('panels:comicReader.fitWidth')}</option>
             <option value="height">{t('panels:comicReader.fitHeight')}</option>
             <option value="original">{t('panels:comicReader.originalResolution')}</option>
           </Select>
-          <IconButton
-            label={t('panels:comicReader.zoomOut')}
-            onClick={() => setZoom(value => Math.max(1, value - 0.5))}
-          >
+          <IconButton label={t('panels:comicReader.zoomOut')} onClick={() => scaleTo(view.current.zoom - 0.5)}>
             <Minus className="size-4" />
           </IconButton>
-          <IconButton label={t('panels:comicReader.zoomIn')} onClick={() => setZoom(value => Math.min(8, value + 0.5))}>
+          <IconButton label={t('panels:comicReader.zoomIn')} onClick={() => scaleTo(view.current.zoom + 0.5)}>
             <Plus className="size-4" />
           </IconButton>
           <IconButton
@@ -253,34 +434,24 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       )}
       {mode === 'single' ? (
         <div
+          ref={singlePage}
           role="group"
           aria-label={t('panels:comicReader.comicPageGestures')}
           className={`relative flex min-h-0 flex-1 ${fit === 'width' || fit === 'original' ? 'items-start overflow-auto' : 'items-center overflow-hidden'} justify-center`}
           style={{ touchAction: 'none' }}
-          onPointerDown={event => {
-            start.current = { x: event.clientX, y: event.clientY }
-            down(event)
-          }}
+          onPointerDown={down}
           onPointerMove={pointerMove}
-          onPointerUp={event => {
-            const origin = start.current
-            pointers.current.delete(event.pointerId)
-            pinch.current = null
-            if (!pinched.current && zoom === 1 && origin && Math.abs(event.clientX - origin.x) > 60)
-              move((event.clientX > origin.x ? -1 : 1) * (direction === 'rtl' ? -1 : 1))
-            start.current = null
-          }}
+          onPointerUp={up}
           onPointerCancel={() => {
             pointers.current.clear()
             pinch.current = null
+            lastTap.current = null
             start.current = null
           }}
-          onDoubleClick={() => {
-            setZoom(value => (value === 1 ? 2 : 1))
-            setPan({ x: 0, y: 0 })
-          }}
+          onDoubleClick={doubleClick}
           onWheel={event => {
-            if (event.ctrlKey) setZoom(value => Math.max(1, Math.min(8, value - event.deltaY / 200)))
+            if (event.ctrlKey)
+              scaleTo(view.current.zoom - event.deltaY / 200, zoomFrame({ x: event.clientX, y: event.clientY }))
           }}
         >
           {comic.format === 'pdf' ? (
@@ -289,6 +460,8 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
                 key={page}
                 document={pdf}
                 index={page}
+                zoom={zoom}
+                original={fit === 'original'}
                 label={`${comic.title}, page ${page + 1}`}
                 className={`${fit === 'width' ? 'w-full h-auto' : fit === 'height' ? 'h-full w-auto' : fit === 'original' ? 'max-w-none' : 'h-full w-full object-contain'} select-none`}
                 style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }}
@@ -312,20 +485,24 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
       ) : (
         <div
           ref={scroll}
+          role="group"
+          aria-label={t('panels:comicReader.comicPageGestures')}
           className="min-h-0 flex-1 overflow-auto"
           style={{ touchAction: 'none' }}
           onPointerDown={down}
+          onDoubleClick={doubleClick}
           onPointerMove={pointerMove}
-          onPointerUp={event => {
-            pointers.current.delete(event.pointerId)
-            pinch.current = null
-          }}
+          onPointerUp={up}
           onPointerCancel={() => {
             pointers.current.clear()
             pinch.current = null
+            lastTap.current = null
           }}
-          onWheel={() => {
+          onWheel={event => {
             restoring.current = false
+            if (!event.ctrlKey) continuousAnchor.current = null
+            if (event.ctrlKey)
+              scaleTo(view.current.zoom - event.deltaY / 200, zoomFrame({ x: event.clientX, y: event.clientY }))
           }}
           onScroll={() => {
             const visible = virtual.getVirtualItems().find(item => item.end > (scroll.current?.scrollTop ?? 0))
@@ -416,6 +593,7 @@ export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => voi
             onChange={event => {
               const index = Math.max(0, Math.min(comic.pageCount - 1, Number(event.target.value) - 1))
               setPage(index)
+              resetZoom()
               if (mode === 'continuous') virtual.scrollToIndex(index)
             }}
           />

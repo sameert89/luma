@@ -1,6 +1,23 @@
 {
   "history": [
     {
+      "version": "2.0.0-beta.15",
+      "date": "2026-10-30",
+      "headline": "Panels browsing and viewer fixes",
+      "changes": [
+        "Import ComicInfo.xml titles, series, writers, summaries, cover choices and tags when discovering comics.",
+        "Animated WebP and GIF pages play in the comic reader, including when zoomed in.",
+        "Zoom into the region you tap or pinch in comics, and zoom videos without changing Fit or Fill.",
+        "Leave the comic reader even when saving progress is slow or offline.",
+        "Comic locations now follow library watcher and periodic refresh settings. Opening a changed folder discovers additions and removals without rescanning the whole library.",
+        "Comic cards show compact tags, cover details and rounded progress in your theme color, with consistent heights across the shelf.",
+        "Jump into the ten most recently added comics from the bookshelf.",
+        "Search comics by title, author, series or tag.",
+        "PDF pages render for your screen density and zoom, and PDFs with owner restrictions can be imported without a password.",
+        "Adjust Flick volume by swiping in the right quarter of the video; swipes elsewhere keep smooth clip navigation."
+      ]
+    },
+    {
       "version": "2.0.0-beta.14",
       "date": "2026-10-29",
       "headline": "Panels browsing",

@@ -297,3 +297,39 @@ and remembers the selected sort/direction on the device. Continue reading keeps
 its most-recently-read order. Comic folders use natural name ordering and accept
 `order=asc|desc`; date sorts apply to books, while folder names follow the selected
 direction. Saved bookshelf locations also follow natural name order/direction.
+
+### Comic folder refresh
+
+`POST /api/panels/refresh` accepts `{ "libraryId": 1, "relativePath": "Comics/Series" }`
+and returns `204`. The same-origin discovery request checks the library's saved
+Refresh on open preference and probes the selected configured source folder's
+mtime outside a writer transaction. A changed or uncheckpointed folder becomes a
+durable shallow discovery hint; unchanged, disabled or unavailable sources are
+no-ops. New child folders expand into their own subtrees. Requests coalesce and
+wait behind active comic/file operations. This does not change `/panels/discover`
+semantics or access originals from browse GETs. Completion appears in `/api/tasks`.
+
+### Comic cards, search and newest books
+
+Comic summaries now include `tags` (up to two tags, ordered by normalized name)
+and `tagCount` (all assigned comic tags). The existing per-comic tags endpoint
+continues to return the full list. These are SQLite-only reads in one query,
+using the ComicTags primary key for each bounded preview; no per-card HTTP calls
+or archive/metadata reads are involved.
+
+Both `q` on `/api/panels/comics` and `/api/panels/suggestions` match title, author,
+series or a substring of a normalized tag name. The existing `tag` parameter
+remains an exact tag filter. Tag matching uses an indexed ComicTags existence
+check, so books matching multiple tags still appear once.
+
+`GET /api/panels/recently-added` returns at most ten visible comic summaries,
+ordered by AddedAt descending then ID descending, including existing reading
+progress. It uses the same source/availability/library restrictions as ordinary
+listing and the existing added-date sort index. Rediscovery retains AddedAt.
+
+PDF import accepts owner-restricted documents when pdfinfo can open them without
+a password. A required user password, invalid page counts or damaged documents
+still fail discovery. Reader canvases adapt to CSS size, device pixel ratio and
+zoom, capped at eight million pixels / 6144 pixels per edge. Resize/zoom renders
+are debounced, cancelled and serialized per visible page; virtual pages release
+their canvases and PDF.js resources on exit.

@@ -406,8 +406,10 @@ it('deletes reels through next, previous and empty while skipping queued items',
     await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled())
     await remove()
     await screen.findByRole('heading', { name: 'No reels to show' })
-    expect(changed).toHaveBeenLastCalledWith(null)
-    expect(JSON.parse(localStorage.getItem('luma-reels-state')!).mediaId).toBeNull()
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(null)
+      expect(JSON.parse(localStorage.getItem('luma-reels-state')!).mediaId).toBeNull()
+    })
     const posts = fetch.mock.calls.filter(([url]) => url === '/api/files/items')
     expect(posts.map(([, init]) => JSON.parse(init.body).mediaId)).toEqual([2, 3, 1])
     expect(fetch.mock.calls.some(([url]) => url.startsWith('/api/files/operations/'))).toBe(false)

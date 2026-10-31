@@ -161,7 +161,10 @@ it('shows at most five continued books with saved page indicators and one locati
   mount(null, true, comics)
   const row = await screen.findByRole('region', { name: 'Continue reading' })
   expect(within(row).getAllByRole('button', { name: /^Read Recent/ })).toHaveLength(5)
-  expect(within(row).getByRole('progressbar', { name: 'Reading progress for Recent 1' })).toHaveAttribute('value', '4')
+  expect(within(row).getByRole('progressbar', { name: 'Reading progress for Recent 1' })).toHaveAttribute(
+    'aria-valuenow',
+    '4',
+  )
   expect(screen.getAllByRole('button', { name: 'Comic locations' })).toHaveLength(1)
   expect(screen.queryByText('Loading comics…')).not.toBeInTheDocument()
 })
@@ -348,4 +351,55 @@ it('restores the bookshelf page and scroll on browser Back from a nested folder'
   await screen.findByRole('button', { name: 'Read Comic 61' })
   expect(screen.getByText('Page 2')).toBeVisible()
   expect(shelf.scrollTop).toBe(240)
+})
+
+it('requests a folder timestamp refresh separately from indexed browsing on open', async () => {
+  window.history.replaceState({}, '', '/panels?libraryId=1&path=Manga')
+  const fetch = mount()
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.some(
+        ([url, init]) =>
+          url === '/api/panels/refresh' && init?.method === 'POST' && JSON.parse(init.body).relativePath === 'Manga',
+      ),
+    ).toBe(true),
+  )
+  expect(fetch.mock.calls.filter(([url]) => url === '/api/panels/refresh')).toHaveLength(1)
+  expect(fetch.mock.calls.some(([url]) => url === '/api/panels/discover')).toBe(false)
+})
+
+it('refreshes saved source folders from the bookshelf without starting a full-library scan', async () => {
+  const fetch = mount()
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.some(
+        ([url, init]) =>
+          url === '/api/panels/refresh' && init?.method === 'POST' && JSON.parse(init.body).libraryId === 1,
+      ),
+    ).toBe(true),
+  )
+  expect(fetch.mock.calls.some(([url]) => url === '/api/panels/discover')).toBe(false)
+})
+
+it('does not request source access for a search', async () => {
+  window.history.replaceState({}, '', '/panels?q=moon')
+  const fetch = mount()
+  await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('/api/panels/comics?'))).toBe(true))
+  expect(fetch.mock.calls.some(([url]) => url === '/api/panels/refresh')).toBe(false)
+})
+
+it('shows the ten most recently added comics in a separate horizontal row on the bookshelf', async () => {
+  const comics = Array.from({ length: 12 }, (_, index) => ({
+    id: index + 1,
+    title: `New ${index + 1}`,
+    format: 'pdf',
+    pageCount: 41,
+    pageIndex: 0,
+    state: 'unread',
+  }))
+  mount(null, true, [], url => (url === '/api/panels/recently-added' ? comics : undefined))
+  const row = await screen.findByRole('region', { name: 'Recently added' })
+  expect(within(row).getAllByRole('button', { name: /^Read New/ })).toHaveLength(10)
+  expect(within(row).getAllByRole('button', { name: /^Edit details for/ })).toHaveLength(10)
+  expect(within(row).queryByText('New 11')).not.toBeInTheDocument()
 })

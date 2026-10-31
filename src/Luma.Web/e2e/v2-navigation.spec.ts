@@ -153,7 +153,7 @@ test('Panels exposes discovery, browses folders and keeps reader tools in popups
   await expect(page.getByRole('button', { name: 'Background jobs, running' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Continue reading' })).toBeVisible()
   await expect(page.getByRole('progressbar', { name: 'Reading progress for DBZ volume 1' })).toHaveAttribute(
-    'value',
+    'aria-valuenow',
     '3',
   )
   await expect(page.getByRole('button', { name: 'Open Base', exact: true }).locator('[data-cover]')).toHaveAttribute(

@@ -13,9 +13,13 @@ public sealed class ComicRow
     public string RelativePath { get; set; } = "";
     public string Format { get; set; } = "";
     public string Title { get; set; } = "";
+    public string TagsJson { get; set; } = "[]";
+    public int TagCount { get; set; }
     public string Series { get; set; } = "";
     public string Author { get; set; } = "";
     public string Description { get; set; } = "";
+    public string? ImportedMetadata { get; set; }
+    public string? SourceFingerprint { get; set; }
     public int PageCount { get; set; }
     public int CoverPage { get; set; }
     public long SourceSize { get; set; }
@@ -34,6 +38,8 @@ public sealed record ComicSummary(long Id, long LibraryId, string Title, string 
     string Format, int PageCount, int PageIndex, string State, double ReadingSeconds, string Direction, string Settings, string? LastReadAt, bool Favourite, string? CoverUrl, int CoverPage)
 {
     public string? DocumentUrl { get; init; }
+    public IReadOnlyList<Luma.Server.Features.Media.TagSummary>? Tags { get; init; }
+    public int TagCount { get; init; }
 }
 public sealed record ComicList(IReadOnlyList<ComicSummary> Items, long? NextCursor);
 public sealed record ComicFolder(string Name, string RelativePath, IReadOnlyList<string>? CoverUrls = null);
@@ -46,6 +52,8 @@ public sealed class ComicJob
     public long Id { get; set; }
     public long LibraryId { get; set; }
     public bool Recursive { get; set; }
+    public bool Shallow { get; set; }
+    public bool Automatic { get; set; }
     public bool ImageFolders { get; set; }
     public string? Source { get; set; }
     public string State { get; set; } = "queued";
@@ -58,6 +66,9 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
 {
     internal const string ReadSql = """
         SELECT EXISTS(SELECT 1 FROM ComicCache cc WHERE cc.ComicId=c.Id AND cc.Revision=c.Revision AND cc.Variant='cover') HasCover,c.*,COALESCE(p.PageIndex,0) PageIndex,COALESCE(p.State,'unread') State,
+          (SELECT json_group_array(json_object('Id',preview.Id,'Name',preview.Name)) FROM (
+            SELECT t.Id,t.Name FROM ComicTags ct JOIN Tags t ON t.Id=ct.TagId WHERE ct.ComicId=c.Id ORDER BY t.NormalizedKey,t.Id LIMIT 2) preview) TagsJson,
+          (SELECT COUNT(*) FROM ComicTags ct WHERE ct.ComicId=c.Id) TagCount,
           CAST(COALESCE(p.ReadingSeconds,0.0) AS REAL) ReadingSeconds,COALESCE(p.Direction,'ltr') Direction,COALESCE(p.Settings,'{}') Settings,p.LastReadAt
         FROM Comics c JOIN Libraries l ON l.Id=c.LibraryId LEFT JOIN ReadingProgress p ON p.ComicId=c.Id
         WHERE c.Availability='present' AND l.Enabled=1
@@ -65,12 +76,16 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
             OR EXISTS(SELECT 1 FROM PanelSources s WHERE s.LibraryId=c.LibraryId
               AND (s.PathKey='' OR c.PathKey=s.PathKey OR (c.PathKey>=s.PathKey||'/' AND c.PathKey<s.PathKey||'0'))))
         """;
+    private const string SearchSql = """
+         AND (@q IS NULL OR instr(lower(c.Title),lower(@q))>0 OR instr(lower(c.Author),lower(@q))>0 OR instr(lower(c.Series),lower(@q))>0
+           OR EXISTS(SELECT 1 FROM ComicTags ct JOIN Tags t ON t.Id=ct.TagId WHERE ct.ComicId=c.Id AND instr(t.NormalizedKey,@qKey)>0))
+        """;
     public async Task<IReadOnlyList<Luma.Server.Features.Media.SearchSuggestion>> SuggestAsync(string? q, int limit, CancellationToken ct)
     {
         if (q?.Length > 200 || limit is < 1 or > 20) throw ApiRequestException.Invalid();
         if (string.IsNullOrWhiteSpace(q)) return [];
         await using var db = await database.OpenAsync(ct);
-        var rows = await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + " AND (instr(lower(c.Title),lower(@q))>0 OR instr(lower(c.Series),lower(@q))>0) ORDER BY c.Id DESC LIMIT @limit", new { q = q.Trim(), limit }, cancellationToken: ct));
+        var rows = await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + SearchSql + " ORDER BY c.Id DESC LIMIT @limit", new { q = q.Trim(), qKey = Luma.Server.Features.Media.SearchText.Key(q.Trim()), limit }, cancellationToken: ct));
         return rows.Select(x => new Luma.Server.Features.Media.SearchSuggestion("comic", x.Title, x.Id, x.Series)).ToArray();
     }
     public async Task<ComicList> ListAsync(string? q, string? state, string? series, bool? favourite, long? cursor, CancellationToken ct, long? libraryId = null, string? path = null, string? tag = null, string? sort = null, string? order = null)
@@ -86,8 +101,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         var seek = cursor is null ? "" : column == "Id" ? $"AND c.Id{comparison}@cursor" : $"AND (c.{column},c.Id){comparison}((SELECT {column} FROM Comics WHERE Id=@cursor),@cursor)";
         var scope = libraryId is null ? "" : "AND c.LibraryId=@libraryId";
         await using var db = await database.OpenAsync(ct);
-        var rows = (await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + "\n" + $"""
-            AND (@q IS NULL OR instr(lower(c.Title),lower(@q))>0 OR instr(lower(c.Author),lower(@q))>0 OR instr(lower(c.Series),lower(@q))>0)
+        var rows = (await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + SearchSql + "\n" + $"""
             {scope}
             AND (@path IS NULL OR c.RelativePath=@path OR (substr(c.RelativePath,1,length(@prefix))=@prefix AND instr(substr(c.RelativePath,length(@prefix)+1),'/')=0))
             AND (@tag IS NULL OR EXISTS(SELECT 1 FROM ComicTags ct JOIN Tags t ON t.Id=ct.TagId WHERE ct.ComicId=c.Id AND t.NormalizedKey=@tag))
@@ -95,7 +109,7 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
             AND (@favourite IS NULL OR c.Favourite=@favourite)
             {seek}
             ORDER BY c.{column} {direction},c.Id {direction} LIMIT 61
-            """, new { q, state, series, favourite, cursor, libraryId, path, prefix = string.IsNullOrEmpty(path) ? "" : path + "/", tag = tag is null ? null : Luma.Server.Features.Tags.TagText.Normalize(tag).Key }, cancellationToken: ct))).ToList();
+            """, new { q = string.IsNullOrWhiteSpace(q) ? null : q.Trim(), qKey = Luma.Server.Features.Media.SearchText.Key(q?.Trim() ?? ""), state, series, favourite, cursor, libraryId, path, prefix = string.IsNullOrEmpty(path) ? "" : path + "/", tag = tag is null ? null : Luma.Server.Features.Tags.TagText.Normalize(tag).Key }, cancellationToken: ct))).ToList();
         var more = rows.Count > 60;
         if (more) rows.RemoveAt(rows.Count - 1);
         return new(rows.Select(row => Summary(row)).ToArray(), more ? rows[^1].Id : null);
@@ -104,6 +118,12 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
     {
         await using var db = await database.OpenAsync(ct);
         var rows = await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + " AND p.State='reading' ORDER BY p.LastReadAt DESC,c.Id DESC LIMIT 5", cancellationToken: ct));
+        return rows.Select(row => Summary(row)).ToArray();
+    }
+    public async Task<IReadOnlyList<ComicSummary>> RecentAsync(CancellationToken ct)
+    {
+        await using var db = await database.OpenAsync(ct);
+        var rows = await db.QueryAsync<ComicRow>(new CommandDefinition(ReadSql + " ORDER BY c.AddedAt DESC,c.Id DESC LIMIT 10", cancellationToken: ct));
         return rows.Select(row => Summary(row)).ToArray();
     }
     public async Task<ComicFolderPage> FoldersAsync(long libraryId, string path, string? after, CancellationToken ct, string? order = null)
@@ -157,15 +177,15 @@ public sealed class ComicLibrary(Database database, IndexingOptions options)
         await using var db = await database.OpenAsync(ct);
         return await db.QuerySingleOrDefaultAsync<ComicRow>(new CommandDefinition(ReadSql + " AND c.Id=@id", new { id }, cancellationToken: ct)) ?? throw ApiRequestException.Missing();
     }
-    internal static ComicSummary Summary(ComicRow row, bool? cover = null) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, (cover ?? row.HasCover) ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null, row.CoverPage) { DocumentUrl = row.Format == "pdf" ? $"/api/panels/comics/{row.Id}/document?revision={row.Revision}" : null };
-    public async Task<ComicJobAccepted> QueueAsync(ComicRegistration request, CancellationToken ct)
+    internal static ComicSummary Summary(ComicRow row, bool? cover = null) => new(row.Id, row.LibraryId, row.Title, row.Series, row.Author, row.Description, row.Format, row.PageCount, row.PageIndex, row.State, row.ReadingSeconds, row.Direction, row.Settings, row.LastReadAt, row.Favourite, (cover ?? row.HasCover) ? $"/api/panels/comics/{row.Id}/cover?v={row.Revision}" : null, row.CoverPage) { Tags = System.Text.Json.JsonSerializer.Deserialize<Luma.Server.Features.Media.TagSummary[]>(row.TagsJson) ?? [], TagCount = row.TagCount, DocumentUrl = row.Format == "pdf" ? $"/api/panels/comics/{row.Id}/document?revision={row.Revision}" : null };
+    public async Task<ComicJobAccepted> QueueAsync(ComicRegistration request, CancellationToken ct, bool recursive = false, bool imageFolders = false, bool shallow = false, bool automatic = false)
     {
         var root = options.Libraries.Find(x => x.Id == request.LibraryId) ?? throw ApiRequestException.Missing();
         if (request.RelativePath is not null) Luma.Server.Features.Files.MutationPaths.Normalize(request.RelativePath, true);
         await using var db = await database.OpenAsync(ct);
         try
         {
-            var id = await db.ExecuteScalarAsync<long>(new CommandDefinition("INSERT INTO ComicJobs(LibraryId,Source,CreatedAt) VALUES(@LibraryId,@RelativePath,@now) RETURNING Id", new { request.LibraryId, request.RelativePath, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
+            var id = await db.ExecuteScalarAsync<long>(new CommandDefinition("INSERT INTO ComicJobs(LibraryId,Source,Recursive,ImageFolders,Shallow,Automatic,CreatedAt) VALUES(@LibraryId,@RelativePath,@recursive,@imageFolders,@shallow,@automatic,@now) RETURNING Id", new { request.LibraryId, request.RelativePath, recursive, imageFolders, shallow, automatic, now = DateTimeOffset.UtcNow.ToString("O") }, cancellationToken: ct));
             return new(id);
         }
         catch (SqliteException error) when (error.SqliteErrorCode == 19) { throw new ApiRequestException(409, "comic_job_active", "A comic discovery task is already active for this library."); }

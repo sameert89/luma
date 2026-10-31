@@ -9,6 +9,7 @@ public static class PanelEndpoints
 {
     public static void MapPanels(this IEndpointRouteBuilder app)
     {
+        app.MapGet("/api/panels/recently-added", async (ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.RecentAsync(ct))).WithName("GetRecentlyAddedComics");
         app.MapGet("/api/panels/continue-reading", async (ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.ContinueAsync(ct))).WithName("GetContinueReading");
         app.MapGet("/api/panels/sources", async (PanelSources sources, CancellationToken ct) => TypedResults.Ok(await sources.GetAsync(ct))).WithName("GetComicSources");
         app.MapGet("/api/panels/suggestions", async (string? q, int? limit, ComicLibrary library, CancellationToken ct) => TypedResults.Ok(await library.SuggestAsync(q, limit ?? 8, ct))).WithName("GetComicSuggestions");
@@ -40,6 +41,8 @@ public static class PanelEndpoints
         var manage = app.MapGroup("/api/panels").AddEndpointFilter<SameOriginFilter>();
 
         manage.MapPost("/comics/{id:long}/tags", async (long id, ComicTagUpdate update, ComicLibrary library, CancellationToken ct) => { await library.UpdateTagsAsync(id, update, ct); return TypedResults.NoContent(); }).WithName("UpdateComicTags");
+        manage.MapPost("/refresh", async (ComicRegistration registration, ComicDiscovery discovery, CancellationToken ct) =>
+        { await discovery.RefreshAsync(registration, ct); return TypedResults.NoContent(); }).WithName("RefreshComicFolder");
         manage.MapPost("/discover", async (ComicRegistration registration, ComicLibrary library, CancellationToken ct) =>
             TypedResults.Accepted(uri: (string?)null, value: await library.QueueAsync(registration, ct))).WithName("DiscoverComics");
         manage.MapPut("/comics/{id:long}/metadata", async (long id, ComicMetadataUpdate update, Database database, ComicLibrary library, CancellationToken ct) =>
