@@ -7,6 +7,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minus, Plus, SlidersHorizontal } from 'lucide-react'
 import { IconButton, QuietButton, Select, Input, Range } from '../../components/ui/Controls'
 import { useReadingSession } from './useReadingSession'
+import { resumeReadingCheckpoint } from './readingCheckpoint'
 import type { Comic } from './api'
 import type { PDFDocumentProxy, PDFDocumentLoadingTask } from 'pdfjs-dist'
 import { PdfPage } from './PdfPage'
@@ -25,10 +26,11 @@ function readerPreferences(settings: string) {
 }
 
 export function ComicReader({ comic, onExit }: { comic: Comic; onExit: () => void }) {
+  const [resume] = useState(() => resumeReadingCheckpoint(comic))
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
-  const [page, setPage] = useState(comic.pageIndex)
-  const [preferences] = useState(() => readerPreferences(comic.settings))
-  const [direction, setDirection] = useState(comic.settings === '{}' ? preferences.direction : comic.direction)
+  const [page, setPage] = useState(resume.pageIndex)
+  const [preferences] = useState(() => readerPreferences(resume.settings))
+  const [direction, setDirection] = useState(resume.settings === '{}' ? preferences.direction : resume.direction)
   const [mode, setMode] = useState(preferences.mode)
   const [fit, setFit] = useState(preferences.fit)
   const [zoom, setZoom] = useState(1)
