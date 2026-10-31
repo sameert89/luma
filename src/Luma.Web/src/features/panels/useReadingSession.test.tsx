@@ -21,6 +21,7 @@ async function settle() {
 
 describe('reading checkpoints', () => {
   beforeEach(() => {
+    localStorage.clear()
     vi.useFakeTimers()
     send.mockReset().mockResolvedValue(undefined)
     Object.defineProperty(document, 'hidden', { configurable: true, value: false })
@@ -75,6 +76,107 @@ describe('reading checkpoints', () => {
     })
     reader.unmount()
     vi.unstubAllGlobals()
+  })
+  it('aborts a stalled save, retries the same sequence and drains the latest page', async () => {
+    let signal!: AbortSignal
+    send.mockImplementationOnce((_path, requestSignal) => {
+      signal = requestSignal!
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const reader = renderHook(({ page }) => useReadingSession(1, page, 'ltr', {}), {
+      wrapper: ReadingTestProvider,
+      initialProps: { page: 0 },
+    })
+    reader.rerender({ page: 30 })
+    const checkpoint = send.mock.calls[0][3]
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000)
+    })
+    expect(signal.aborted).toBe(true)
+    expect(reader.result.current.error).not.toBe('')
+    expect(localStorage.getItem('luma-panels-checkpoint-1')).toContain('"pageIndex":30')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(send.mock.calls[1][3]).toEqual(checkpoint)
+    expect(updates().at(-1)?.pageIndex).toBe(30)
+    expect(reader.result.current.error).toBe('')
+    expect(localStorage.getItem('luma-panels-checkpoint-1')).toBeNull()
+  })
+  it('retries a failed save without another page turn or heartbeat', async () => {
+    send.mockRejectedValueOnce(new Error('offline'))
+    const reader = renderHook(() => useReadingSession(1, 20, 'ltr', {}), { wrapper: ReadingTestProvider })
+    await settle()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(updates().at(-1)?.pageIndex).toBe(20)
+    expect(reader.result.current.error).toBe('')
+  })
+  it.each(['focus', 'online'])('retries immediately on %s', async event => {
+    send.mockRejectedValueOnce(new Error('offline'))
+    const reader = renderHook(() => useReadingSession(1, 20, 'ltr', {}), { wrapper: ReadingTestProvider })
+    await settle()
+    act(() => {
+      window.dispatchEvent(new Event(event))
+    })
+    await settle()
+    expect(reader.result.current.error).toBe('')
+    expect(updates().at(-1)?.pageIndex).toBe(20)
+  })
+  it('retains the latest local position when the final server save fails', async () => {
+    send.mockRejectedValue(new Error('offline'))
+    const reader = renderHook(({ page }) => useReadingSession(1, page, 'ltr', {}), {
+      wrapper: ReadingTestProvider,
+      initialProps: { page: 0 },
+    })
+    await settle()
+    reader.rerender({ page: 30 })
+    await settle()
+    reader.unmount()
+    await settle()
+    expect(JSON.parse(localStorage.getItem('luma-panels-checkpoint-1')!)).toMatchObject({ pageIndex: 30 })
+    const calls = send.mock.calls.length
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000)
+    })
+    expect(send).toHaveBeenCalledTimes(calls)
+  })
+  it('does not clear a newer local position when an older save completes', async () => {
+    let finish!: () => void
+    send.mockImplementation(
+      () =>
+        new Promise<void>(resolve => {
+          finish = resolve
+        }),
+    )
+    const reader = renderHook(({ page }) => useReadingSession(1, page, 'ltr', {}), {
+      wrapper: ReadingTestProvider,
+      initialProps: { page: 0 },
+    })
+    reader.rerender({ page: 30 })
+    finish()
+    await settle()
+    expect(updates().at(-1)?.pageIndex).toBe(30)
+    expect(JSON.parse(localStorage.getItem('luma-panels-checkpoint-1')!)).toMatchObject({ pageIndex: 30 })
+    finish()
+    await settle()
+    expect(localStorage.getItem('luma-panels-checkpoint-1')).toBeNull()
+    send.mockResolvedValue(undefined)
+  })
+  it('continues saving to the server when local storage is unavailable', async () => {
+    const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('disabled')
+    })
+    try {
+      renderHook(() => useReadingSession(1, 30, 'ltr', {}), { wrapper: ReadingTestProvider })
+      await settle()
+      expect(updates().at(-1)?.pageIndex).toBe(30)
+    } finally {
+      storage.mockRestore()
+    }
   })
   it('counts visible time, excludes hidden intervals and stops after inactivity', async () => {
     renderHook(() => useReadingSession(1, 0, 'ltr', {}), { wrapper: ReadingTestProvider })

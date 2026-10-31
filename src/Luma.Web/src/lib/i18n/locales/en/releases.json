@@ -5,6 +5,7 @@
       "date": "2026-10-30",
       "headline": "Panels browsing and viewer fixes",
       "changes": [
+        "Panels retries stalled progress saves automatically and keeps an unsaved page on this device so you can resume after reconnecting.",
         "Import ComicInfo.xml titles, series, writers, summaries, cover choices and tags when discovering comics.",
         "Animated WebP and GIF pages play in the comic reader, including when zoomed in.",
         "Zoom into the region you tap or pinch in comics, and zoom videos without changing Fit or Fill.",

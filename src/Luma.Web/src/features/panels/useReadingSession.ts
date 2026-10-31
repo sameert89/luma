@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import type { Comic } from './api'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { rememberReadingCheckpoint, confirmReadingCheckpoint } from './readingCheckpoint'
 import { shuffleSeed } from '../browse/shuffleSeed'
 import { request, errorMessage } from '../browse/api'
 
@@ -27,6 +28,8 @@ export function useReadingSession(id: number, page: number, direction: string, s
       queued = false,
       disposed = false
     let inFlight: Promise<void> | null = null
+    let retry: ReturnType<typeof setTimeout> | undefined
+    let failures = 0
     let pending: {
       sessionId: string
       sequence: number
@@ -47,6 +50,7 @@ export function useReadingSession(id: number, page: number, direction: string, s
     async function save(): Promise<void> {
       queued = true
       if (inFlight) return inFlight
+      clearTimeout(retry)
       inFlight = (async () => {
         while (queued) {
           queued = false
@@ -61,8 +65,16 @@ export function useReadingSession(id: number, page: number, direction: string, s
               settings: JSON.stringify(latest.current.settings),
             }
           const checkpoint = pending
+          const controller = new AbortController()
+          const deadline = setTimeout(() => controller.abort(), 8000)
           try {
-            await request(`/api/panels/comics/${id}/progress`, undefined, 'PUT', checkpoint)
+            await request(`/api/panels/comics/${id}/progress`, controller.signal, 'PUT', checkpoint)
+            failures = 0
+            confirmReadingCheckpoint(id, {
+              pageIndex: checkpoint.pageIndex,
+              direction: checkpoint.direction,
+              settings: checkpoint.settings,
+            })
             activeSeconds = Math.max(0, activeSeconds - checkpoint.activeSeconds)
             pending = null
             client.setQueryData<Comic>(['comic', id], previous =>
@@ -77,7 +89,7 @@ export function useReadingSession(id: number, page: number, direction: string, s
                 : previous,
             )
             for (const key of ['comics', 'continue-reading', 'reading-statistics'])
-              void client.invalidateQueries({ queryKey: [key] })
+              void client.invalidateQueries({ queryKey: [key], refetchType: 'none' })
             if (!disposed) setError('')
             // Retry a dropped response with its original sequence before draining the latest page.
             if (
@@ -87,8 +99,13 @@ export function useReadingSession(id: number, page: number, direction: string, s
             )
               queued = true
           } catch (error) {
-            if (!disposed) setError(errorMessage(error))
+            if (!disposed) {
+              setError(errorMessage(error))
+              retry = setTimeout(() => void save(), Math.min(1000 * 2 ** failures++, 15000))
+            }
             break
+          } finally {
+            clearTimeout(deadline)
           }
         }
       })()
@@ -98,6 +115,7 @@ export function useReadingSession(id: number, page: number, direction: string, s
         inFlight = null
       }
     }
+    const saveOnReturn = () => void save()
     const visibility = () => {
       measure()
       visible = !document.hidden
@@ -112,6 +130,8 @@ export function useReadingSession(id: number, page: number, direction: string, s
       window.addEventListener(event, activity, { passive: true, capture: true })
     document.addEventListener('visibilitychange', visibility)
     window.addEventListener('pagehide', pageHide)
+    window.addEventListener('online', saveOnReturn)
+    window.addEventListener('focus', saveOnReturn)
     const timer = setInterval(measure, 1000),
       heartbeat = setInterval(() => void save(), 15000)
     flush.current = save
@@ -120,19 +140,25 @@ export function useReadingSession(id: number, page: number, direction: string, s
       measure()
       visible = false
       disposed = true
+      clearTimeout(retry)
       void save()
       flush.current = async () => {}
       clearInterval(timer)
       clearInterval(heartbeat)
       document.removeEventListener('visibilitychange', visibility)
       window.removeEventListener('pagehide', pageHide)
+      window.removeEventListener('online', saveOnReturn)
+      window.removeEventListener('focus', saveOnReturn)
       for (const event of ['pointerdown', 'keydown', 'wheel', 'scroll'])
         window.removeEventListener(event, activity, true)
     }
   }, [id, client])
   const preferences = JSON.stringify(settings)
+  useLayoutEffect(() => {
+    rememberReadingCheckpoint(id, { pageIndex: page, direction, settings: preferences })
+  }, [id, page, direction, preferences])
   useEffect(() => {
-    flush.current()
+    void flush.current()
   }, [page, direction, preferences])
   return { error, flush: () => flush.current() }
 }

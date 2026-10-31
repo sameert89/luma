@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ComicReader } from './ComicReader'
 import { useReadingSession } from './useReadingSession'
 import type { Comic } from './api'
@@ -25,6 +25,8 @@ const comic: Comic = {
   coverUrl: null,
   coverPage: 0,
 }
+beforeEach(() => localStorage.removeItem('luma-panels-checkpoint-1'))
+
 describe('comic reader', () => {
   it('resumes saved preferences, keeps page rendering bounded and uses RTL keyboard navigation', async () => {
     const exit = vi.fn()
@@ -219,4 +221,28 @@ it('does not navigate again if browser Back already unmounted a reader waiting t
   } finally {
     vi.useRealTimers()
   }
+})
+
+it('resumes an unsaved local page and preferences when the server is behind', () => {
+  localStorage.setItem(
+    'luma-panels-checkpoint-1',
+    JSON.stringify({
+      pageIndex: 51,
+      direction: 'ltr',
+      settings: '{"mode":"single","fit":"height"}',
+    }),
+  )
+  render(<ComicReader comic={comic} onExit={() => {}} />)
+  expect(screen.getByRole('button', { name: 'Go to page' })).toHaveTextContent('52 / 5000')
+  expect(useReadingSession).toHaveBeenLastCalledWith(1, 51, 'ltr', { mode: 'single', fit: 'height' })
+})
+
+it.each([
+  'broken',
+  '{"pageIndex":9000,"direction":"ltr","settings":"{}"}',
+  '{"pageIndex":1,"direction":"bad","settings":"{}"}',
+])('ignores an invalid local checkpoint: %s', value => {
+  localStorage.setItem('luma-panels-checkpoint-1', value)
+  render(<ComicReader comic={comic} onExit={() => {}} />)
+  expect(screen.getByRole('button', { name: 'Go to page' })).toHaveTextContent('22 / 5000')
 })
